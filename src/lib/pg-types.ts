@@ -6,6 +6,7 @@ import type { Options } from 'postgres';
 
 /** OIDs we override. */
 const BIGINT_OID = 20;
+const NUMERIC_OID = 1700;
 const DATE_OID = 1082;
 
 export const pgTypes = {
@@ -31,6 +32,24 @@ export const pgTypes = {
    * back as 2026-08-19 — every report silently shifts by a day. Keep the wire
    * format: an ISO yyyy-mm-dd string.
    */
+  /**
+   * NUMERIC arrives as a string because it is arbitrary-precision. Every
+   * numeric in this schema is either a SUM of cents (an integer) or a small
+   * ratio (confidence, return_pct) — both exact in a double. Left as strings,
+   * `income_cents + 1` silently concatenates instead of adding, which is the
+   * kind of bug that shows up as a wrong number on a chart and nowhere else.
+   */
+  numeric: {
+    to: NUMERIC_OID,
+    from: [NUMERIC_OID],
+    serialize: (v: number | string) => v.toString(),
+    parse: (v: string) => {
+      const n = Number(v);
+      if (!Number.isFinite(n)) throw new Error(`numeric not finite: ${v}`);
+      return n;
+    },
+  },
+
   date: {
     to: DATE_OID,
     from: [DATE_OID],

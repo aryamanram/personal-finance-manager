@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   A ledger, not a dashboard.
+   Ink ground, paper figures, columns that align to the digit. Accounting's own
+   two colors — verdigris in, clay out — desaturated so they read as
+   information rather than alarm. Amber is reserved, everywhere and only, for
+   "a human changed this."
+   --------------------------------------------------------------------------- */
+
+@theme {
+  --color-ink-900: #0d0f13;
+  --color-ink-850: #12141a;
+  --color-ink-800: #171a21;
+  --color-ink-700: #1f232c;
+  --color-ink-600: #2a2f3a;
+  --color-ink-500: #3a4150;
+
+  --color-paper:     #e8e6e1;
+  --color-paper-dim: #a8a69f;
+  --color-paper-faint: #6b6f78;
+
+  --color-in:    #5b9c85;
+  --color-in-dim:#3d6b5c;
+  --color-out:   #c4644f;
+  --color-out-dim:#8a4638;
+
+  /* Reserved for human edits. Never use for anything else. */
+  --color-edited: #d9a441;
+
+  --color-invest: #7b8fc4;
+
+  --font-sans: "Inter Tight", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html, body {
+  background: var(--color-ink-900);
+  color: var(--color-paper);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Every monetary figure. Tabular figures are the whole point: a column of
+   numbers must align on the decimal without a table layout doing the work. */
+.figure {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  letter-spacing: -0.01em;
+}
+
+/* The signature. A hairline under any value the user corrected by hand —
+   quiet enough to ignore while scanning, impossible to miss when you look.
+   Edited data that looks identical to synced data is how you stop trusting
+   your own ledger (DESIGN.md §7). */
+.edited {
+  position: relative;
+  cursor: help;
+  text-decoration: underline;
+  text-decoration-color: var(--color-edited);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+  text-decoration-style: dotted;
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-paper-faint);
+}
+
+/* A ruled register: hairlines between rows, nothing around them. */
+.rule    { border-color: var(--color-ink-700); }
+.rule-t  { border-top: 1px solid var(--color-ink-700); }
+.rule-b  { border-bottom: 1px solid var(--color-ink-700); }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--color-ink-900); }
+::-webkit-scrollbar-thumb { background: var(--color-ink-600); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-ink-500); }
+
+:focus-visible {
+  outline: 2px solid var(--color-edited);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
