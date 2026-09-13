@@ -5,6 +5,7 @@
 import 'server-only';
 import postgres from 'postgres';
 import { loadEnv } from './env';
+import { pgTypes } from './pg-types';
 
 loadEnv();
 
@@ -18,21 +19,7 @@ export const sql =
   globalForDb.__financeSql ??
   postgres(url, {
     max: 10,
-    // BIGINT (cents) arrives as a string by default. Every monetary value in
-    // this schema is well inside Number.MAX_SAFE_INTEGER ($90 trillion), so
-    // parse to number and assert rather than threading BigInt through the UI.
-    types: {
-      bigint: {
-        to: 20,
-        from: [20],
-        serialize: (v: number | bigint) => v.toString(),
-        parse: (v: string) => {
-          const n = Number(v);
-          if (!Number.isSafeInteger(n)) throw new Error(`bigint out of safe range: ${v}`);
-          return n;
-        },
-      },
-    },
+    types: pgTypes,
     transform: { undefined: null },
   });
 

@@ -5,6 +5,7 @@
 import { readFileSync } from 'node:fs';
 import postgres from 'postgres';
 import { config } from 'dotenv';
+import { pgTypes } from '../../src/lib/pg-types';
 
 config({ path: '.env.local', quiet: true });
 
@@ -18,17 +19,7 @@ export async function createTestDb(name: string) {
   await admin.end();
 
   const url = BASE.replace(/\/[^/?]+(\?|$)/, `/${dbName}$1`);
-  const sql = postgres(url, {
-    max: 2,
-    onnotice: () => {},
-    types: {
-      bigint: {
-        to: 20, from: [20],
-        serialize: (v: number | bigint) => v.toString(),
-        parse: (v: string) => Number(v),
-      },
-    },
-  });
+  const sql = postgres(url, { max: 2, onnotice: () => {}, types: pgTypes });
   await sql.unsafe(readFileSync('db/schema.sql', 'utf8'));
 
   return {
