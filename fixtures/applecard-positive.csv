@@ -1,0 +1,8 @@
+Date,Type,Description,Daily Cash (%),Daily Cash ($),Amount
+08/03/2026,Transaction,APPLE.COM/BILL,3%,$0.09,2.99
+08/05/2026,Transaction,STARBUCKS #12345 SEATTLE WA,2%,$0.09,4.50
+08/05/2026,Transaction,STARBUCKS #12345 SEATTLE WA,2%,$0.09,4.50
+08/09/2026,Transaction,WHOLE FOODS MKT 10234,2%,$1.74,87.12
+08/14/2026,Transaction,UBER TRIP 08/14,2%,$0.37,18.40
+08/18/2026,Daily Cash,Daily Cash Adjustment,,,-2.29
+08/22/2026,Payment,ACH Deposit Internet Transfer from account ending in 4432,,,-115.51

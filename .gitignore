@@ -1,0 +1,60 @@
+# ---------------------------------------------------------------------------
+# SECRETS AND PERSONAL FINANCIAL DATA
+# This repo is public-facing. Nothing below may ever be committed.
+# ---------------------------------------------------------------------------
+
+# Env / credentials. SIMPLEFIN_ACCESS_URL is a bearer credential in URL form.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# Real statements, exports, and any downloaded financial file.
+# Fixtures live in fixtures/ and must be synthetic only.
+/data/
+/private/
+*.csv
+*.ofx
+*.qfx
+*.qbo
+*.pdf
+!fixtures/**/*.csv
+!tests/**/*.csv
+
+# Database dumps and local volumes
+*.sql.gz
+*.dump
+*.bak
+db/dumps/
+pgdata/
+postgres-data/
+
+# ---------------------------------------------------------------------------
+# Build / tooling
+# ---------------------------------------------------------------------------
+node_modules/
+.next/
+out/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# Drizzle introspection output is regenerated from db/schema.sql
+db/drizzle/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
