@@ -72,6 +72,8 @@ async function main() {
 
   let extId = 0;
   const sf = () => `demo-sf-${++extId}`;
+  /** Charges already covered by a card payment, so each is paid exactly once. */
+  const paid = new Set<CanonicalTxn>();
 
   const groceries = ['TRADER JOES #447', 'WHOLE FOODS MKT 10234', 'SAFEWAY 2891'];
   const restaurants = ['THE LOCAL BISTRO', 'SQ *TACO HAUS', 'TST* NOODLE BAR', 'CHIPOTLE 1882'];
@@ -146,16 +148,29 @@ async function main() {
           rawDescription: 'MORGAN STANLEY ACH TRANSFER', externalId: sf() });
 
     // --- Transfer pairs: checking -> each card --------------------------
-    add({ accountId: checking.id, amountCents: -128745, postedDate: day(18),
-          rawDescription: 'CHASE CREDIT CRD AUTOPAY 9911', externalId: sf() });
-    add({ accountId: explorer.id, amountCents: 128745, postedDate: day(18),
-          rawDescription: 'AUTOMATIC PAYMENT - THANK YOU', externalId: sf() });
+    // Pay off exactly what was charged to each card in the PRIOR cycle, the
+    // way autopay actually works. A fixed payment amount overpays the card and
+    // leaves a credit balance, which then reads as an asset in net worth.
+    const owedExplorer = -txns
+      .filter((t) => t.accountId === explorer.id && t.amountCents < 0 && !paid.has(t))
+      .reduce((a, t) => { paid.add(t); return a + t.amountCents; }, 0);
+    const owedApple = -txns
+      .filter((t) => t.accountId === apple.id && t.amountCents < 0 && !paid.has(t))
+      .reduce((a, t) => { paid.add(t); return a + t.amountCents; }, 0);
 
-    add({ accountId: checking.id, amountCents: -38715, postedDate: day(22),
-          rawDescription: 'ACH PAYMENT APPLE CARD GSBANK', externalId: sf() });
-    add({ accountId: apple.id, amountCents: 38715, postedDate: day(24),
-          rawDescription: 'ACH Deposit Internet Transfer from account ending in 4432',
-          source: 'csv' });
+    if (owedExplorer > 0) {
+      add({ accountId: checking.id, amountCents: -owedExplorer, postedDate: day(18),
+            rawDescription: 'CHASE CREDIT CRD AUTOPAY 9911', externalId: sf() });
+      add({ accountId: explorer.id, amountCents: owedExplorer, postedDate: day(18),
+            rawDescription: 'AUTOMATIC PAYMENT - THANK YOU', externalId: sf() });
+    }
+    if (owedApple > 0) {
+      add({ accountId: checking.id, amountCents: -owedApple, postedDate: day(22),
+            rawDescription: 'ACH PAYMENT APPLE CARD GSBANK', externalId: sf() });
+      add({ accountId: apple.id, amountCents: owedApple, postedDate: day(24),
+            rawDescription: 'ACH Deposit Internet Transfer from account ending in 4432',
+            source: 'csv' });
+    }
   }
 
   // --- The Explorer's annual fee: one lumpy fixed charge (DESIGN §12) ----

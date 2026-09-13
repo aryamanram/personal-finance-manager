@@ -77,6 +77,32 @@ describe('I7 — re-importing the same file is a no-op', () => {
   });
 });
 
+describe('import_batches guards a repeat of the same file', () => {
+  it('records the file hash and refuses a second OK batch for it', async () => {
+    const sha = 'a'.repeat(64);
+    await sql`
+      INSERT INTO import_batches (account_id, source, filename, file_sha256, status)
+      VALUES (${acct.appleId}, 'csv', 'stmt.csv', ${sha}, 'ok')`;
+
+    // The unique index is what the import endpoint must check BEFORE inserting
+    // a batch row, or a legitimate re-import surfaces a constraint violation
+    // instead of "already imported, nothing to do".
+    await expect(sql`
+      INSERT INTO import_batches (account_id, source, filename, file_sha256, status)
+      VALUES (${acct.appleId}, 'csv', 'stmt.csv', ${sha}, 'ok')`,
+    ).rejects.toThrow(/duplicate key|unique/i);
+
+    // A FAILED batch for the same file must not block a retry.
+    await sql`
+      INSERT INTO import_batches (account_id, source, filename, file_sha256, status)
+      VALUES (${acct.appleId}, 'csv', 'stmt.csv', ${'b'.repeat(64)}, 'failed')`;
+    await expect(sql`
+      INSERT INTO import_batches (account_id, source, filename, file_sha256, status)
+      VALUES (${acct.appleId}, 'csv', 'stmt.csv', ${'b'.repeat(64)}, 'ok')`,
+    ).resolves.toBeDefined();
+  });
+});
+
 describe('I8 — CSV backfill and API sync must not double-count', () => {
   it('adopts a hand-imported CSV row rather than inserting a second copy', async () => {
     const csvRow: CanonicalTxn = {

@@ -122,7 +122,10 @@ export default async function DashboardPage() {
       <section className="grid gap-10 lg:grid-cols-[1fr_360px]">
         <div>
           <div className="rule-b pb-2">
-            <h2 className="eyebrow">Fixed vs variable · 12 months</h2>
+            {/* Name the span the data actually covers, not the span requested. */}
+            <h2 className="eyebrow">
+              Fixed vs variable · {cashflow.length} month{cashflow.length === 1 ? '' : 's'}
+            </h2>
           </div>
           <p className="mt-2 mb-4 max-w-lg text-xs leading-relaxed text-paper-faint">
             Fixed costs are the part of next month you already know. The taller
