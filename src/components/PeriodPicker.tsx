@@ -1,16 +1,18 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
-import clsx from 'clsx';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import type { PeriodOption } from '@/lib/periods';
 
 /**
  * Period selector for the cashflow view.
  *
- * A Sankey pinned to the current calendar month is useless in a month with no
- * income, and misleading in a partial one. The period is a link rather than
- * local state so the view is shareable and survives a reload.
+ * A native <select> rather than a row of links: the list grows by one entry
+ * every month this app runs, and a row of links would eventually wrap across
+ * the header. A select stays one control forever, and gets keyboard handling,
+ * scrolling and touch behaviour from the platform.
+ *
+ * The period lives in the URL rather than component state, so a view is
+ * shareable and survives a reload.
  */
 export function PeriodPicker({
   options,
@@ -19,31 +21,51 @@ export function PeriodPicker({
   options: PeriodOption[];
   active: string;
 }) {
+  const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
 
+  // Group so months, years and all-time are visually separated in the list.
+  const months = options.filter((o) => /^\d{4}-\d{2}$/.test(o.key));
+  const years = options.filter((o) => /^\d{4}$/.test(o.key));
+  const rest = options.filter((o) => !/^\d{4}(-\d{2})?$/.test(o.key));
+
+  function go(key: string) {
+    const next = new URLSearchParams(params.toString());
+    next.set('period', key);
+    router.push(`${pathname}?${next.toString()}`);
+  }
+
   return (
-    <nav className="flex flex-wrap items-center gap-x-4 gap-y-1" aria-label="Period">
-      {options.map((o) => {
-        const next = new URLSearchParams(params.toString());
-        next.set('period', o.key);
-        const isActive = o.key === active;
-        return (
-          <Link
-            key={o.key}
-            href={`${pathname}?${next.toString()}`}
-            aria-current={isActive ? 'page' : undefined}
-            className={clsx(
-              'border-b pb-0.5 text-xs transition-colors',
-              isActive
-                ? 'border-paper text-paper'
-                : 'border-transparent text-paper-faint hover:text-paper-dim',
-            )}
-          >
-            {o.label}
-          </Link>
-        );
-      })}
-    </nav>
+    <label className="inline-flex items-center gap-2">
+      <span className="sr-only">Period</span>
+      <select
+        value={active}
+        onChange={(e) => go(e.target.value)}
+        className="figure cursor-pointer rounded-sm border border-ink-600 bg-ink-800 px-2 py-1 text-xs text-paper transition-colors hover:border-ink-500"
+      >
+        {months.length > 0 && (
+          <optgroup label="Month">
+            {months.map((o) => (
+              <option key={o.key} value={o.key}>{o.label}</option>
+            ))}
+          </optgroup>
+        )}
+        {years.length > 0 && (
+          <optgroup label="Year">
+            {years.map((o) => (
+              <option key={o.key} value={o.key}>{o.label}</option>
+            ))}
+          </optgroup>
+        )}
+        {rest.length > 0 && (
+          <optgroup label="Everything">
+            {rest.map((o) => (
+              <option key={o.key} value={o.key}>{o.label}</option>
+            ))}
+          </optgroup>
+        )}
+      </select>
+    </label>
   );
 }

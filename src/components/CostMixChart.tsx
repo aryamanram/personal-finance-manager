@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { formatCents, formatCentsCompact } from '@/money';
 import type { MonthlyCashflow } from '@/lib/types';
+import { formatMonthAbbrev, formatMonthLong } from '@/lib/format-date';
 
 /**
  * Fixed vs variable, twelve months. This is the forecasting axis: fixed costs
@@ -12,10 +13,8 @@ import type { MonthlyCashflow } from '@/lib/types';
  */
 export function CostMixChart({ data }: { data: MonthlyCashflow[] }) {
   const rows = data.map((m) => ({
-    month: new Date(`${m.month}T00:00:00`).toLocaleDateString('en-US', { month: 'short' }),
-    fullMonth: new Date(`${m.month}T00:00:00`).toLocaleDateString('en-US', {
-      month: 'long', year: 'numeric',
-    }),
+    month: formatMonthAbbrev(m.month),
+    fullMonth: formatMonthLong(m.month),
     Fixed: m.fixed_cents ?? 0,
     Variable: m.variable_cents ?? 0,
   }));

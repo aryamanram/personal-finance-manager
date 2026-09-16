@@ -4,6 +4,7 @@ import { useState, useRef } from 'react';
 import { Figure } from './Figure';
 import { formatCents } from '@/money';
 import type { Account } from '@/lib/types';
+import { formatTimestampShort } from '@/lib/format-date';
 
 interface Preview {
   rowCount: number;
@@ -156,7 +157,7 @@ export function CsvImport({ accounts }: { accounts: Account[] }) {
           {preview.alreadyImported && (
             <p className="text-xs text-edited">
               This exact file was imported on{' '}
-              {new Date(preview.alreadyImported.at).toLocaleDateString()}. Importing again
+              {formatTimestampShort(preview.alreadyImported.at)}. Importing again
               is safe — duplicate rows are counted, not re-inserted.
             </p>
           )}

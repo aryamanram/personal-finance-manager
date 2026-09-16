@@ -10,6 +10,7 @@ import { Sankey } from '@/components/Sankey';
 import { CostMixChart } from '@/components/CostMixChart';
 import { Figure } from '@/components/Figure';
 import { formatCents } from '@/money';
+import { formatMonthLong, formatMonthShort, formatTimestampShort } from '@/lib/format-date';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,10 +49,7 @@ export default async function DashboardPage({
   const idx = cashflow.findIndex((m) => m.month.startsWith(period.key));
   const previous = isMonth && idx > 0 ? cashflow[idx - 1] : undefined;
 
-  const monthLabel = period.label === period.key
-    ? period.label
-    : new Date(`${period.from}T00:00:00`).toLocaleDateString('en-US',
-        isMonth ? { month: 'long', year: 'numeric' } : { month: 'short', year: 'numeric' });
+  const monthLabel = isMonth ? formatMonthLong(period.from) : formatMonthShort(period.from);
 
   const income = totals.income_cents;
   const required = totals.required_cents;
@@ -76,9 +74,7 @@ export default async function DashboardPage({
             <span>
               Last sync{' '}
               <span className="figure text-paper-dim">
-                {new Date(lastSync.finished_at).toLocaleDateString('en-US', {
-                  month: 'short', day: 'numeric',
-                })}
+                {formatTimestampShort(lastSync.finished_at)}
               </span>
               {lastSync.status !== 'ok' && (
                 <span className="ml-2 text-out">({lastSync.status})</span>

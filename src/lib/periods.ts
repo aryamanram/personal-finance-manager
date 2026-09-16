@@ -4,6 +4,8 @@
  * resolve the selected period before rendering.
  */
 
+import { formatMonthShort } from './format-date';
+
 export interface PeriodOption {
   key: string;
   label: string;
@@ -28,7 +30,7 @@ export function buildPeriods(
     const end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
     out.push({
       key: m.slice(0, 7),
-      label: start.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+      label: formatMonthShort(m),
       from: m,
       to: iso(end),
     });

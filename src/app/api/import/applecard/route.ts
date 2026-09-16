@@ -12,6 +12,7 @@ import { parseAppleCardCsv, toCanonical } from '@/ingest/applecard-csv';
 import { upsertTransactions } from '@/ingest/upsert';
 import { runCategorization } from '@/categorize/run';
 import { matchTransfers } from '@/transfers/match';
+import { formatTimestampShort } from '@/lib/format-date';
 
 export const maxDuration = 60;
 
@@ -86,7 +87,7 @@ export async function POST(req: Request) {
         transfersLinked: 0,
         warnings: [
           `This file was already imported on ` +
-          `${new Date(priorImport.started_at).toLocaleDateString()}. Nothing to do.`,
+          `${formatTimestampShort(priorImport.started_at)}. Nothing to do.`,
         ],
       },
     });

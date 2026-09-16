@@ -3,6 +3,7 @@ import { Figure } from '@/components/Figure';
 import { CsvImport } from '@/components/CsvImport';
 import { BalanceSnapshotForm } from '@/components/BalanceSnapshotForm';
 import { formatCents } from '@/money';
+import { formatTimestampLong } from '@/lib/format-date';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,7 +52,7 @@ export default async function AccountsPage() {
         {lastSync && (
           <p className="mt-3 text-xs text-paper-faint">
             Last sync {lastSync.finished_at
-              ? new Date(lastSync.finished_at).toLocaleString()
+              ? formatTimestampLong(lastSync.finished_at)
               : 'in progress'}{' '}
             · {lastSync.status}
             {lastSync.error && <span className="ml-2 text-edited">{lastSync.error}</span>}

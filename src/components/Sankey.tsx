@@ -34,9 +34,17 @@ const TONE = {
 
 const WIDTH = 940;
 const HEIGHT = 340;
-/** Gutters reserved for the node labels, which sit outside the diagram. */
-const PAD_LEFT = 104;
+/**
+ * Gutters reserved for the node labels, which sit outside the diagram. The left
+ * one is computed from the longest source label actually being drawn — a fixed
+ * value fits "Income $13k" and clips "From savings $25k", and the labels vary
+ * with the data, so guessing a constant is guessing wrong periodically.
+ */
 const PAD_RIGHT = 148;
+/** Rough advance width per character at the 11px label size, plus the value. */
+const CHAR_PX = 6.2;
+const LABEL_GAP = 14;
+const MIN_PAD_LEFT = 78;
 const MAX_CATEGORIES = 5;
 /**
  * A flow thinner than this fraction OF TOTAL INCOME cannot be read, so it is
@@ -169,12 +177,21 @@ export function Sankey({ data }: { data: SankeyInput }) {
 
     if (links.length === 0) return null;
 
+    // "Income $13k" vs "From savings $25k" — size the gutter to whichever is
+    // actually being drawn.
+    const padLeft = Math.max(
+      MIN_PAD_LEFT,
+      ...sourceIndexes.map((i) =>
+        (nodes[i]!.name.length + formatCentsCompact(nodes[i]!.cents).length + 2) * CHAR_PX
+        + LABEL_GAP),
+    );
+
     try {
       return sankey<N, L>()
         .nodeWidth(11)
         .nodePadding(12)
         .nodeAlign(sankeyJustify)
-        .extent([[PAD_LEFT, 6], [WIDTH - PAD_RIGHT, HEIGHT - 6]])({
+        .extent([[padLeft, 6], [WIDTH - PAD_RIGHT, HEIGHT - 6]])({
           nodes: nodes.map((n) => ({ ...n })),
           links: links.map((l) => ({ ...l })),
         });
