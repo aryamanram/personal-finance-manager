@@ -192,6 +192,73 @@ describe('M3 — two consecutive syncs insert no duplicates', () => {
   });
 });
 
+describe('an account connected after the first sync gets a full backfill', () => {
+  it('does not leave a newly discovered account empty', async () => {
+    // By this point the suite has already run successful syncs, so the window
+    // is incremental (a few days). A second institution connected now — which
+    // is the normal case: Chase and the Apple Card are linked at different
+    // times — must still get its history, not just the overlap window.
+    const epochDaysAgo = (n: number) => {
+      const d = new Date();
+      d.setDate(d.getDate() - n);
+      return Math.floor(d.getTime() / 1000);
+    };
+
+    const lateAccount: SimpleFinAccount = {
+      id: 'sf-late-1',
+      name: 'Apple Card',
+      currency: 'USD',
+      balance: '-707.21',
+      'balance-date': epochDaysAgo(0),
+      conn_id: 'CON-2',
+      transactions: [
+        // All older than the incremental window; only a backfill reaches them.
+        { id: 'sf-late-a', posted: epochDaysAgo(60), amount: '-274.52', description: 'APPLE STORE #R035' },
+        { id: 'sf-late-b', posted: epochDaysAgo(45), amount: '-162.80', description: 'APPLE.COM/US' },
+        { id: 'sf-late-c', posted: epochDaysAgo(30), amount: '54.51', description: 'ACH Deposit Internet transfer' },
+      ],
+    };
+
+    mockFetch({
+      errlist: [],
+      connections: [
+        { conn_id: 'CON-1', name: 'Chase' },
+        { conn_id: 'CON-2', name: 'Apple Card (Updated Monthly)' },
+      ],
+      accounts: [checkingAccount([]), lateAccount],
+    });
+
+    const r = await runSync(sql, { accessUrl: ACCESS_URL });
+
+    const [{ c }] = await sql<{ c: number }[]>`
+      SELECT count(*)::int AS c FROM transactions t
+      JOIN accounts a ON a.id = t.account_id
+      WHERE a.external_id = 'sf-late-1'`;
+
+    // Before the fix this was 0: the account appeared with its balance, the run
+    // reported "ok", and every one of its transactions was silently missed.
+    expect(c).toBe(3);
+    expect(r.inserted).toBeGreaterThanOrEqual(3);
+  });
+
+  it('stops backfilling once the account has history', async () => {
+    mockFetch({
+      errlist: [],
+      connections: [{ conn_id: 'CON-1', name: 'Chase' }],
+      accounts: [checkingAccount([])],
+    });
+
+    const spy = vi.fn(async (_i: unknown) =>
+      new Response(JSON.stringify(baseSet([])), { status: 200 }));
+    vi.stubGlobal('fetch', spy);
+    await runSync(sql, { accessUrl: ACCESS_URL });
+
+    // Every account now has rows, so this is a routine incremental sync: one
+    // window, not the multi-window backfill.
+    expect(spy.mock.calls.length).toBe(1);
+  });
+});
+
 describe('M3 — a pending row that posts carries its category forward', () => {
   it('supersedes the pending leg and keeps the manual category', async () => {
     mockFetch(baseSet([

@@ -117,6 +117,28 @@ async function windowStart(sql: Sql): Promise<Date> {
   return from;
 }
 
+/**
+ * Does any synced account still have no transactions?
+ *
+ * The window above is global: once ONE successful sync exists, later runs fetch
+ * only the last few days. An account connected after that first run therefore
+ * arrives with its balance but none of its history, and nothing reports it —
+ * the run says "ok" and inserts zero rows. Chase and the Apple Card are
+ * connected at different times, and the Apple Card syncs monthly, so this is
+ * the normal case rather than an edge case.
+ *
+ * When it happens, widen the window back to a full backfill so the new account
+ * is filled in. Existing accounts are unaffected: their rows are already
+ * present and dedup makes re-fetching them a no-op.
+ */
+async function hasUnbackfilledAccount(sql: Sql): Promise<string[]> {
+  const rows = await sql<{ name: string }[]>`
+    SELECT a.name FROM accounts a
+    WHERE a.source = 'simplefin' AND a.is_active
+      AND NOT EXISTS (SELECT 1 FROM transactions t WHERE t.account_id = a.id)`;
+  return rows.map((r) => r.name);
+}
+
 export async function runSync(
   sql: Sql,
   opts: { accessUrl: string; since?: Date; log?: (msg: string) => void } = {
@@ -124,7 +146,22 @@ export async function runSync(
   },
 ): Promise<SyncResult> {
   const log = opts.log ?? (() => {});
-  const start = opts.since ?? (await windowStart(sql));
+
+  let start = opts.since ?? (await windowStart(sql));
+
+  // An account with no transactions yet needs its history, not the last five
+  // days. Only widens the window; never narrows an explicit --since.
+  if (!opts.since) {
+    const empty = await hasUnbackfilledAccount(sql);
+    if (empty.length > 0) {
+      const backfill = new Date();
+      backfill.setDate(backfill.getDate() - FIRST_RUN_DAYS);
+      if (backfill < start) {
+        start = backfill;
+        log(`· backfilling ${empty.length} account(s) with no history: ${empty.join(', ')}`);
+      }
+    }
+  }
 
   const [run] = await sql<{ id: string }[]>`
     INSERT INTO sync_runs (source, status) VALUES ('simplefin', 'running') RETURNING id`;
