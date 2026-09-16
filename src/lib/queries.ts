@@ -166,6 +166,21 @@ export async function getCategoryBreakdownRange(
     ORDER BY total_cents DESC`;
 }
 
+/**
+ * Every month the ledger has activity in, oldest first. Deliberately separate
+ * from getCashflow(n): the chart wants a bounded window, the period picker
+ * wants the whole history, and sharing one query hid any year older than that
+ * window from the picker.
+ */
+export async function getActiveMonths(): Promise<string[]> {
+  const rows = await sql<{ month: string }[]>`
+    SELECT DISTINCT date_trunc('month', eff_posted_date)::date AS month
+    FROM v_transactions
+    WHERE voided_at IS NULL AND superseded_by_id IS NULL
+    ORDER BY month DESC`;
+  return rows.map((r) => r.month);
+}
+
 /** Earliest and latest transaction, for bounding the period picker. */
 export async function getLedgerBounds(): Promise<{ first: string; last: string } | null> {
   const [row] = await sql<{ first: string; last: string }[]>`

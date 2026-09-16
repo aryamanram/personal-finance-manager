@@ -118,7 +118,7 @@ async function windowStart(sql: Sql): Promise<Date> {
 }
 
 /**
- * Does any synced account still have no transactions?
+ * Which synced accounts have never completed a full backfill?
  *
  * The window above is global: once ONE successful sync exists, later runs fetch
  * only the last few days. An account connected after that first run therefore
@@ -127,19 +127,34 @@ async function windowStart(sql: Sql): Promise<Date> {
  * connected at different times, and the Apple Card syncs monthly, so this is
  * the normal case rather than an edge case.
  *
- * When it happens, widen the window back to a full backfill so the new account
- * is filled in. Existing accounts are unaffected: their rows are already
- * present and dedup makes re-fetching them a no-op.
+ * Completion is recorded explicitly in accounts.backfilled_at rather than
+ * inferred from "has no transactions". That inference had two failure modes:
+ * an account with genuinely no activity re-ran the whole backfill on every
+ * sync forever, and a backfill interrupted after its first window looked
+ * finished — the account now had a row, so the next run used the incremental
+ * window and the rest of its history was never fetched.
  */
-async function hasUnbackfilledAccount(sql: Sql): Promise<string[]> {
+async function unbackfilledAccounts(sql: Sql): Promise<string[]> {
   const rows = await sql<{ name: string }[]>`
     SELECT a.name FROM accounts a
-    WHERE a.source = 'simplefin' AND a.is_active
-      AND NOT EXISTS (SELECT 1 FROM transactions t WHERE t.account_id = a.id)`;
+    WHERE a.source = 'simplefin' AND a.is_active AND a.backfilled_at IS NULL`;
   return rows.map((r) => r.name);
 }
 
+/**
+ * Mark backfill complete. Called only after every window has been fetched AND
+ * written, so an interrupted run leaves the flag unset and the next sync
+ * resumes the full lookback.
+ */
+async function markBackfilled(sql: Sql, accountIds: string[]): Promise<void> {
+  if (accountIds.length === 0) return;
+  await sql`
+    UPDATE accounts SET backfilled_at = now(), updated_at = now()
+    WHERE id = ANY(${accountIds}::uuid[]) AND backfilled_at IS NULL`;
+}
+
 /** Synchronizes SimpleFIN accounts, transactions, balances, and holdings. */
+
 export async function runSync(
   sql: Sql,
   opts: { accessUrl: string; since?: Date; log?: (msg: string) => void } = {
@@ -150,18 +165,30 @@ export async function runSync(
 
   let start = opts.since ?? (await windowStart(sql));
 
-  // An account with no transactions yet needs its history, not the last five
-  // days. Only widens the window; never narrows an explicit --since.
+  // An account that has never completed a backfill needs its history, not the
+  // last five days. Only widens the window; never narrows an explicit --since.
+  //
+  // `backfilling` records that this run's window IS a full lookback, which is
+  // what licenses marking accounts complete at the end. It is also true on a
+  // first run, where every account is new, and stays true for an account
+  // discovered part-way through this same run.
+  let backfilling = false;
   if (!opts.since) {
-    const empty = await hasUnbackfilledAccount(sql);
-    if (empty.length > 0) {
-      const backfill = new Date();
-      backfill.setDate(backfill.getDate() - FIRST_RUN_DAYS);
-      if (backfill < start) {
-        start = backfill;
-        log(`· backfilling ${empty.length} account(s) with no history: ${empty.join(', ')}`);
-      }
+    const pending = await unbackfilledAccounts(sql);
+    const backfill = new Date();
+    backfill.setDate(backfill.getDate() - FIRST_RUN_DAYS);
+
+    if (pending.length > 0 && backfill < start) {
+      start = backfill;
+      log(`· backfilling ${pending.length} account(s): ${pending.join(', ')}`);
     }
+
+    // The run counts as a backfill whenever its window reaches the full
+    // lookback — whether we widened it just now, or it already started there
+    // because this is the first sync and windowStart returned FIRST_RUN_DAYS.
+    // Comparing to the day rather than the millisecond: both dates are built
+    // from `new Date()` moments apart, so an exact <= would be a coin flip.
+    backfilling = start.getTime() <= backfill.getTime() + 60_000;
   }
 
   const [run] = await sql<{ id: string }[]>`
@@ -221,9 +248,6 @@ export async function runSync(
         }
       }
 
-      // A rate-limit warning mid-backfill means stop, not keep hammering.
-      if (result.rateLimited) break;
-
       for (const account of set.accounts) {
         const existing = merged.get(account.id);
         if (!existing) {
@@ -240,12 +264,21 @@ export async function runSync(
           if (!seen.has(t.id)) existing.transactions!.push(t);
         }
       }
+
+      // A rate-limit warning mid-backfill means send no FURTHER request. The
+      // response carrying the warning still holds real accounts and
+      // transactions, and it has already cost a request against the quota, so
+      // it is merged above before stopping. Breaking first threw it away.
+      if (result.rateLimited) break;
     }
 
     const set: AccountSet = { accounts: Array.from(merged.values()), connections };
 
+    const syncedAccountIds: string[] = [];
+
     for (const sfAccount of set.accounts) {
       const { id: accountId, created } = await resolveAccount(sql, sfAccount, set.connections ?? []);
+      syncedAccountIds.push(accountId);
       if (created) {
         const msg = `New account discovered and created: "${sfAccount.name}"`;
         result.notices.push(msg);
@@ -281,6 +314,29 @@ export async function runSync(
 
       log(`  · ${sfAccount.name}: +${up.inserted} new, ${up.updated} updated, ` +
           `${up.adopted} adopted, ${up.superseded} superseded`);
+    }
+
+    // Every window fetched and every account written: the backfill is complete.
+    // Deliberately after the write loop, so an interruption anywhere above
+    // leaves backfilled_at NULL and the next run starts the lookback again.
+    if (backfilling && !result.rateLimited && syncedAccountIds.length > 0) {
+      await markBackfilled(sql, syncedAccountIds);
+
+      // An account the bridge no longer returns — revoked, closed, or dropped
+      // from the connection — would otherwise stay unbackfilled forever and
+      // force a full-lookback window on every future sync. Mark it complete
+      // too: this run asked for the whole history and the bridge had nothing
+      // to say about it. It is deactivated so the ledger records why.
+      const stale = await sql<{ name: string }[]>`
+        UPDATE accounts SET backfilled_at = now(), is_active = FALSE, updated_at = now()
+        WHERE source = 'simplefin' AND is_active AND backfilled_at IS NULL
+          AND id <> ALL(${syncedAccountIds}::uuid[])
+        RETURNING name`;
+      for (const a of stale) {
+        const msg = `"${a.name}" was not returned by the bridge and has been deactivated.`;
+        result.notices.push(msg);
+        log(`  · ${msg}`);
+      }
     }
 
     if (result.errors.length > 0 && result.accountsSynced > 0) result.status = 'partial';

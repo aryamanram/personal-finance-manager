@@ -16,9 +16,11 @@ export const NOT_LOCKED = 'NOT category_locked';
  * nothing in the other, and a rule that matches nothing looks exactly like a
  * rule that had nothing to match.
  *
- * So rules are evaluated against a whitespace-collapsed description. This is
- * applied to the COLUMN, not to the pattern, so an existing rule keeps working
- * whichever form it was written against.
+ * So rules are evaluated against a whitespace-collapsed description AND against
+ * the raw one. Collapsing only would break the mirror-image case: a pattern
+ * written with the literal repeated spaces it saw in a CSV can never match the
+ * collapsed form, so that rule would quietly stop claiming its rows and a
+ * lower-priority rule would take them.
  */
 const COLLAPSED = 'regexp_replace(t.raw_description, \'\\s+\', \' \', \'g\')';
 
@@ -103,7 +105,10 @@ export async function applyRules(
         ${alreadyMatched.size > 0
           ? sql`AND t.id <> ALL(${Array.from(alreadyMatched)}::uuid[])`
           : sql``}
-        ${rule.match_regex ? sql`AND ${sql.unsafe(COLLAPSED)} ~* ${rule.match_regex}` : sql``}
+        ${rule.match_regex
+          ? sql`AND (t.raw_description ~* ${rule.match_regex}
+                     OR ${sql.unsafe(COLLAPSED)} ~* ${rule.match_regex})`
+          : sql``}
         ${rule.match_account_id ? sql`AND t.account_id = ${rule.match_account_id}` : sql``}
         ${rule.match_amount_min !== null ? sql`AND t.amount_cents >= ${rule.match_amount_min}` : sql``}
         ${rule.match_amount_max !== null ? sql`AND t.amount_cents <= ${rule.match_amount_max}` : sql``}
@@ -137,7 +142,10 @@ export async function applyRules(
         ${alreadyMatched.size > 0
           ? sql`AND t.id <> ALL(${Array.from(alreadyMatched)}::uuid[])`
           : sql``}
-        ${rule.match_regex ? sql`AND ${sql.unsafe(COLLAPSED)} ~* ${rule.match_regex}` : sql``}
+        ${rule.match_regex
+          ? sql`AND (t.raw_description ~* ${rule.match_regex}
+                     OR ${sql.unsafe(COLLAPSED)} ~* ${rule.match_regex})`
+          : sql``}
         ${rule.match_account_id ? sql`AND t.account_id = ${rule.match_account_id}` : sql``}
         ${rule.match_amount_min !== null ? sql`AND t.amount_cents >= ${rule.match_amount_min}` : sql``}
         ${rule.match_amount_max !== null ? sql`AND t.amount_cents <= ${rule.match_amount_max}` : sql``}

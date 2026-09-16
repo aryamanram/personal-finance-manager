@@ -241,20 +241,79 @@ describe('an account connected after the first sync gets a full backfill', () =>
     expect(r.inserted).toBeGreaterThanOrEqual(3);
   });
 
-  it('stops backfilling once the account has history', async () => {
+  it('does not re-backfill an account that has genuinely no activity', async () => {
+    // Inferring completion from "has no transactions" meant an account with no
+    // activity re-ran the full multi-window backfill on every single sync.
+    const empty: SimpleFinAccount = {
+      id: 'sf-quiet-1', name: 'Quiet Account', currency: 'USD',
+      balance: '0.00', 'balance-date': Math.floor(Date.now() / 1000),
+      conn_id: 'CON-1', transactions: [],
+    };
+
+    mockFetch({ errlist: [], connections: [{ conn_id: 'CON-1', name: 'Chase' }],
+                accounts: [checkingAccount([]), empty] });
+    await runSync(sql, { accessUrl: ACCESS_URL });
+
+    const [row] = await sql<{ backfilled_at: Date | null }[]>`
+      SELECT backfilled_at FROM accounts WHERE external_id = 'sf-quiet-1'`;
+    expect(row.backfilled_at).not.toBeNull();
+
+    // Second run: one window, not a backfill, even though it still has no rows.
+    const spy = vi.fn(async (_i: unknown) =>
+      new Response(JSON.stringify({
+        errlist: [], connections: [{ conn_id: 'CON-1', name: 'Chase' }],
+        accounts: [checkingAccount([]), empty],
+      }), { status: 200 }));
+    vi.stubGlobal('fetch', spy);
+    await runSync(sql, { accessUrl: ACCESS_URL });
+    expect(spy.mock.calls.length).toBe(1);
+  });
+
+  it('leaves the backfill flag unset when a run is rate-limited', async () => {
+    // An interrupted backfill must look unfinished, or the next sync uses the
+    // incremental window and the rest of the history is never fetched.
+    const fresh: SimpleFinAccount = {
+      id: 'sf-interrupted-1', name: 'Interrupted Account', currency: 'USD',
+      balance: '-10.00', 'balance-date': Math.floor(Date.now() / 1000),
+      conn_id: 'CON-1', transactions: [],
+    };
+
+    mockFetch({
+      errlist: [{ code: 'gen.', msg: 'Warning: rate limit approaching' }],
+      connections: [{ conn_id: 'CON-1', name: 'Chase' }],
+      accounts: [fresh],
+    });
+
+    const r = await runSync(sql, { accessUrl: ACCESS_URL });
+    expect(r.rateLimited).toBe(true);
+
+    const [row] = await sql<{ backfilled_at: Date | null }[]>`
+      SELECT backfilled_at FROM accounts WHERE external_id = 'sf-interrupted-1'`;
+    expect(row.backfilled_at).toBeNull();
+  });
+
+  it('stops backfilling once every account is marked complete', async () => {
+    // Settle any account left unbackfilled by an earlier test, so this asserts
+    // the steady state rather than the leftovers.
     mockFetch({
       errlist: [],
       connections: [{ conn_id: 'CON-1', name: 'Chase' }],
       accounts: [checkingAccount([])],
     });
+    await runSync(sql, { accessUrl: ACCESS_URL });
+
+    const [{ pending }] = await sql<{ pending: number }[]>`
+      SELECT count(*)::int AS pending FROM accounts
+      WHERE source = 'simplefin' AND is_active AND backfilled_at IS NULL`;
+    expect(pending).toBe(0);
 
     const spy = vi.fn(async (_i: unknown) =>
       new Response(JSON.stringify(baseSet([])), { status: 200 }));
     vi.stubGlobal('fetch', spy);
     await runSync(sql, { accessUrl: ACCESS_URL });
 
-    // Every account now has rows, so this is a routine incremental sync: one
-    // window, not the multi-window backfill.
+    // Nothing left to backfill, so this is a routine incremental sync: one
+    // window, not the multi-window lookback.
     expect(spy.mock.calls.length).toBe(1);
   });
 });
@@ -314,6 +373,36 @@ describe('protocol error handling', () => {
       SELECT status, error FROM sync_runs ORDER BY started_at DESC LIMIT 1`;
     expect(run.status).toBe('partial');
     expect(run.error).toMatch(/Authentication failed/);
+  });
+
+  it('keeps the data in the response that carried the rate-limit warning', async () => {
+    // A rate-limit warning and real account data arrive in the SAME response,
+    // and that response has already cost a request against the quota. Stopping
+    // before merging it throws away transactions that were already paid for.
+    mockFetch({
+      errlist: [{ code: 'gen.', msg: 'Warning: rate limit approaching for this access token' }],
+      connections: [{ conn_id: 'CON-1', name: 'Chase' }],
+      // Its own account, so this does not perturb the counts other tests assert.
+      accounts: [{
+        id: 'sf-ratelimit-acct',
+        name: 'Rate Limited Account',
+        currency: 'USD',
+        balance: '-31.40',
+        'balance-date': epoch('2026-08-25'),
+        conn_id: 'CON-1',
+        transactions: [
+          { id: 'sf-ratelimited-1', posted: epoch('2026-08-25'), amount: '-31.40',
+            description: 'ARRIVED WITH THE WARNING' },
+        ],
+      }],
+    });
+
+    const r = await runSync(sql, { accessUrl: ACCESS_URL });
+    expect(r.rateLimited).toBe(true);
+
+    const [{ c }] = await sql<{ c: number }[]>`
+      SELECT count(*)::int AS c FROM transactions WHERE external_id = 'sf-ratelimited-1'`;
+    expect(c).toBe(1);
   });
 
   it('records a failed run rather than leaving it "running"', async () => {

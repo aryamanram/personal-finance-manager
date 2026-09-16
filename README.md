@@ -141,7 +141,7 @@ against a database that already holds real transactions.
 npm run sync                        # fetch, categorize, match transfers
 npm run recategorize -- --from 2026-01-01   # after editing rules
 npx tsx scripts/match-transfers.ts  # review pairs the matcher was unsure about
-npm test                            # 93 tests
+npm test
 ```
 
 Pairs scoring below 0.90 are listed rather than linked, because a wrong link

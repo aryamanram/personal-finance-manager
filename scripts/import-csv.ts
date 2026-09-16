@@ -88,25 +88,45 @@ async function main() {
             ${parsed.periodStart}, ${parsed.periodEnd}, ${parsed.rows.length})
     RETURNING id`;
 
+  // Only the upsert decides the batch's status. It commits its own
+  // transaction, so a later failure in categorization or transfer matching
+  // must not relabel a committed import as failed — the rows are in the
+  // ledger either way, and both passes are independently re-runnable.
+  let r;
   try {
-    const r = await upsertTransactions(sql, canonical, { importBatchId: batch.id });
-    await sql`
-      UPDATE import_batches SET status='ok', finished_at=now(),
-        rows_inserted=${r.inserted}, rows_duplicate=${r.duplicate}
-      WHERE id = ${batch.id}`;
-
-    console.log(`\n· ${r.inserted} inserted, ${r.duplicate} already present, ${r.adopted} adopted`);
-
-    const cat = await runCategorization(sql, { noLlm: !process.env.ANTHROPIC_API_KEY });
-    console.log(`· categorized ${cat.byRule} by rule, ${cat.toUncategorized} to Uncategorized`);
-
-    const tr = await matchTransfers(sql);
-    console.log(`· ${tr.linked} transfers linked, ${tr.candidates.length} need review`);
+    r = await upsertTransactions(sql, canonical, { importBatchId: batch.id });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await sql`UPDATE import_batches SET status='failed', finished_at=now(), error=${message}
               WHERE id = ${batch.id}`;
     throw err;
+  }
+
+  await sql`
+    UPDATE import_batches SET status='ok', finished_at=now(),
+      rows_inserted=${r.inserted}, rows_duplicate=${r.duplicate}
+    WHERE id = ${batch.id}`;
+
+  console.log(`\n· ${r.inserted} inserted, ${r.duplicate} already present, ${r.adopted} adopted`);
+
+  // Enrichment. A failure here is reported, not fatal: re-run
+  // `npm run recategorize` or scripts/match-transfers.ts.
+  try {
+    const cat = await runCategorization(sql, { noLlm: !process.env.ANTHROPIC_API_KEY });
+    console.log(`· categorized ${cat.byRule} by rule, ${cat.toUncategorized} to Uncategorized`);
+  } catch (err) {
+    console.error(`! categorization failed (import is safe): ${err instanceof Error ? err.message : err}`);
+    console.error('  re-run with: npm run recategorize');
+    process.exitCode = 1;
+  }
+
+  try {
+    const tr = await matchTransfers(sql);
+    console.log(`· ${tr.linked} transfers linked, ${tr.candidates.length} need review`);
+  } catch (err) {
+    console.error(`! transfer matching failed (import is safe): ${err instanceof Error ? err.message : err}`);
+    console.error('  re-run with: npx tsx scripts/match-transfers.ts');
+    process.exitCode = 1;
   }
 }
 

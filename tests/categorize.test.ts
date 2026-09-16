@@ -234,6 +234,30 @@ describe('bank column padding does not defeat a rule', () => {
   });
 });
 
+describe('a rule written with padded spaces still matches', () => {
+  it('matches when the PATTERN carries the padding, not just the description', async () => {
+    // The mirror image of the collapsed-description case: someone copies a
+    // pattern straight out of a Chase CSV, padding included. Collapsing only
+    // the column means that rule can never match, so it silently stops
+    // claiming its rows and a lower-priority rule takes them.
+    await upsertTransactions(sql, [
+      txn({ accountId: acct.checkingId, amountCents: -4200, postedDate: '2026-09-27',
+            rawDescription: 'PADDED    PATTERN    MERCHANT' }),
+    ]);
+
+    const travel = await categoryByName(sql, 'Travel');
+    await sql`INSERT INTO rules (name, priority, match_regex, set_category_id)
+              VALUES ('Padded pattern', 15, 'PADDED    PATTERN', ${travel})`;
+
+    await runCategorization(sql, { noLlm: true });
+
+    const [row] = await sql<{ category_name: string }[]>`
+      SELECT category_name FROM v_transactions
+      WHERE raw_description LIKE 'PADDED%'`;
+    expect(row.category_name).toBe('Travel');
+  });
+});
+
 describe('merchant defaults', () => {
   it('propagates a merchant default to future transactions of that merchant', async () => {
     const travel = await categoryByName(sql, 'Travel');

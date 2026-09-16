@@ -156,7 +156,18 @@ export async function matchTransfers(
   return result;
 }
 
-/** Create the transfers row and point both legs at it. */
+export class TransferLinkError extends Error {}
+
+/**
+ * Create the transfers row and point both legs at it.
+ *
+ * Validates inside the transaction rather than trusting the caller. The auto
+ * matcher only ever passes pairs its own query vetted, but the manual path
+ * (scripts/match-transfers.ts --link, and the UI) takes two ids from a human.
+ * Without these checks a typo could create a transfer with one leg, or silently
+ * steal a leg out of an existing transfer — and a transfer's legs are excluded
+ * from spending, so a wrong link quietly removes real money from the totals.
+ */
 export async function linkPair(
   sql: Sql,
   aId: string,
@@ -164,15 +175,63 @@ export async function linkPair(
   matchedBy: 'auto' | 'manual',
   confidence: number | null = null,
 ): Promise<string> {
-  const [transfer] = await sql<{ id: string }[]>`
-    INSERT INTO transfers (matched_by, confidence)
-    VALUES (${matchedBy}, ${matchedBy === 'auto' ? confidence : null})
-    RETURNING id`;
+  if (aId === bId) {
+    throw new TransferLinkError('A transfer needs two different transactions.');
+  }
 
-  await sql`
-    UPDATE transactions SET transfer_id = ${transfer.id} WHERE id IN (${aId}, ${bId})`;
+  return sql.begin(async (tx) => {
+    const rows = await tx<{
+      id: string; account_id: string; transfer_id: string | null;
+      amount_cents: number; voided_at: Date | null; superseded_by_id: string | null;
+    }[]>`
+      SELECT id, account_id, transfer_id, amount_cents, voided_at, superseded_by_id
+      FROM transactions WHERE id IN (${aId}, ${bId}) FOR UPDATE`;
 
-  return transfer.id;
+    if (rows.length !== 2) {
+      throw new TransferLinkError(
+        `Expected two transactions, found ${rows.length}. Check both ids.`,
+      );
+    }
+
+    const [a, b] = rows;
+    const already = rows.find((r) => r.transfer_id !== null);
+    if (already) {
+      throw new TransferLinkError(
+        `${already.id} is already part of transfer ${already.transfer_id}. Unlink it first.`,
+      );
+    }
+
+    const dead = rows.find((r) => r.voided_at !== null || r.superseded_by_id !== null);
+    if (dead) {
+      throw new TransferLinkError(`${dead.id} is voided or superseded and cannot be linked.`);
+    }
+
+    if (a.account_id === b.account_id) {
+      throw new TransferLinkError('Both legs are on the same account, so this is not a transfer.');
+    }
+
+    // Equal and opposite is the definition of a transfer. Enforced for the
+    // auto matcher, advisory for a human — a real pair can differ by a wire
+    // fee, so a manual link warns rather than refusing.
+    if (a.amount_cents !== -b.amount_cents) {
+      if (matchedBy === 'auto') {
+        throw new TransferLinkError('Legs are not equal and opposite.');
+      }
+      console.warn(
+        `  ! legs differ: ${a.amount_cents} vs ${b.amount_cents}. Linking anyway (manual).`,
+      );
+    }
+
+    const [transfer] = await tx<{ id: string }[]>`
+      INSERT INTO transfers (matched_by, confidence)
+      VALUES (${matchedBy}, ${matchedBy === 'auto' ? confidence : null})
+      RETURNING id`;
+
+    await tx`
+      UPDATE transactions SET transfer_id = ${transfer.id} WHERE id IN (${aId}, ${bId})`;
+
+    return transfer.id;
+  });
 }
 
 /** Unlink both legs and drop the transfers row. */

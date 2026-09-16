@@ -37,17 +37,37 @@ export interface ChaseParseResult {
   fileSha256: string;
 }
 
-/** Chase writes MM/DD/YYYY. Returns ISO yyyy-mm-dd. */
+/**
+ * Chase writes MM/DD/YYYY. Returns ISO yyyy-mm-dd.
+ *
+ * The shape check is not enough on its own: 02/30/2026 and 2026-99-99 both
+ * match their pattern, and Postgres rejects them on INSERT — aborting the whole
+ * import rather than skipping one bad row. Validate the calendar here so the
+ * caller can skip it with a warning.
+ */
 export function parseChaseDate(input: string): string {
   const s = input.trim();
-  let m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-  if (m) return s;
-  m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(s);
+  let y: number, mo: number, d: number;
+
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s);
   if (m) {
-    const year = m[3].length === 2 ? `20${m[3]}` : m[3];
-    return `${year}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+    [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  } else {
+    m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(s);
+    if (!m) throw new Error(`Unparseable date: "${input}"`);
+    const rawYear = m[3].length === 2 ? `20${m[3]}` : m[3];
+    [y, mo, d] = [Number(rawYear), Number(m[1]), Number(m[2])];
   }
-  throw new Error(`Unparseable date: "${input}"`);
+
+  if (mo < 1 || mo > 12) throw new Error(`Month out of range in "${input}"`);
+  if (d < 1 || d > daysInMonth(y, mo)) throw new Error(`Day out of range in "${input}"`);
+  if (y < 1900 || y > 2200) throw new Error(`Year out of range in "${input}"`);
+
+  return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
 /** Parses a Chase statement into normalized rows plus preview metadata. */

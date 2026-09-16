@@ -14,7 +14,12 @@ import {
 } from '@/lib/format-date';
 
 const ORIGINAL_TZ = process.env.TZ;
-afterEach(() => { process.env.TZ = ORIGINAL_TZ; });
+afterEach(() => {
+  // Assigning undefined stores the literal string "undefined", which leaves
+  // later tests in an altered timezone and makes them order-dependent.
+  if (ORIGINAL_TZ === undefined) delete process.env.TZ;
+  else process.env.TZ = ORIGINAL_TZ;
+});
 
 describe('date formatting is timezone-independent', () => {
   const zones = ['UTC', 'America/Chicago', 'Asia/Tokyo', 'Pacific/Kiritimati'];

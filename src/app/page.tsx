@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import {
   getCashflow, getCategoryBreakdownRange, getPeriodTotals, getUncategorizedCount,
-  getLastSync, getReconciliation, getLedgerBounds,
+  getLastSync, getReconciliation, getLedgerBounds, getActiveMonths,
 } from '@/lib/queries';
 import { PeriodPicker } from '@/components/PeriodPicker';
 import { buildPeriods } from '@/lib/periods';
@@ -10,7 +10,7 @@ import { Sankey } from '@/components/Sankey';
 import { CostMixChart } from '@/components/CostMixChart';
 import { Figure } from '@/components/Figure';
 import { formatCents } from '@/money';
-import { formatMonthLong, formatMonthShort, formatTimestampShort } from '@/lib/format-date';
+import { formatMonthLong, formatTimestampShort } from '@/lib/format-date';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,17 +23,29 @@ export default async function DashboardPage({
   const params = await searchParams;
   const requested = Array.isArray(params.period) ? params.period[0] : params.period;
 
-  const [cashflow, bounds] = await Promise.all([getCashflow(24), getLedgerBounds()]);
-  if (!bounds || cashflow.length === 0) return <EmptyState />;
+  // The chart wants a bounded window; the period picker wants every month the
+  // ledger has. Sharing one query meant a year older than 24 months never
+  // appeared as an option even though all-time already covered it.
+  const [cashflow, activeMonths, bounds] = await Promise.all([
+    getCashflow(24),
+    getActiveMonths(),
+    getLedgerBounds(),
+  ]);
+  if (!bounds || activeMonths.length === 0) return <EmptyState />;
 
-  const periods = buildPeriods(cashflow.map((m) => m.month), bounds);
+  const periods = buildPeriods(activeMonths, bounds);
   // Default to the most recent month that actually had money moving, rather
   // than the current calendar month — which, part-way through, or in a month
   // with no income, has nothing worth charting.
   const fallback =
     periods.find((p) => {
       const row = cashflow.find((m) => m.month.startsWith(p.key));
-      return row && ((row.income_cents ?? 0) > 0 || (row.discretionary_cents ?? 0) > 0);
+      // Any movement counts. Testing income and discretionary only meant a
+      // month of nothing but rent opened an older period instead.
+      return row && [
+        row.income_cents, row.required_cents,
+        row.discretionary_cents, row.invested_cents,
+      ].some((cents) => (cents ?? 0) > 0);
     }) ?? periods[0];
   const period = periods.find((p) => p.key === requested) ?? fallback;
 
@@ -50,7 +62,9 @@ export default async function DashboardPage({
   const idx = cashflow.findIndex((m) => m.month.startsWith(period.key));
   const previous = isMonth && idx > 0 ? cashflow[idx - 1] : undefined;
 
-  const monthLabel = isMonth ? formatMonthLong(period.from) : formatMonthShort(period.from);
+  // A yearly or all-time period has no month to name — formatting its `from`
+  // date rendered the year 2026 as "Jan 26".
+  const monthLabel = isMonth ? formatMonthLong(period.from) : period.label;
 
   const income = totals.income_cents;
   const required = totals.required_cents;

@@ -31,7 +31,9 @@ const tracked = sh('git ls-files').split('\n').filter(Boolean);
 
 // --- 1. Files that should never be tracked, whatever their contents ---------
 const FORBIDDEN = [
-  { re: /^\.env(\..*)?$/, unless: /^\.env\.example$/, what: 'environment file' },
+  // Anchored on the basename, not the root, so a forced-added
+  // config/.env.production cannot slip past.
+  { re: /(^|\/)\.env(\..*)?$/, unless: /(^|\/)\.env\.example$/, what: 'environment file' },
   { re: /\.(ofx|qfx|qbo|pdf)$/i, what: 'financial export' },
   { re: /^db\/dumps\//, what: 'database dump' },
   { re: /^(data|private)\//, what: 'private directory' },
@@ -61,7 +63,9 @@ for (const file of tracked.filter((f) => f.endsWith('.csv'))) {
 const CREDENTIALS: [RegExp, string][] = [
   [/sk-ant-[A-Za-z0-9-]{16,}/, 'Anthropic API key'],
   [/SIMPLEFIN_ACCESS_URL\s*=\s*https:\/\/\S+:\S+@/, 'SimpleFIN access URL with credentials'],
-  [/https:\/\/[^\s:@/]+:[^\s:@/]+@[\w.-]*simplefin/i, 'SimpleFIN credentialed URL'],
+  // Any host, not just SimpleFIN: a credential in a URL is a credential
+  // whoever it authenticates to.
+  [/https?:\/\/[^\s:@/]+:[^\s:@/]+@[\w.-]+/i, 'URL with embedded credentials'],
   [/-----BEGIN [A-Z ]*PRIVATE KEY-----/, 'private key'],
   [/AKIA[0-9A-Z]{16}/, 'AWS access key'],
 ];
@@ -84,8 +88,12 @@ for (const file of tracked) {
 }
 
 // History matters: deleting a file does not remove it from earlier commits.
+// ':(glob)' makes the pattern match at any depth, so config/.env.production is
+// caught as well as a root .env. ':(exclude)' keeps .env.example legal.
 const historyHits = sh(
-  `git log --all --pretty=format:%H -- '*.env' '*.env.local' 'data/*' 'private/*' 2>/dev/null`,
+  `git log --all --pretty=format:%H -- ':(glob)**/.env' ':(glob)**/.env.*' ` +
+  `':(glob).env' ':(glob).env.*' ':(glob)data/**' ':(glob)private/**' ` +
+  `':(exclude,glob)**/.env.example' ':(exclude,glob).env.example' 2>/dev/null`,
 ).split('\n').filter(Boolean);
 if (historyHits.length > 0) {
   problems.push(
