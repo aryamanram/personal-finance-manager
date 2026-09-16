@@ -210,9 +210,20 @@ export async function linkPair(
       throw new TransferLinkError('Both legs are on the same account, so this is not a transfer.');
     }
 
-    // Equal and opposite is the definition of a transfer. Enforced for the
-    // auto matcher, advisory for a human — a real pair can differ by a wire
-    // fee, so a manual link warns rather than refusing.
+    // Opposite DIRECTION is what makes a pair a transfer, and it is
+    // non-negotiable on both paths. Two outflows are two payments, not money
+    // moving between your own accounts, and linking them would exclude both
+    // from spending — hiding real money rather than merely misfiling it.
+    if (Math.sign(a.amount_cents) === Math.sign(b.amount_cents)) {
+      throw new TransferLinkError(
+        `Both legs move the same direction (${a.amount_cents} and ${b.amount_cents}). ` +
+        `A transfer needs one outflow and one inflow.`,
+      );
+    }
+
+    // MAGNITUDE is the part a human may override: a wire fee or an FX spread
+    // makes a genuine pair differ by a few cents or dollars. The auto matcher
+    // still requires an exact match, since it has no judgement to apply.
     if (a.amount_cents !== -b.amount_cents) {
       if (matchedBy === 'auto') {
         throw new TransferLinkError('Legs are not equal and opposite.');

@@ -56,6 +56,10 @@ async function main() {
     if (cat.toUncategorized > 0) {
       console.log(`  ! ${cat.toUncategorized} left uncategorized — worth a rule`);
     }
+    // runCategorization RETURNS LLM failures rather than throwing them, so one
+    // bad batch does not abandon the merchants already categorized. Under cron
+    // the exit code is the only signal anyone sees, so surface them here.
+    for (const e of cat.errors) result.errors.push(`categorization: ${e}`);
 
     const tr = await matchTransfers(sql, { log: (m) => console.log(m) });
     console.log(`· ${tr.linked} transfers linked, ${tr.candidates.length} need review`);

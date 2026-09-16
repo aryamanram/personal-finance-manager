@@ -163,13 +163,52 @@ describe('a manual link is validated, not trusted', () => {
   });
 
   it('refuses two legs on the same account', async () => {
+    // Build the fixture rather than fishing for leftovers: what earlier tests
+    // leave unlinked is not this test's business, and depending on it made the
+    // assertion silently skippable.
+    await upsertTransactions(sql, [
+      txn({ accountId: acct.appleId, rawDescription: 'SAME ACCT OUT', amountCents: -3300, postedDate: '2026-11-01' }),
+      txn({ accountId: acct.appleId, rawDescription: 'SAME ACCT IN',  amountCents:  3300, postedDate: '2026-11-01' }),
+    ]);
     const rows = await sql<{ id: string }[]>`
       SELECT id FROM transactions
-      WHERE transfer_id IS NULL AND account_id = ${acct.appleId} LIMIT 2`;
-    if (rows.length === 2) {
-      await expect(linkPair(sql, rows[0].id, rows[1].id, 'manual'))
-        .rejects.toThrow(/same account/i);
-    }
+      WHERE raw_description LIKE 'SAME ACCT%' ORDER BY amount_cents`;
+
+    expect(rows).toHaveLength(2);
+    await expect(linkPair(sql, rows[0].id, rows[1].id, 'manual'))
+      .rejects.toThrow(/same account/i);
+  });
+
+  it('refuses two legs that move the same direction', async () => {
+    // Two outflows are two payments, not a transfer. Linking them would exclude
+    // both from spending, hiding real money rather than misfiling it.
+    await upsertTransactions(sql, [
+      txn({ accountId: acct.checkingId, rawDescription: 'SAME SIGN A', amountCents: -7700, postedDate: '2026-11-02' }),
+      txn({ accountId: acct.explorerId, rawDescription: 'SAME SIGN B', amountCents: -7700, postedDate: '2026-11-02' }),
+    ]);
+    const rows = await sql<{ id: string }[]>`
+      SELECT id FROM transactions WHERE raw_description LIKE 'SAME SIGN%' ORDER BY raw_description`;
+
+    expect(rows).toHaveLength(2);
+    await expect(linkPair(sql, rows[0].id, rows[1].id, 'manual'))
+      .rejects.toThrow(/same direction/i);
+  });
+
+  it('allows a manual link whose legs differ by a fee', async () => {
+    // Magnitude is the part a human may override — a wire fee or FX spread
+    // makes a genuine pair differ — as long as the direction is opposite.
+    await upsertTransactions(sql, [
+      txn({ accountId: acct.checkingId, rawDescription: 'WIRE OUT', amountCents: -50000, postedDate: '2026-11-03' }),
+      txn({ accountId: acct.explorerId, rawDescription: 'WIRE IN',  amountCents:  49750, postedDate: '2026-11-04' }),
+    ]);
+    const [out] = await sql<{ id: string }[]>`SELECT id FROM transactions WHERE raw_description = 'WIRE OUT'`;
+    const [inn] = await sql<{ id: string }[]>`SELECT id FROM transactions WHERE raw_description = 'WIRE IN'`;
+
+    const transferId = await linkPair(sql, out.id, inn.id, 'manual');
+    const legs = await sql<{ counts_as_spending: boolean }[]>`
+      SELECT counts_as_spending FROM v_transactions WHERE transfer_id = ${transferId}`;
+    expect(legs).toHaveLength(2);
+    expect(legs.every((l) => !l.counts_as_spending)).toBe(true);
   });
 
   it('leaves no orphaned transfer row behind when it refuses', async () => {
