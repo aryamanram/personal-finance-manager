@@ -25,6 +25,7 @@ import { formatCents } from '../src/money.js';
 loadEnv();
 const sql = postgres(process.env.DATABASE_URL!, { max: 4, onnotice: () => {}, types: pgTypes });
 
+/** Reads a named CLI option in either `--name value` or `--name=value` form. */
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
   if (i >= 0 && process.argv[i + 1] && !process.argv[i + 1].startsWith('--')) {
@@ -33,6 +34,7 @@ function arg(name: string): string | undefined {
   return process.argv.find((a) => a.startsWith(`--${name}=`))?.split('=')[1];
 }
 
+/** Imports or previews the statement selected by the command-line arguments. */
 async function main() {
   const file = process.argv[2];
   const accountName = arg('account');

@@ -10,6 +10,7 @@ import { formatMonthShort } from '@/lib/format-date';
 
 export const dynamic = 'force-dynamic';
 
+/** Renders a category's spending trend, defaults, and transactions. */
 export default async function CategoryPage({
   params,
 }: {

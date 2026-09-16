@@ -50,6 +50,7 @@ export function parseChaseDate(input: string): string {
   throw new Error(`Unparseable date: "${input}"`);
 }
 
+/** Parses a Chase statement into normalized rows plus preview metadata. */
 export function parseChaseCsv(content: string): ChaseParseResult {
   const warnings: string[] = [];
   const fileSha256 = createHash('sha256').update(content).digest('hex');

@@ -23,6 +23,7 @@ const MONTHS_LONG = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ] as const;
 
+/** Extracts calendar fields from an ISO date without applying a timezone. */
 function parts(isoDate: string): { y: number; m: number; d: number } {
   const [y, m, d] = isoDate.slice(0, 10).split('-').map(Number);
   return { y: y ?? 1970, m: m ?? 1, d: d ?? 1 };

@@ -54,6 +54,7 @@ const MAX_CATEGORIES = 5;
  */
 const MIN_SHARE_OF_TOTAL = 0.02;
 
+/** Renders a balanced cashflow diagram from income through spending categories. */
 export function Sankey({ data }: { data: SankeyInput }) {
   const [hover, setHover] = useState<number | null>(null);
 

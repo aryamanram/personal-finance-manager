@@ -26,6 +26,7 @@ const dropShells = process.argv.includes('--drop-shells');
 /** Accounts worth keeping as empty shells: you will import into these. */
 const KEEP_AS_SHELL = ['Apple Card', 'Morgan Stanley Brokerage'];
 
+/** Reports or removes demo records while preserving real financial data. */
 async function main() {
   // A demo account is one seed-demo.ts created: a demo- external_id, or one of
   // the manual/csv accounts it made. A real synced account never matches.

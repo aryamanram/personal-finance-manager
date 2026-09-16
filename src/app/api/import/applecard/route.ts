@@ -16,6 +16,7 @@ import { formatTimestampShort } from '@/lib/format-date';
 
 export const maxDuration = 60;
 
+/** Previews or commits an uploaded Apple Card statement. */
 export async function POST(req: Request) {
   const form = await req.formData().catch(() => null);
   if (!form) return NextResponse.json({ error: 'Expected multipart form data.' }, { status: 400 });

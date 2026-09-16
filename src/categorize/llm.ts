@@ -47,6 +47,7 @@ interface Assignment {
   confidence: number;
 }
 
+/** Categorizes unresolved merchants with the configured language model. */
 export async function categorizeWithLlm(
   sql: Sql,
   opts: { from?: string; to?: string; limit?: number; log?: (m: string) => void } = {},
@@ -145,6 +146,7 @@ export async function categorizeWithLlm(
   return result;
 }
 
+/** Requests structured category assignments for a batch of merchant names. */
 async function askModel(
   client: Anthropic,
   merchantNames: string[],

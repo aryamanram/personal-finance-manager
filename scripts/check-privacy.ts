@@ -18,6 +18,7 @@ import { readFileSync } from 'node:fs';
 const problems: string[] = [];
 const notes: string[] = [];
 
+/** Runs a Git command and returns empty output when the command fails. */
 function sh(cmd: string): string {
   try {
     return execSync(cmd, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });

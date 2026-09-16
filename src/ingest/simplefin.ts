@@ -135,6 +135,7 @@ export interface FetchOptions {
   accountIds?: string[];
 }
 
+/** Fetches and validates a SimpleFIN account set for the requested window. */
 export async function fetchAccounts(
   accessUrl: string,
   opts: FetchOptions = {},

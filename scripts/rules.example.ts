@@ -77,7 +77,9 @@ const RULES: RuleSpec[] = [
   { name: 'Restaurants', priority: 70, regex: 'TST\\*|SQ \\*|DOORDASH', category: 'Restaurants' },
 ];
 
+/** Creates or updates the example categorization rules in the database. */
 async function main() {
+  /** Resolves a category name to the identifier required by a rule. */
   const cat = async (name: string) => {
     const [c] = await sql<{ id: string }[]>`SELECT id FROM categories WHERE name = ${name} LIMIT 1`;
     if (!c) throw new Error(`No category named "${name}"`);

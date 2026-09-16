@@ -20,6 +20,7 @@ const sql = postgres(process.env.DATABASE_URL!, { max: 4, onnotice: () => {}, ty
 const dryRun = process.argv.includes('--dry-run');
 const linkIdx = process.argv.indexOf('--link');
 
+/** Runs automatic transfer matching or manually links the requested pair. */
 async function main() {
   if (linkIdx >= 0) {
     const a = process.argv[linkIdx + 1];

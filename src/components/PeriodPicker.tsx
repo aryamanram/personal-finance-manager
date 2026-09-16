@@ -30,6 +30,7 @@ export function PeriodPicker({
   const years = options.filter((o) => /^\d{4}$/.test(o.key));
   const rest = options.filter((o) => !/^\d{4}(-\d{2})?$/.test(o.key));
 
+  /** Navigates to the current page with the selected period in its query. */
   function go(key: string) {
     const next = new URLSearchParams(params.toString());
     next.set('period', key);

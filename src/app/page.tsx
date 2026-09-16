@@ -14,6 +14,7 @@ import { formatMonthLong, formatMonthShort, formatTimestampShort } from '@/lib/f
 
 export const dynamic = 'force-dynamic';
 
+/** Renders cashflow metrics and charts for the selected ledger period. */
 export default async function DashboardPage({
   searchParams,
 }: {

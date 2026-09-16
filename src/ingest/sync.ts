@@ -139,6 +139,7 @@ async function hasUnbackfilledAccount(sql: Sql): Promise<string[]> {
   return rows.map((r) => r.name);
 }
 
+/** Synchronizes SimpleFIN accounts, transactions, balances, and holdings. */
 export async function runSync(
   sql: Sql,
   opts: { accessUrl: string; since?: Date; log?: (msg: string) => void } = {

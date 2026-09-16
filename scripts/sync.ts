@@ -33,6 +33,7 @@ const args = process.argv.slice(2);
 const sinceArg = args.find((a) => a.startsWith('--since='))?.split('=')[1];
 const noLlm = args.includes('--no-llm');
 
+/** Runs sync, categorization, and transfer matching for the nightly job. */
 async function main() {
   const started = Date.now();
   console.log(`sync · ${new Date().toISOString()}`);

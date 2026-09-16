@@ -117,6 +117,7 @@ export interface PeriodTotals {
   variable_cents: number;
 }
 
+/** Returns cashflow totals for an inclusive ledger date range. */
 export async function getPeriodTotals(from: string, to: string): Promise<PeriodTotals> {
   const [row] = await sql<PeriodTotals[]>`
     SELECT

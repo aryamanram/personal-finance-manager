@@ -7,6 +7,7 @@ import { formatTimestampLong } from '@/lib/format-date';
 
 export const dynamic = 'force-dynamic';
 
+/** Renders account balances, investment performance, and import controls. */
 export default async function AccountsPage() {
   const [accounts, netWorth, performance, lastSync] = await Promise.all([
     getAccounts(),
