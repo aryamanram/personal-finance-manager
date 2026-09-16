@@ -76,12 +76,51 @@ date range, computed total, and whether the sign convention was flipped — and
 Re-importing the same statement, or a later statement that overlaps it, is
 safe. Duplicates are counted rather than re-inserted.
 
+### Your own categorization rules
+
+Rule patterns name your employer, your landlord, and the places you shop — that
+is personal data and does not belong in a public repo. So the real rules live in
+`private/`, which is gitignored:
+
+```bash
+cp scripts/rules.example.ts private/my-rules.ts
+# edit to match your merchants
+npx tsx private/my-rules.ts && npm run recategorize
+```
+
+To find what still needs a rule, the register's "Uncategorized" filter or:
+
+```sql
+SELECT raw_description, count(*) FROM v_transactions
+WHERE category_name = 'Uncategorized' GROUP BY 1 ORDER BY 2 DESC;
+```
+
+### Clearing the demo data
+
+`npm run seed` writes ~230 fake transactions. Once you have synced real ones:
+
+```bash
+npx tsx scripts/purge-demo.ts --dry-run   # show what would go
+npx tsx scripts/purge-demo.ts             # remove seed, keep everything real
+```
+
+Seed accounts carry a `demo-` external id, which is what makes this safe to run
+against a database that already holds real transactions.
+
 ## Daily operation
 
 ```bash
 npm run sync                        # fetch, categorize, match transfers
 npm run recategorize -- --from 2026-01-01   # after editing rules
-npm test                            # 87 tests
+npx tsx scripts/match-transfers.ts  # review pairs the matcher was unsure about
+npm test                            # 93 tests
+```
+
+Pairs scoring below 0.90 are listed rather than linked, because a wrong link
+removes two real transactions from spending. Confirm one with:
+
+```bash
+npx tsx scripts/match-transfers.ts --link <id-a> <id-b>
 ```
 
 Cron, since there is no in-process scheduler:

@@ -1,0 +1,112 @@
+/**
+ * Template for your own categorization rules.
+ *
+ *   cp scripts/rules.example.ts private/my-rules.ts
+ *   # edit to match your real merchants, then:
+ *   npx tsx private/my-rules.ts && npm run recategorize
+ *
+ * Keep the real thing in private/ — it is gitignored. Rule patterns name your
+ * employer, your landlord and the places you shop, which is personal data you
+ * do not want in a public repository.
+ *
+ * To see what needs a rule:
+ *   psql -c "SELECT raw_description, count(*) FROM v_transactions
+ *            WHERE category_name = 'Uncategorized'
+ *            GROUP BY 1 ORDER BY 2 DESC"
+ */
+import postgres from 'postgres';
+import { loadEnv } from './env.js';
+import { pgTypes } from '../src/lib/pg-types.js';
+
+loadEnv();
+const sql = postgres(process.env.DATABASE_URL!, { max: 4, onnotice: () => {}, types: pgTypes });
+
+interface RuleSpec {
+  name: string;
+  priority: number;       // lower runs first; first match wins
+  regex: string;          // matched against raw_description, case-insensitive
+  category: string;       // must be an existing category name
+  costType?: 'fixed' | 'variable';
+  necessity?: 'required' | 'discretionary' | 'income' | 'transfer' | 'investment';
+}
+
+/**
+ * Suggested priority bands:
+ *   10-19  transfers and card payments
+ *   20-29  income
+ *   30-39  fixed required
+ *   40-59  variable required
+ *   60-89  discretionary
+ *
+ * WARNING on transfer rules: the Credit Card Payment and Account Transfer
+ * categories carry necessity='transfer', so anything they match leaves your
+ * spending totals ENTIRELY. A pattern like /AUTOPAY/ will happily swallow
+ * "CITY UTILITIES AUTOPAY" and make that bill disappear rather than merely
+ * miscategorizing it. Name the card or the transfer explicitly.
+ */
+const RULES: RuleSpec[] = [
+  // --- Transfers -----------------------------------------------------------
+  { name: 'Card payment (out)', priority: 10,
+    regex: 'Payment to Chase card ending', category: 'Credit Card Payment' },
+  { name: 'Card payment (in)', priority: 10,
+    regex: 'Payment Thank You', category: 'Credit Card Payment' },
+
+  // --- Income --------------------------------------------------------------
+  { name: 'Payroll', priority: 20, regex: 'YOUR EMPLOYER PAYROLL', category: 'Paycheck' },
+  { name: 'Bank interest', priority: 21, regex: '^INTEREST PAYMENT',
+    category: 'Interest & Dividends' },
+
+  // --- Fixed required ------------------------------------------------------
+  { name: 'Rent', priority: 30, regex: 'YOUR LANDLORD', category: 'Rent' },
+
+  // --- Variable required ---------------------------------------------------
+  { name: 'Gas', priority: 40, regex: 'SHELL|CHEVRON|COSTCO GAS', category: 'Gas' },
+  { name: 'Groceries', priority: 41,
+    regex: 'TRADER JOE|WHOLE FOODS|COSTCO WHSE|SAFEWAY', category: 'Groceries' },
+
+  // --- Discretionary -------------------------------------------------------
+  { name: 'Subscriptions', priority: 60,
+    regex: 'NETFLIX|SPOTIFY|YouTubePremi', category: 'Subscriptions' },
+  { name: 'Restaurants', priority: 70, regex: 'TST\\*|SQ \\*|DOORDASH', category: 'Restaurants' },
+];
+
+async function main() {
+  const cat = async (name: string) => {
+    const [c] = await sql<{ id: string }[]>`SELECT id FROM categories WHERE name = ${name} LIMIT 1`;
+    if (!c) throw new Error(`No category named "${name}"`);
+    return c.id;
+  };
+
+  let created = 0;
+  let updated = 0;
+
+  for (const r of RULES) {
+    const categoryId = await cat(r.category);
+    const [existing] = await sql<{ id: string }[]>`
+      SELECT id FROM rules WHERE name = ${r.name} LIMIT 1`;
+
+    if (existing) {
+      await sql`
+        UPDATE rules SET
+          priority = ${r.priority}, match_regex = ${r.regex},
+          set_category_id = ${categoryId},
+          set_cost_type = ${r.costType ?? null},
+          set_necessity = ${r.necessity ?? null},
+          is_active = TRUE
+        WHERE id = ${existing.id}`;
+      updated++;
+    } else {
+      await sql`
+        INSERT INTO rules (name, priority, match_regex, set_category_id,
+                           set_cost_type, set_necessity)
+        VALUES (${r.name}, ${r.priority}, ${r.regex}, ${categoryId},
+                ${r.costType ?? null}, ${r.necessity ?? null})`;
+      created++;
+    }
+  }
+
+  console.log(`✓ ${created} rules created, ${updated} updated`);
+  console.log('  Run: npm run recategorize');
+}
+
+main().catch((e) => { console.error(e); process.exitCode = 1; }).finally(() => sql.end());
