@@ -1,55 +1,95 @@
 import Link from 'next/link';
 import {
-  getCashflow, getCategoryBreakdown, getUncategorizedCount,
-  getLastSync, getReconciliation,
+  getCashflow, getCategoryBreakdownRange, getPeriodTotals, getUncategorizedCount,
+  getLastSync, getReconciliation, getLedgerBounds, getActiveMonths,
 } from '@/lib/queries';
+import { PeriodPicker } from '@/components/PeriodPicker';
+import { buildPeriods } from '@/lib/periods';
 import { StatCard } from '@/components/StatCard';
 import { Sankey } from '@/components/Sankey';
 import { CostMixChart } from '@/components/CostMixChart';
 import { Figure } from '@/components/Figure';
 import { formatCents } from '@/money';
+import { formatMonthLong, formatTimestampShort } from '@/lib/format-date';
 
 export const dynamic = 'force-dynamic';
 
-export default async function DashboardPage() {
-  const cashflow = await getCashflow(12);
-  const current = cashflow[cashflow.length - 1];
-  const previous = cashflow[cashflow.length - 2];
+/** Renders cashflow metrics and charts for the selected ledger period. */
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const requested = Array.isArray(params.period) ? params.period[0] : params.period;
 
-  const [breakdown, uncategorized, lastSync, drift] = await Promise.all([
-    current ? getCategoryBreakdown(current.month) : Promise.resolve([]),
+  // The chart wants a bounded window; the period picker wants every month the
+  // ledger has. Sharing one query meant a year older than 24 months never
+  // appeared as an option even though all-time already covered it.
+  const [cashflow, activeMonths, bounds] = await Promise.all([
+    getCashflow(24),
+    getActiveMonths(),
+    getLedgerBounds(),
+  ]);
+  if (!bounds || activeMonths.length === 0) return <EmptyState />;
+
+  const periods = buildPeriods(activeMonths, bounds);
+  // Default to the most recent month that actually had money moving, rather
+  // than the current calendar month — which, part-way through, or in a month
+  // with no income, has nothing worth charting.
+  const fallback =
+    periods.find((p) => {
+      const row = cashflow.find((m) => m.month.startsWith(p.key));
+      // Any movement counts. Testing income and discretionary only meant a
+      // month of nothing but rent opened an older period instead.
+      return row && [
+        row.income_cents, row.required_cents,
+        row.discretionary_cents, row.invested_cents,
+      ].some((cents) => (cents ?? 0) > 0);
+    }) ?? periods[0];
+  const period = periods.find((p) => p.key === requested) ?? fallback;
+
+  const [totals, breakdown, uncategorized, lastSync, drift] = await Promise.all([
+    getPeriodTotals(period.from, period.to),
+    getCategoryBreakdownRange(period.from, period.to),
     getUncategorizedCount(),
     getLastSync(),
     getReconciliation(),
   ]);
 
-  if (!current) return <EmptyState />;
+  // Month-over-month deltas only mean something for a single month.
+  const isMonth = /^\d{4}-\d{2}$/.test(period.key);
+  const idx = cashflow.findIndex((m) => m.month.startsWith(period.key));
+  const previous = isMonth && idx > 0 ? cashflow[idx - 1] : undefined;
 
-  const monthLabel = new Date(`${current.month}T00:00:00`).toLocaleDateString('en-US', {
-    month: 'long', year: 'numeric',
-  });
+  // A yearly or all-time period has no month to name — formatting its `from`
+  // date rendered the year 2026 as "Jan 26".
+  const monthLabel = isMonth ? formatMonthLong(period.from) : period.label;
 
-  const income = current.income_cents ?? 0;
-  const required = current.required_cents ?? 0;
-  const discretionary = current.discretionary_cents ?? 0;
-  const invested = current.invested_cents ?? 0;
-  const spendable = current.spendable_cents ?? 0;
+  const income = totals.income_cents;
+  const required = totals.required_cents;
+  const discretionary = totals.discretionary_cents;
+  const invested = totals.invested_cents;
+  const spendable = income - required;
 
   return (
     <div className="space-y-12">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="eyebrow">Cashflow</div>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">{monthLabel}</h1>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight">
+            {period.key === 'all' ? 'All time' : monthLabel}
+          </h1>
+          <div className="mt-3">
+            <PeriodPicker options={periods} active={period.key} />
+          </div>
         </div>
         <div className="flex items-center gap-6 text-xs text-paper-faint">
           {lastSync?.finished_at && (
             <span>
               Last sync{' '}
               <span className="figure text-paper-dim">
-                {new Date(lastSync.finished_at).toLocaleDateString('en-US', {
-                  month: 'short', day: 'numeric',
-                })}
+                {formatTimestampShort(lastSync.finished_at)}
               </span>
               {lastSync.status !== 'ok' && (
                 <span className="ml-2 text-out">({lastSync.status})</span>
@@ -98,7 +138,7 @@ export default async function DashboardPage() {
         <div className="rule-b flex items-baseline justify-between pb-2">
           <h2 className="eyebrow">Where it went</h2>
           <span className="text-xs text-paper-faint">
-            Invested this month{' '}
+            Invested{' '}
             <Figure cents={invested} tone="invest" showCents={false} />
           </span>
         </div>
@@ -124,14 +164,14 @@ export default async function DashboardPage() {
           <div className="rule-b pb-2">
             {/* Name the span the data actually covers, not the span requested. */}
             <h2 className="eyebrow">
-              Fixed vs variable · {cashflow.length} month{cashflow.length === 1 ? '' : 's'}
+              Fixed vs variable · last {Math.min(cashflow.length, 12)} months
             </h2>
           </div>
           <p className="mt-2 mb-4 max-w-lg text-xs leading-relaxed text-paper-faint">
             Fixed costs are the part of next month you already know. The taller
             the dark band, the more predictable the month.
           </p>
-          <CostMixChart data={cashflow} />
+          <CostMixChart data={cashflow.slice(-12)} />
         </div>
 
         <div>

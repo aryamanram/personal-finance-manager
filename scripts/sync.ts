@@ -33,6 +33,7 @@ const args = process.argv.slice(2);
 const sinceArg = args.find((a) => a.startsWith('--since='))?.split('=')[1];
 const noLlm = args.includes('--no-llm');
 
+/** Runs sync, categorization, and transfer matching for the nightly job. */
 async function main() {
   const started = Date.now();
   console.log(`sync · ${new Date().toISOString()}`);
@@ -55,6 +56,10 @@ async function main() {
     if (cat.toUncategorized > 0) {
       console.log(`  ! ${cat.toUncategorized} left uncategorized — worth a rule`);
     }
+    // runCategorization RETURNS LLM failures rather than throwing them, so one
+    // bad batch does not abandon the merchants already categorized. Under cron
+    // the exit code is the only signal anyone sees, so surface them here.
+    for (const e of cat.errors) result.errors.push(`categorization: ${e}`);
 
     const tr = await matchTransfers(sql, { log: (m) => console.log(m) });
     console.log(`· ${tr.linked} transfers linked, ${tr.candidates.length} need review`);
@@ -62,6 +67,14 @@ async function main() {
 
   for (const e of result.errors) console.error(`! ${e}`);
   for (const n of result.notices) console.log(`+ ${n}`);
+
+  if (result.rateLimited) {
+    console.error(
+      '\n! The bridge is warning about request volume. It expects <= 24 requests\n' +
+      '  per day and will DISABLE the access token if the warnings are ignored,\n' +
+      '  which means re-claiming a setup token. Stop running sync by hand today.',
+    );
+  }
 
   console.log(`done in ${((Date.now() - started) / 1000).toFixed(1)}s · ${result.status}`);
   process.exitCode = result.status === 'ok' ? 0 : result.status === 'partial' ? 2 : 1;

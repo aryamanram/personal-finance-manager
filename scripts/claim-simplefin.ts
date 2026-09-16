@@ -20,9 +20,34 @@ if (!token) {
 
 claimAccessUrl(token)
   .then((url) => {
-    console.log('\nAccess URL claimed. Add this line to .env.local:\n');
+    // The bridge may hand back either bridge.simplefin.org or
+    // beta-bridge.simplefin.org. Both are valid; use whatever it returned.
+    let host = '(unparseable)';
+    let hasCredentials = false;
+    try {
+      const parsed = new URL(url);
+      host = parsed.host;
+      hasCredentials = Boolean(parsed.username && parsed.password);
+    } catch {
+      /* reported below */
+    }
+
+    console.log('\nAccess URL claimed.\n');
+    console.log(`  host         ${host}`);
+    console.log(`  credentials  ${hasCredentials ? 'embedded (expected)' : 'MISSING — see below'}`);
+
+    if (!hasCredentials) {
+      console.log(
+        '\n! The URL has no user:password@ part. A URL without embedded\n' +
+        '  credentials will fail with 403 on the first sync. Check that the\n' +
+        '  whole token was pasted, then claim a fresh one — this one is spent.',
+      );
+    }
+
+    console.log('\nAdd this line to .env.local, on ONE line with no quotes:\n');
     console.log(`SIMPLEFIN_ACCESS_URL=${url}\n`);
-    console.log('This is a credential. .env.local is gitignored — keep it that way.');
+    console.log('This is a bearer credential. .env.local is gitignored — keep it that way.');
+    console.log('Then run:  npm run sync');
   })
   .catch((err) => {
     console.error(err instanceof Error ? err.message : err);

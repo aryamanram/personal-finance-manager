@@ -17,7 +17,9 @@
     "db:pull": "drizzle-kit pull",
     "seed": "tsx scripts/seed-demo.ts",
     "sync": "tsx scripts/sync.ts",
-    "recategorize": "tsx scripts/recategorize.ts"
+    "recategorize": "tsx scripts/recategorize.ts",
+    "check:privacy": "tsx scripts/check-privacy.ts",
+    "prepush": "npm run check:privacy && npm run typecheck && npm test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",

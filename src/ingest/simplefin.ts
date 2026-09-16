@@ -135,6 +135,7 @@ export interface FetchOptions {
   accountIds?: string[];
 }
 
+/** Fetches and validates a SimpleFIN account set for the requested window. */
 export async function fetchAccounts(
   accessUrl: string,
   opts: FetchOptions = {},
@@ -145,6 +146,11 @@ export async function fetchAccounts(
   }
 
   const url = new URL(`${accessUrl.replace(/\/$/, '')}/accounts`);
+  // The bridge's own examples pass this explicitly. Without it the server may
+  // answer with the v1 shape (an `org` object per account instead of a
+  // top-level `connections` array), which institutionName() would then fail to
+  // resolve.
+  url.searchParams.set('version', '2');
   if (opts.startDate) {
     url.searchParams.set('start-date', String(Math.floor(opts.startDate.getTime() / 1000)));
   }
@@ -155,7 +161,21 @@ export async function fetchAccounts(
   if (opts.balancesOnly) url.searchParams.set('balances-only', '1');
   for (const id of opts.accountIds ?? []) url.searchParams.append('account', id);
 
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  // Node's fetch REFUSES a URL carrying credentials ("Request cannot be
+  // constructed from a URL that includes credentials"), and a SimpleFIN access
+  // URL is credentials-in-URL by design. Strip them off the URL and send them
+  // as the Basic auth header they already represent.
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  const username = decodeURIComponent(url.username);
+  const password = decodeURIComponent(url.password);
+  if (username || password) {
+    headers.Authorization =
+      'Basic ' + Buffer.from(`${username}:${password}`).toString('base64');
+    url.username = '';
+    url.password = '';
+  }
+
+  const res = await fetch(url, { headers });
 
   if (res.status === 403) {
     throw new SimpleFinError_(
@@ -173,6 +193,15 @@ export async function fetchAccounts(
     throw new SimpleFinError_('Malformed response: no accounts array.');
   }
   return body;
+}
+
+/**
+ * The bridge expects <= 24 requests/day and DISABLES the access token if you
+ * keep exceeding it after the warnings start. Warnings arrive in the normal
+ * error list, so they must be surfaced rather than swallowed.
+ */
+export function isRateLimitWarning(err: SimpleFinError): boolean {
+  return /rate limit|too many requests|quota|slow down/i.test(err.msg);
 }
 
 /** Normalizes v1 `errors` strings and v2 `errlist` objects into one list. */

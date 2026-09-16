@@ -11,15 +11,43 @@ Single user, runs on localhost or behind Tailscale. No authentication.
 
 ## Privacy
 
-**No financial data is in this repository.** `.gitignore` blanket-ignores
-`*.csv`, `*.ofx`, `*.qfx`, `*.pdf`, every `.env*` file except `.env.example`,
-and `/data/` and `/private/`, so a statement dropped anywhere in the tree is
-ignored by default. The only CSVs tracked are the synthetic fixtures under
-`fixtures/`, which contain invented merchants and amounts.
+This repository holds the code for a financial tracker, never the finances.
+Clone it and you get an empty shell: no transactions, no balances, no
+credentials. Everything personal lives in your local Postgres and in files git
+refuses to track.
 
-`SIMPLEFIN_ACCESS_URL` is a bearer credential in URL form. It lives only in
-`.env.local`. `redactUrl()` is the only form allowed near a log line, and no
-error message in the sync path interpolates it — there is a test for that.
+`.gitignore` blocks `*.csv`, `*.ofx`, `*.qfx`, `*.qbo`, `*.pdf`, every `.env*`
+file except `.env.example`, `/data/`, `/private/`, and `db/dumps/`. The only
+tracked CSVs are two synthetic fixtures, **unignored by name** rather than by
+unignoring the directory — a blanket `!fixtures/**/*.csv` would silently commit
+a real statement dropped there while debugging an import.
+
+Two things that are personal but not obviously so:
+
+- **Categorization rules** name your employer, your landlord and the shops you
+  use. Keep them in `private/my-rules.ts`; `scripts/rules.example.ts` is the
+  template.
+- **`SIMPLEFIN_ACCESS_URL` is a bearer credential in URL form.** It lives only
+  in `.env.local`. `redactUrl()` is the only form allowed near a log line, and
+  no error in the sync path interpolates it — there is a test for that.
+
+### Before you push
+
+```bash
+npm run check:privacy
+```
+
+Fails on a tracked env file, an unrecognised CSV, anything shaped like an API
+key or a credentialed URL, and on any commit in *history* that touched an env or
+private path — deleting a file does not remove it from earlier commits.
+
+Install it as a pre-push hook (hooks are not cloned, so each checkout needs
+this once):
+
+```bash
+printf '#!/bin/sh\nexec npx tsx scripts/check-privacy.ts\n' > .git/hooks/pre-push
+chmod +x .git/hooks/pre-push
+```
 
 ## Setup
 
@@ -39,8 +67,15 @@ against this rather than against your own statements.
 
 ### Connecting Chase
 
+1. Link your institutions in the bridge dashboard first — the token grants
+   access to whatever is already connected, so a token minted before you add
+   Chase will sync an empty account list.
+2. Visit **https://beta-bridge.simplefin.org/simplefin/create** to mint a setup
+   token. It is generated on demand and is *not* stored in your account
+   settings, which is why it is easy to look for and not find.
+3. Exchange it:
+
 ```bash
-# Get a setup token at https://beta-bridge.simplefin.org/
 npx tsx scripts/claim-simplefin.ts <setup-token>
 # Paste the printed line into .env.local, then:
 npm run sync
@@ -49,6 +84,15 @@ npm run sync
 Setup tokens are single-use. A 403 means it was already claimed — per the
 SimpleFIN protocol checklist that may mean it was compromised, so revoke it at
 the bridge rather than retrying.
+
+**Rate limit: about 24 requests per day.** The bridge starts emitting warnings
+above that and **disables the access token** if they are ignored, which means
+re-claiming a setup token. A daily cron is well inside the limit, but running
+`npm run sync` repeatedly while testing is not. `sync` detects the warning and
+says so loudly; stop for the day when it does. Quotas replenish through the day.
+
+The request window is capped at 90 days, and each sync overlaps the previous one
+by 5 days to catch late-posting transactions.
 
 ### Importing an Apple Card statement
 
@@ -60,12 +104,51 @@ date range, computed total, and whether the sign convention was flipped — and
 Re-importing the same statement, or a later statement that overlaps it, is
 safe. Duplicates are counted rather than re-inserted.
 
+### Your own categorization rules
+
+Rule patterns name your employer, your landlord, and the places you shop — that
+is personal data and does not belong in a public repo. So the real rules live in
+`private/`, which is gitignored:
+
+```bash
+cp scripts/rules.example.ts private/my-rules.ts
+# edit to match your merchants
+npx tsx private/my-rules.ts && npm run recategorize
+```
+
+To find what still needs a rule, the register's "Uncategorized" filter or:
+
+```sql
+SELECT raw_description, count(*) FROM v_transactions
+WHERE category_name = 'Uncategorized' GROUP BY 1 ORDER BY 2 DESC;
+```
+
+### Clearing the demo data
+
+`npm run seed` writes ~230 fake transactions. Once you have synced real ones:
+
+```bash
+npx tsx scripts/purge-demo.ts --dry-run   # show what would go
+npx tsx scripts/purge-demo.ts             # remove seed, keep everything real
+```
+
+Seed accounts carry a `demo-` external id, which is what makes this safe to run
+against a database that already holds real transactions.
+
 ## Daily operation
 
 ```bash
 npm run sync                        # fetch, categorize, match transfers
 npm run recategorize -- --from 2026-01-01   # after editing rules
-npm test                            # 87 tests
+npx tsx scripts/match-transfers.ts  # review pairs the matcher was unsure about
+npm test
+```
+
+Pairs scoring below 0.90 are listed rather than linked, because a wrong link
+removes two real transactions from spending. Confirm one with:
+
+```bash
+npx tsx scripts/match-transfers.ts --link <id-a> <id-b>
 ```
 
 Cron, since there is no in-process scheduler:

@@ -16,7 +16,13 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { Sql } from 'postgres';
 
-const MODEL = 'claude-haiku-4-5';
+/**
+ * Categorization is cheap classification over merchant names, so the smallest
+ * capable model is the right one (DESIGN.md §4). Pinned to the dated snapshot:
+ * the bare `claude-haiku-4-5` alias is not resolvable on every account, and a
+ * model id that 404s fails the whole pass at the first call.
+ */
+const MODEL = 'claude-haiku-4-5-20251001';
 const BATCH_SIZE = 40;
 
 export interface LlmCategorizeResult {
@@ -41,6 +47,7 @@ interface Assignment {
   confidence: number;
 }
 
+/** Categorizes unresolved merchants with the configured language model. */
 export async function categorizeWithLlm(
   sql: Sql,
   opts: { from?: string; to?: string; limit?: number; log?: (m: string) => void } = {},
@@ -139,6 +146,7 @@ export async function categorizeWithLlm(
   return result;
 }
 
+/** Requests structured category assignments for a batch of merchant names. */
 async function askModel(
   client: Anthropic,
   merchantNames: string[],
@@ -184,7 +192,12 @@ async function askModel(
                     type: 'string',
                     enum: categories.map((c) => c.name),
                   },
-                  confidence: { type: 'number', minimum: 0, maximum: 1 },
+                  // No minimum/maximum: structured outputs reject numeric
+                  // range constraints. The value is clamped on read instead.
+                  confidence: {
+                    type: 'number',
+                    description: '0 to 1. Low when the merchant name is ambiguous.',
+                  },
                 },
               },
             },

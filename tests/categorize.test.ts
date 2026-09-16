@@ -206,6 +206,58 @@ describe('rules', () => {
   });
 });
 
+describe('bank column padding does not defeat a rule', () => {
+  it('matches a description padded with runs of spaces', async () => {
+    // Chase CSV exports pad descriptions to align fixed-width columns, so the
+    // same transaction reads "VENMO            CASHOUT" from a file and
+    // "VENMO CASHOUT" from the API. A rule written against one form matched
+    // nothing in the other — and a rule matching nothing is indistinguishable
+    // from a rule with nothing to match.
+    await upsertTransactions(sql, [
+      txn({ accountId: acct.checkingId, amountCents: 78978, postedDate: '2026-09-25',
+            rawDescription: 'VENMO            CASHOUT                    PPD ID: 5264681992' }),
+    ]);
+
+    const transfers = await categoryByName(sql, 'Account Transfer');
+    await sql`INSERT INTO rules (name, priority, match_regex, set_category_id)
+              VALUES ('Venmo cashout', 12, 'VENMO CASHOUT', ${transfers})`;
+
+    await runCategorization(sql, { noLlm: true });
+
+    const [row] = await sql<{ category_name: string; counts_as_spending: boolean }[]>`
+      SELECT category_name, counts_as_spending FROM v_transactions
+      WHERE raw_description LIKE 'VENMO%CASHOUT%'`;
+
+    expect(row.category_name).toBe('Account Transfer');
+    // The point of getting this right: an unmatched cashout reads as income.
+    expect(row.counts_as_spending).toBe(false);
+  });
+});
+
+describe('a rule written with padded spaces still matches', () => {
+  it('matches when the PATTERN carries the padding, not just the description', async () => {
+    // The mirror image of the collapsed-description case: someone copies a
+    // pattern straight out of a Chase CSV, padding included. Collapsing only
+    // the column means that rule can never match, so it silently stops
+    // claiming its rows and a lower-priority rule takes them.
+    await upsertTransactions(sql, [
+      txn({ accountId: acct.checkingId, amountCents: -4200, postedDate: '2026-09-27',
+            rawDescription: 'PADDED    PATTERN    MERCHANT' }),
+    ]);
+
+    const travel = await categoryByName(sql, 'Travel');
+    await sql`INSERT INTO rules (name, priority, match_regex, set_category_id)
+              VALUES ('Padded pattern', 15, 'PADDED    PATTERN', ${travel})`;
+
+    await runCategorization(sql, { noLlm: true });
+
+    const [row] = await sql<{ category_name: string }[]>`
+      SELECT category_name FROM v_transactions
+      WHERE raw_description LIKE 'PADDED%'`;
+    expect(row.category_name).toBe('Travel');
+  });
+});
+
 describe('merchant defaults', () => {
   it('propagates a merchant default to future transactions of that merchant', async () => {
     const travel = await categoryByName(sql, 'Travel');

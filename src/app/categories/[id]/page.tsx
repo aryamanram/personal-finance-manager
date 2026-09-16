@@ -6,9 +6,11 @@ import { TransactionTable } from '@/components/TransactionTable';
 import { CategoryDefaults } from '@/components/CategoryDefaults';
 import { Figure } from '@/components/Figure';
 import { formatCentsCompact } from '@/money';
+import { formatMonthShort } from '@/lib/format-date';
 
 export const dynamic = 'force-dynamic';
 
+/** Renders a category's spending trend, defaults, and transactions. */
 export default async function CategoryPage({
   params,
 }: {
@@ -72,9 +74,7 @@ export default async function CategoryPage({
             {months.map((m) => (
               <li key={m.month} className="flex items-center gap-3 text-xs">
                 <span className="figure w-16 shrink-0 text-paper-faint">
-                  {new Date(`${m.month}T00:00:00`).toLocaleDateString('en-US', {
-                    month: 'short', year: '2-digit',
-                  })}
+                  {formatMonthShort(m.month)}
                 </span>
                 <span className="h-4 flex-1 bg-ink-850">
                   <span

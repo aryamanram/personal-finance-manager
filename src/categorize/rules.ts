@@ -9,6 +9,21 @@ import type { Sql } from 'postgres';
 /** The guard that makes I4 true. Never write a batch update without it. */
 export const NOT_LOCKED = 'NOT category_locked';
 
+/**
+ * Bank exports pad descriptions with runs of spaces to align fixed-width
+ * columns: Chase writes "VENMO            CASHOUT" in a CSV where its API
+ * returns "VENMO CASHOUT". A rule written against one form silently matches
+ * nothing in the other, and a rule that matches nothing looks exactly like a
+ * rule that had nothing to match.
+ *
+ * So rules are evaluated against a whitespace-collapsed description AND against
+ * the raw one. Collapsing only would break the mirror-image case: a pattern
+ * written with the literal repeated spaces it saw in a CSV can never match the
+ * collapsed form, so that rule would quietly stop claiming its rows and a
+ * lower-priority rule would take them.
+ */
+const COLLAPSED = 'regexp_replace(t.raw_description, \'\\s+\', \' \', \'g\')';
+
 export interface Rule {
   id: string;
   name: string;
@@ -90,7 +105,10 @@ export async function applyRules(
         ${alreadyMatched.size > 0
           ? sql`AND t.id <> ALL(${Array.from(alreadyMatched)}::uuid[])`
           : sql``}
-        ${rule.match_regex ? sql`AND t.raw_description ~* ${rule.match_regex}` : sql``}
+        ${rule.match_regex
+          ? sql`AND (t.raw_description ~* ${rule.match_regex}
+                     OR ${sql.unsafe(COLLAPSED)} ~* ${rule.match_regex})`
+          : sql``}
         ${rule.match_account_id ? sql`AND t.account_id = ${rule.match_account_id}` : sql``}
         ${rule.match_amount_min !== null ? sql`AND t.amount_cents >= ${rule.match_amount_min}` : sql``}
         ${rule.match_amount_max !== null ? sql`AND t.amount_cents <= ${rule.match_amount_max}` : sql``}
@@ -124,7 +142,10 @@ export async function applyRules(
         ${alreadyMatched.size > 0
           ? sql`AND t.id <> ALL(${Array.from(alreadyMatched)}::uuid[])`
           : sql``}
-        ${rule.match_regex ? sql`AND t.raw_description ~* ${rule.match_regex}` : sql``}
+        ${rule.match_regex
+          ? sql`AND (t.raw_description ~* ${rule.match_regex}
+                     OR ${sql.unsafe(COLLAPSED)} ~* ${rule.match_regex})`
+          : sql``}
         ${rule.match_account_id ? sql`AND t.account_id = ${rule.match_account_id}` : sql``}
         ${rule.match_amount_min !== null ? sql`AND t.amount_cents >= ${rule.match_amount_min}` : sql``}
         ${rule.match_amount_max !== null ? sql`AND t.amount_cents <= ${rule.match_amount_max}` : sql``}

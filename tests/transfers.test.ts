@@ -6,7 +6,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { Sql } from 'postgres';
 import { createTestDb, seedAccounts, categoryByName } from './helpers/db';
 import { upsertTransactions } from '@/ingest/upsert';
-import { matchTransfers, scorePair, linkPair, unlinkTransfer } from '@/transfers/match';
+import { matchTransfers, scorePair, linkPair, unlinkTransfer, TransferLinkError } from '@/transfers/match';
 import type { CanonicalTxn } from '@/lib/types';
 
 let sql: Sql;
@@ -135,6 +135,92 @@ describe('ambiguity is queued, not guessed', () => {
     const rows = await sql<{ transfer_id: string | null }[]>`
       SELECT transfer_id FROM transactions WHERE abs(amount_cents) = 2500`;
     expect(rows.every((x) => x.transfer_id === null)).toBe(true);
+  });
+});
+
+describe('a manual link is validated, not trusted', () => {
+  // The auto matcher only passes pairs its own query vetted, but --link and the
+  // UI take two ids from a human. A transfer's legs are excluded from spending,
+  // so a bad link silently removes real money from the totals.
+  it('refuses an id that does not exist', async () => {
+    const [real] = await sql<{ id: string }[]>`SELECT id FROM transactions LIMIT 1`;
+    await expect(
+      linkPair(sql, real.id, '00000000-0000-0000-0000-000000000000', 'manual'),
+    ).rejects.toThrow(TransferLinkError);
+  });
+
+  it('refuses to link a transaction to itself', async () => {
+    const [real] = await sql<{ id: string }[]>`SELECT id FROM transactions LIMIT 1`;
+    await expect(linkPair(sql, real.id, real.id, 'manual')).rejects.toThrow(/two different/i);
+  });
+
+  it('refuses to steal a leg out of an existing transfer', async () => {
+    const [linked] = await sql<{ id: string }[]>`
+      SELECT id FROM transactions WHERE transfer_id IS NOT NULL LIMIT 1`;
+    const [free] = await sql<{ id: string }[]>`
+      SELECT id FROM transactions WHERE transfer_id IS NULL LIMIT 1`;
+    await expect(linkPair(sql, linked.id, free.id, 'manual')).rejects.toThrow(/already part of/i);
+  });
+
+  it('refuses two legs on the same account', async () => {
+    // Build the fixture rather than fishing for leftovers: what earlier tests
+    // leave unlinked is not this test's business, and depending on it made the
+    // assertion silently skippable.
+    await upsertTransactions(sql, [
+      txn({ accountId: acct.appleId, rawDescription: 'SAME ACCT OUT', amountCents: -3300, postedDate: '2026-11-01' }),
+      txn({ accountId: acct.appleId, rawDescription: 'SAME ACCT IN',  amountCents:  3300, postedDate: '2026-11-01' }),
+    ]);
+    const rows = await sql<{ id: string }[]>`
+      SELECT id FROM transactions
+      WHERE raw_description LIKE 'SAME ACCT%' ORDER BY amount_cents`;
+
+    expect(rows).toHaveLength(2);
+    await expect(linkPair(sql, rows[0].id, rows[1].id, 'manual'))
+      .rejects.toThrow(/same account/i);
+  });
+
+  it('refuses two legs that move the same direction', async () => {
+    // Two outflows are two payments, not a transfer. Linking them would exclude
+    // both from spending, hiding real money rather than misfiling it.
+    await upsertTransactions(sql, [
+      txn({ accountId: acct.checkingId, rawDescription: 'SAME SIGN A', amountCents: -7700, postedDate: '2026-11-02' }),
+      txn({ accountId: acct.explorerId, rawDescription: 'SAME SIGN B', amountCents: -7700, postedDate: '2026-11-02' }),
+    ]);
+    const rows = await sql<{ id: string }[]>`
+      SELECT id FROM transactions WHERE raw_description LIKE 'SAME SIGN%' ORDER BY raw_description`;
+
+    expect(rows).toHaveLength(2);
+    await expect(linkPair(sql, rows[0].id, rows[1].id, 'manual'))
+      .rejects.toThrow(/same direction/i);
+  });
+
+  it('allows a manual link whose legs differ by a fee', async () => {
+    // Magnitude is the part a human may override — a wire fee or FX spread
+    // makes a genuine pair differ — as long as the direction is opposite.
+    await upsertTransactions(sql, [
+      txn({ accountId: acct.checkingId, rawDescription: 'WIRE OUT', amountCents: -50000, postedDate: '2026-11-03' }),
+      txn({ accountId: acct.explorerId, rawDescription: 'WIRE IN',  amountCents:  49750, postedDate: '2026-11-04' }),
+    ]);
+    const [out] = await sql<{ id: string }[]>`SELECT id FROM transactions WHERE raw_description = 'WIRE OUT'`;
+    const [inn] = await sql<{ id: string }[]>`SELECT id FROM transactions WHERE raw_description = 'WIRE IN'`;
+
+    const transferId = await linkPair(sql, out.id, inn.id, 'manual');
+    const legs = await sql<{ counts_as_spending: boolean }[]>`
+      SELECT counts_as_spending FROM v_transactions WHERE transfer_id = ${transferId}`;
+    expect(legs).toHaveLength(2);
+    expect(legs.every((l) => !l.counts_as_spending)).toBe(true);
+  });
+
+  it('leaves no orphaned transfer row behind when it refuses', async () => {
+    const [{ before }] = await sql<{ before: number }[]>`
+      SELECT count(*)::int AS before FROM transfers`;
+    const [real] = await sql<{ id: string }[]>`SELECT id FROM transactions LIMIT 1`;
+    await expect(
+      linkPair(sql, real.id, '00000000-0000-0000-0000-000000000000', 'manual'),
+    ).rejects.toThrow();
+    const [{ after }] = await sql<{ after: number }[]>`
+      SELECT count(*)::int AS after FROM transfers`;
+    expect(after).toBe(before);
   });
 });
 
