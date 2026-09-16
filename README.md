@@ -11,15 +11,43 @@ Single user, runs on localhost or behind Tailscale. No authentication.
 
 ## Privacy
 
-**No financial data is in this repository.** `.gitignore` blanket-ignores
-`*.csv`, `*.ofx`, `*.qfx`, `*.pdf`, every `.env*` file except `.env.example`,
-and `/data/` and `/private/`, so a statement dropped anywhere in the tree is
-ignored by default. The only CSVs tracked are the synthetic fixtures under
-`fixtures/`, which contain invented merchants and amounts.
+This repository holds the code for a financial tracker, never the finances.
+Clone it and you get an empty shell: no transactions, no balances, no
+credentials. Everything personal lives in your local Postgres and in files git
+refuses to track.
 
-`SIMPLEFIN_ACCESS_URL` is a bearer credential in URL form. It lives only in
-`.env.local`. `redactUrl()` is the only form allowed near a log line, and no
-error message in the sync path interpolates it — there is a test for that.
+`.gitignore` blocks `*.csv`, `*.ofx`, `*.qfx`, `*.qbo`, `*.pdf`, every `.env*`
+file except `.env.example`, `/data/`, `/private/`, and `db/dumps/`. The only
+tracked CSVs are two synthetic fixtures, **unignored by name** rather than by
+unignoring the directory — a blanket `!fixtures/**/*.csv` would silently commit
+a real statement dropped there while debugging an import.
+
+Two things that are personal but not obviously so:
+
+- **Categorization rules** name your employer, your landlord and the shops you
+  use. Keep them in `private/my-rules.ts`; `scripts/rules.example.ts` is the
+  template.
+- **`SIMPLEFIN_ACCESS_URL` is a bearer credential in URL form.** It lives only
+  in `.env.local`. `redactUrl()` is the only form allowed near a log line, and
+  no error in the sync path interpolates it — there is a test for that.
+
+### Before you push
+
+```bash
+npm run check:privacy
+```
+
+Fails on a tracked env file, an unrecognised CSV, anything shaped like an API
+key or a credentialed URL, and on any commit in *history* that touched an env or
+private path — deleting a file does not remove it from earlier commits.
+
+Install it as a pre-push hook (hooks are not cloned, so each checkout needs
+this once):
+
+```bash
+printf '#!/bin/sh\nexec npx tsx scripts/check-privacy.ts\n' > .git/hooks/pre-push
+chmod +x .git/hooks/pre-push
+```
 
 ## Setup
 

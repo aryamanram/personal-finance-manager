@@ -12,7 +12,6 @@
 secrets/
 
 # Real statements, exports, and any downloaded financial file.
-# Fixtures live in fixtures/ and must be synthetic only.
 /data/
 /private/
 *.csv
@@ -20,8 +19,14 @@ secrets/
 *.qfx
 *.qbo
 *.pdf
-!fixtures/**/*.csv
-!tests/**/*.csv
+
+# Synthetic fixtures are the ONLY tracked CSVs, and they are listed by name
+# rather than unignoring the whole directory. A blanket `!fixtures/**/*.csv`
+# means dropping a real statement into fixtures/ commits it silently — which is
+# exactly the mistake someone makes while debugging an import.
+# Adding a fixture is therefore a deliberate act: add its name here too.
+!fixtures/applecard-negative.csv
+!fixtures/applecard-positive.csv
 
 # Database dumps and local volumes
 *.sql.gz
