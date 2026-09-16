@@ -73,6 +73,40 @@ describe('the opening balance is not a gain', () => {
   });
 });
 
+describe('period totals agree with the monthly view', () => {
+  it('matches v_monthly_cashflow for the same single month', async () => {
+    // The dashboard reads getPeriodTotals for an arbitrary range while the bar
+    // chart reads v_monthly_cashflow. If the two ever disagree, the same page
+    // shows two different numbers for the same month.
+    const [monthly] = await sql<{
+      income_cents: number | null; required_cents: number | null;
+      discretionary_cents: number | null; invested_cents: number | null;
+    }[]>`SELECT * FROM v_monthly_cashflow WHERE month = '2026-02-01'`;
+
+    const [period] = await sql<{
+      income_cents: number; required_cents: number;
+      discretionary_cents: number; invested_cents: number;
+    }[]>`
+      SELECT
+        COALESCE(SUM(eff_amount_cents) FILTER (
+          WHERE eff_necessity = 'income' AND voided_at IS NULL
+            AND superseded_by_id IS NULL), 0)::bigint AS income_cents,
+        COALESCE(-SUM(eff_amount_cents) FILTER (
+          WHERE counts_as_spending AND eff_necessity = 'required'), 0)::bigint AS required_cents,
+        COALESCE(-SUM(eff_amount_cents) FILTER (
+          WHERE counts_as_spending AND eff_necessity = 'discretionary'), 0)::bigint AS discretionary_cents,
+        COALESCE(-SUM(eff_amount_cents) FILTER (
+          WHERE eff_necessity = 'investment' AND voided_at IS NULL
+            AND superseded_by_id IS NULL), 0)::bigint AS invested_cents
+      FROM v_transactions
+      WHERE eff_posted_date >= '2026-02-01'::date AND eff_posted_date <= '2026-02-28'::date`;
+
+    expect(period.invested_cents).toBe(monthly?.invested_cents ?? 0);
+    expect(period.income_cents).toBe(monthly?.income_cents ?? 0);
+    expect(period.required_cents).toBe(monthly?.required_cents ?? 0);
+  });
+});
+
 describe('market movement never reaches the cashflow view', () => {
   it('keeps a 9% month out of income', async () => {
     const rows = await sql<{ income_cents: number | null }[]>`

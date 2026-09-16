@@ -103,6 +103,76 @@ export async function getCategoryBreakdown(month: string): Promise<CategoryBreak
     ORDER BY total_cents DESC`;
 }
 
+/**
+ * The four cashflow totals over an arbitrary range, rather than one calendar
+ * month. v_monthly_cashflow answers per-month; this answers per-period, using
+ * the same predicates so the two can never disagree.
+ */
+export interface PeriodTotals {
+  income_cents: number;
+  required_cents: number;
+  discretionary_cents: number;
+  invested_cents: number;
+  fixed_cents: number;
+  variable_cents: number;
+}
+
+export async function getPeriodTotals(from: string, to: string): Promise<PeriodTotals> {
+  const [row] = await sql<PeriodTotals[]>`
+    SELECT
+      COALESCE(SUM(eff_amount_cents) FILTER (
+        WHERE eff_necessity = 'income' AND voided_at IS NULL
+          AND superseded_by_id IS NULL), 0)::bigint          AS income_cents,
+      COALESCE(-SUM(eff_amount_cents) FILTER (
+        WHERE counts_as_spending AND eff_necessity = 'required'), 0)::bigint
+                                                             AS required_cents,
+      COALESCE(-SUM(eff_amount_cents) FILTER (
+        WHERE counts_as_spending AND eff_necessity = 'discretionary'), 0)::bigint
+                                                             AS discretionary_cents,
+      COALESCE(-SUM(eff_amount_cents) FILTER (
+        WHERE eff_necessity = 'investment' AND voided_at IS NULL
+          AND superseded_by_id IS NULL), 0)::bigint          AS invested_cents,
+      COALESCE(-SUM(eff_amount_cents) FILTER (
+        WHERE counts_as_spending AND eff_cost_type = 'fixed'), 0)::bigint
+                                                             AS fixed_cents,
+      COALESCE(-SUM(eff_amount_cents) FILTER (
+        WHERE counts_as_spending AND eff_cost_type = 'variable'), 0)::bigint
+                                                             AS variable_cents
+    FROM v_transactions
+    WHERE eff_posted_date >= ${from}::date AND eff_posted_date <= ${to}::date`;
+  return row;
+}
+
+/** Category breakdown over an arbitrary range. */
+export async function getCategoryBreakdownRange(
+  from: string,
+  to: string,
+): Promise<CategoryBreakdownRow[]> {
+  return sql<CategoryBreakdownRow[]>`
+    SELECT
+      category_id,
+      COALESCE(category_name, 'Uncategorized')     AS category_name,
+      COALESCE(category_group_name, 'Other')       AS category_group_name,
+      eff_necessity::text                          AS necessity,
+      eff_cost_type::text                          AS cost_type,
+      -SUM(eff_amount_cents)::bigint               AS total_cents,
+      count(*)::int                                AS txn_count
+    FROM v_transactions
+    WHERE counts_as_spending
+      AND eff_posted_date >= ${from}::date AND eff_posted_date <= ${to}::date
+    GROUP BY 1,2,3,4,5
+    HAVING -SUM(eff_amount_cents) > 0
+    ORDER BY total_cents DESC`;
+}
+
+/** Earliest and latest transaction, for bounding the period picker. */
+export async function getLedgerBounds(): Promise<{ first: string; last: string } | null> {
+  const [row] = await sql<{ first: string; last: string }[]>`
+    SELECT MIN(eff_posted_date) AS first, MAX(eff_posted_date) AS last
+    FROM v_transactions WHERE voided_at IS NULL AND superseded_by_id IS NULL`;
+  return row?.first ? row : null;
+}
+
 export async function getCategories(): Promise<CategoryWithGroup[]> {
   return sql<CategoryWithGroup[]>`
     SELECT c.*, g.name AS group_name, g.sort_order AS group_sort_order

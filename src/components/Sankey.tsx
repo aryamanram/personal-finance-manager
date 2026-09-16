@@ -18,6 +18,8 @@ export interface SankeyInput {
   discretionaryCents: number;
   investedCents: number;
   categories: { name: string; necessity: string; cents: number }[];
+  /** Label for the source node. Defaults to "Income". */
+  sourceLabel?: string;
 }
 
 interface N { name: string; kind: 'income' | 'bucket' | 'category'; cents: number; tone: string }
@@ -33,7 +35,7 @@ const TONE = {
 const WIDTH = 940;
 const HEIGHT = 340;
 /** Gutters reserved for the node labels, which sit outside the diagram. */
-const PAD_LEFT = 78;
+const PAD_LEFT = 104;
 const PAD_RIGHT = 148;
 const MAX_CATEGORIES = 5;
 /**
@@ -49,12 +51,41 @@ export function Sankey({ data }: { data: SankeyInput }) {
 
   const graph = useMemo(() => {
     const { incomeCents, requiredCents, discretionaryCents, investedCents } = data;
-    if (incomeCents <= 0) return null;
 
-    const leftover = Math.max(0, incomeCents - requiredCents - discretionaryCents - investedCents);
+    const spent = requiredCents + discretionaryCents + investedCents;
 
-    const nodes: N[] = [{ name: 'Income', kind: 'income', cents: incomeCents, tone: TONE.in }];
+    // When spending exceeds income the difference came from somewhere —
+    // savings, a transfer in, or an existing balance. Naming it keeps the
+    // diagram balanced and honest. Refusing to draw at all (the old behaviour
+    // whenever income was zero) hid the entire breakdown in exactly the months
+    // a person most wants to see where the money went.
+    const drawdown = Math.max(0, spent - incomeCents);
+    const sourceTotal = incomeCents + drawdown;
+    if (sourceTotal <= 0) return null;
+
+    const leftover = Math.max(0, incomeCents - spent);
+
+    // Naming the source node is not cosmetic. When spending outruns income the
+    // node's value is income + drawdown, and calling that "Income" contradicts
+    // the income figure in the header above it. Split it into two source nodes
+    // instead, so both numbers are true and the funding gap is visible.
+    const nodes: N[] = [];
     const links: L[] = [];
+
+    const sourceIndexes: number[] = [];
+    if (incomeCents > 0) {
+      sourceIndexes.push(nodes.length);
+      nodes.push({
+        name: data.sourceLabel ?? 'Income',
+        kind: 'income',
+        cents: incomeCents,
+        tone: TONE.in,
+      });
+    }
+    if (drawdown > 0) {
+      sourceIndexes.push(nodes.length);
+      nodes.push({ name: 'From savings', kind: 'income', cents: drawdown, tone: TONE.left });
+    }
 
     const buckets: { name: string; cents: number; tone: string; necessity: string }[] = [
       { name: 'Required', cents: requiredCents, tone: TONE.out, necessity: 'required' },
@@ -63,19 +94,45 @@ export function Sankey({ data }: { data: SankeyInput }) {
       { name: 'Unspent', cents: leftover, tone: TONE.left, necessity: 'leftover' },
     ].filter((b) => b.cents > 0);
 
+    // With two sources, fanning each one into every bucket produces a mess of
+    // crossing ribbons that encodes nothing — the ledger cannot say which
+    // dollar paid for what. Pool them into a single node instead, so the
+    // sources stay legible and the flows downstream stay readable.
+    let poolIndex = sourceIndexes[0]!;
+    if (sourceIndexes.length > 1) {
+      poolIndex = nodes.length;
+      nodes.push({ name: 'Available', kind: 'bucket', cents: sourceTotal, tone: TONE.left });
+      for (const si of sourceIndexes) {
+        links.push({ source: si, target: poolIndex, value: nodes[si].cents, tone: nodes[si].tone });
+      }
+    }
+
     const bucketIndex = new Map<string, number>();
     for (const b of buckets) {
       const i = nodes.length;
       nodes.push({ name: b.name, kind: 'bucket', cents: b.cents, tone: b.tone });
       bucketIndex.set(b.necessity, i);
-      links.push({ source: 0, target: i, value: b.cents, tone: b.tone });
+      links.push({ source: poolIndex, target: i, value: b.cents, tone: b.tone });
+    }
+
+    // Callers may pass the same category more than once — the breakdown query
+    // groups by cost_type as well, so Entertainment arrives split into its
+    // fixed and variable halves. This diagram is about WHERE money went, not
+    // how predictable it was, so fold those back together first. Without this,
+    // one category renders as two nodes with the same name.
+    const merged = new Map<string, { name: string; necessity: string; cents: number }>();
+    for (const c of data.categories) {
+      if (c.cents <= 0) continue;
+      const key = `${c.necessity}|${c.name}`;
+      const existing = merged.get(key);
+      if (existing) existing.cents += c.cents;
+      else merged.set(key, { ...c });
     }
 
     // Top categories only; the tail becomes one "Other" flow so the chart
     // stays readable without hiding money.
-    const byNecessity = new Map<string, typeof data.categories>();
-    for (const c of data.categories) {
-      if (c.cents <= 0) continue;
+    const byNecessity = new Map<string, { name: string; necessity: string; cents: number }[]>();
+    for (const c of merged.values()) {
       const g = byNecessity.get(c.necessity);
       if (g) g.push(c);
       else byNecessity.set(c.necessity, [c]);
@@ -89,7 +146,7 @@ export function Sankey({ data }: { data: SankeyInput }) {
       // Keep the big ones; fold everything too thin to render into one flow, so
       // no money is hidden but no hairline is unreadable.
       const keep = sorted.filter(
-        (c, i) => i < MAX_CATEGORIES && c.cents / incomeCents >= MIN_SHARE_OF_TOTAL,
+        (c, i) => i < MAX_CATEGORIES && c.cents / sourceTotal >= MIN_SHARE_OF_TOTAL,
       );
       const shown = keep.length > 0 ? keep : sorted.slice(0, 1);
       const rest = sorted.slice(shown.length);
@@ -128,8 +185,8 @@ export function Sankey({ data }: { data: SankeyInput }) {
 
   if (!graph) {
     return (
-      <div className="flex h-[360px] items-center justify-center text-sm text-paper-faint">
-        No income recorded this month — nothing to trace.
+      <div className="flex h-[300px] items-center justify-center text-sm text-paper-faint">
+        No money moved in this period.
       </div>
     );
   }
