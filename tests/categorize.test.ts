@@ -206,6 +206,34 @@ describe('rules', () => {
   });
 });
 
+describe('bank column padding does not defeat a rule', () => {
+  it('matches a description padded with runs of spaces', async () => {
+    // Chase CSV exports pad descriptions to align fixed-width columns, so the
+    // same transaction reads "VENMO            CASHOUT" from a file and
+    // "VENMO CASHOUT" from the API. A rule written against one form matched
+    // nothing in the other — and a rule matching nothing is indistinguishable
+    // from a rule with nothing to match.
+    await upsertTransactions(sql, [
+      txn({ accountId: acct.checkingId, amountCents: 78978, postedDate: '2026-09-25',
+            rawDescription: 'VENMO            CASHOUT                    PPD ID: 5264681992' }),
+    ]);
+
+    const transfers = await categoryByName(sql, 'Account Transfer');
+    await sql`INSERT INTO rules (name, priority, match_regex, set_category_id)
+              VALUES ('Venmo cashout', 12, 'VENMO CASHOUT', ${transfers})`;
+
+    await runCategorization(sql, { noLlm: true });
+
+    const [row] = await sql<{ category_name: string; counts_as_spending: boolean }[]>`
+      SELECT category_name, counts_as_spending FROM v_transactions
+      WHERE raw_description LIKE 'VENMO%CASHOUT%'`;
+
+    expect(row.category_name).toBe('Account Transfer');
+    // The point of getting this right: an unmatched cashout reads as income.
+    expect(row.counts_as_spending).toBe(false);
+  });
+});
+
 describe('merchant defaults', () => {
   it('propagates a merchant default to future transactions of that merchant', async () => {
     const travel = await categoryByName(sql, 'Travel');
