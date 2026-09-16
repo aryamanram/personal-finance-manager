@@ -162,6 +162,10 @@ synced), `3` misconfigured.
 
 ## How it is put together
 
+**[Architecture diagrams](docs/architecture/)** — four levels, from a one-screen
+system context down to module detail and the path one transaction takes. Start
+there if you are new, or when a number looks wrong.
+
 ```
 db/schema.sql          authoritative DDL — edit this, not migrations
 src/ingest/            fingerprint, dedup, SimpleFIN, Apple Card CSV
@@ -170,6 +174,7 @@ src/transfers/         pair matching
 src/money.ts           the only cents↔display path
 src/lib/edit.ts        the manual edit contract
 src/app/               dashboard, register, accounts
+docs/architecture/     the diagrams, four levels of zoom
 docs/DESIGN.md         the design document
 docs/INGEST_NOTES.md   the dedup, supersession, and matching algorithms
 ```
