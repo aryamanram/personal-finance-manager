@@ -515,6 +515,11 @@ FROM (VALUES
   ('Transfers','Credit Card Payment','variable','transfer'),
   ('Transfers','Account Transfer','variable','transfer'),
 
+  -- Cash that left the account but whose destination the ledger cannot see.
+  -- Deliberately NOT Uncategorized: that means "nobody has decided yet", while
+  -- this means "decided, and unknowable". Counts as spending either way.
+  ('Lifestyle','Cash Withdrawn','variable','discretionary'),
+
   ('Lifestyle','Uncategorized','variable','discretionary')
 ) AS v(grp, name, ct, nec)
 JOIN category_groups g ON g.name = v.grp;

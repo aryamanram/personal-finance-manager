@@ -64,6 +64,13 @@ const RULES: RuleSpec[] = [
   { name: 'Groceries', priority: 41,
     regex: 'TRADER JOE|WHOLE FOODS|COSTCO WHSE|SAFEWAY', category: 'Groceries' },
 
+  // Cash withdrawn IS an expenditure — it left the account — but where it went
+  // is not traceable. Its own category keeps it in the spending totals while
+  // staying honest that the ledger cannot say what it bought.
+  { name: 'ATM cash', priority: 45,
+    regex: 'ATM WITHDRAWAL|NON-CHASE ATM WITHDRAW|CASH WITHDRAWAL',
+    category: 'Cash Withdrawn' },
+
   // --- Discretionary -------------------------------------------------------
   { name: 'Subscriptions', priority: 60,
     regex: 'NETFLIX|SPOTIFY|YouTubePremi', category: 'Subscriptions' },
