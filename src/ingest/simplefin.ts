@@ -145,6 +145,11 @@ export async function fetchAccounts(
   }
 
   const url = new URL(`${accessUrl.replace(/\/$/, '')}/accounts`);
+  // The bridge's own examples pass this explicitly. Without it the server may
+  // answer with the v1 shape (an `org` object per account instead of a
+  // top-level `connections` array), which institutionName() would then fail to
+  // resolve.
+  url.searchParams.set('version', '2');
   if (opts.startDate) {
     url.searchParams.set('start-date', String(Math.floor(opts.startDate.getTime() / 1000)));
   }
@@ -173,6 +178,15 @@ export async function fetchAccounts(
     throw new SimpleFinError_('Malformed response: no accounts array.');
   }
   return body;
+}
+
+/**
+ * The bridge expects <= 24 requests/day and DISABLES the access token if you
+ * keep exceeding it after the warnings start. Warnings arrive in the normal
+ * error list, so they must be surfaced rather than swallowed.
+ */
+export function isRateLimitWarning(err: SimpleFinError): boolean {
+  return /rate limit|too many requests|quota|slow down/i.test(err.msg);
 }
 
 /** Normalizes v1 `errors` strings and v2 `errlist` objects into one list. */

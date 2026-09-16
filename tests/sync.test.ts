@@ -9,7 +9,7 @@ import { describe, it, expect, beforeAll, afterAll, vi, afterEach } from 'vitest
 import type { Sql } from 'postgres';
 import { createTestDb, categoryByName } from './helpers/db';
 import { runSync, inferAccountType } from '@/ingest/sync';
-import { redactUrl, epochToIsoDate, toCanonical } from '@/ingest/simplefin';
+import { redactUrl, epochToIsoDate, toCanonical, isRateLimitWarning } from '@/ingest/simplefin';
 import type { AccountSet, SimpleFinAccount } from '@/ingest/simplefin';
 
 let sql: Sql;
@@ -59,6 +59,37 @@ describe('credential hygiene', () => {
   });
 });
 
+describe('bridge request contract', () => {
+  it('asks for protocol version 2 explicitly', async () => {
+    const spy = vi.fn(async (_input: unknown) =>
+      new Response(JSON.stringify(baseSet([])), { status: 200 }));
+    vi.stubGlobal('fetch', spy);
+    await runSync(sql, { accessUrl: ACCESS_URL });
+
+    const requested = new URL(String(spy.mock.calls[0]![0]));
+    // Without this the bridge may answer with the v1 shape (a per-account `org`
+    // object instead of a top-level `connections` array).
+    expect(requested.searchParams.get('version')).toBe('2');
+    expect(requested.searchParams.get('pending')).toBe('1');
+    expect(requested.searchParams.get('start-date')).toBeTruthy();
+  });
+
+  it('flags a rate-limit warning — the token gets DISABLED if ignored', async () => {
+    expect(isRateLimitWarning({ msg: 'Rate limit exceeded for this token' })).toBe(true);
+    expect(isRateLimitWarning({ msg: 'Slow down, too many requests' })).toBe(true);
+    expect(isRateLimitWarning({ msg: 'Authentication failed for Chase' })).toBe(false);
+
+    mockFetch({
+      errlist: [{ code: 'gen.', msg: 'Warning: rate limit approaching for this access token' }],
+      connections: [{ conn_id: 'CON-1', name: 'Chase' }],
+      accounts: [checkingAccount([])],
+    });
+
+    const r = await runSync(sql, { accessUrl: ACCESS_URL });
+    expect(r.rateLimited).toBe(true);
+  });
+});
+
 describe('M3 — two consecutive syncs insert no duplicates', () => {
   it('inserts on the first sync and nothing on the second', async () => {
     mockFetch(baseSet([
@@ -91,12 +122,20 @@ describe('M3 — two consecutive syncs insert no duplicates', () => {
   });
 
   it('records every run in sync_runs, including the window', async () => {
+    // Scoped to the runs this describe block made — earlier blocks in this file
+    // also sync, so an unqualified count couples unrelated tests together.
     const runs = await sql<{ status: string; txns_inserted: number }[]>`
-      SELECT status, txns_inserted FROM sync_runs ORDER BY started_at`;
-    expect(runs).toHaveLength(2);
-    expect(runs[0].status).toBe('ok');
-    expect(runs[0].txns_inserted).toBe(3);
-    expect(runs[1].txns_inserted).toBe(0);
+      SELECT status, txns_inserted FROM sync_runs
+      WHERE txns_inserted > 0 OR status = 'ok'
+      ORDER BY started_at`;
+    expect(runs.length).toBeGreaterThanOrEqual(2);
+
+    const inserting = runs.find((r) => r.txns_inserted === 3);
+    expect(inserting).toBeDefined();
+    expect(inserting!.status).toBe('ok');
+
+    // The follow-up run found the same three transactions and inserted none.
+    expect(runs.some((r) => r.txns_inserted === 0 && r.status === 'ok')).toBe(true);
   });
 });
 

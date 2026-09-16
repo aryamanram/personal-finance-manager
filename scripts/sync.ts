@@ -63,6 +63,14 @@ async function main() {
   for (const e of result.errors) console.error(`! ${e}`);
   for (const n of result.notices) console.log(`+ ${n}`);
 
+  if (result.rateLimited) {
+    console.error(
+      '\n! The bridge is warning about request volume. It expects <= 24 requests\n' +
+      '  per day and will DISABLE the access token if the warnings are ignored,\n' +
+      '  which means re-claiming a setup token. Stop running sync by hand today.',
+    );
+  }
+
   console.log(`done in ${((Date.now() - started) / 1000).toFixed(1)}s · ${result.status}`);
   process.exitCode = result.status === 'ok' ? 0 : result.status === 'partial' ? 2 : 1;
 }

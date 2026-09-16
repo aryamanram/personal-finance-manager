@@ -39,8 +39,15 @@ against this rather than against your own statements.
 
 ### Connecting Chase
 
+1. Link your institutions in the bridge dashboard first — the token grants
+   access to whatever is already connected, so a token minted before you add
+   Chase will sync an empty account list.
+2. Visit **https://beta-bridge.simplefin.org/simplefin/create** to mint a setup
+   token. It is generated on demand and is *not* stored in your account
+   settings, which is why it is easy to look for and not find.
+3. Exchange it:
+
 ```bash
-# Get a setup token at https://beta-bridge.simplefin.org/
 npx tsx scripts/claim-simplefin.ts <setup-token>
 # Paste the printed line into .env.local, then:
 npm run sync
@@ -49,6 +56,15 @@ npm run sync
 Setup tokens are single-use. A 403 means it was already claimed — per the
 SimpleFIN protocol checklist that may mean it was compromised, so revoke it at
 the bridge rather than retrying.
+
+**Rate limit: about 24 requests per day.** The bridge starts emitting warnings
+above that and **disables the access token** if they are ignored, which means
+re-claiming a setup token. A daily cron is well inside the limit, but running
+`npm run sync` repeatedly while testing is not. `sync` detects the warning and
+says so loudly; stop for the day when it does. Quotas replenish through the day.
+
+The request window is capped at 90 days, and each sync overlaps the previous one
+by 5 days to catch late-posting transactions.
 
 ### Importing an Apple Card statement
 

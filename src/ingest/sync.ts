@@ -7,7 +7,7 @@
  */
 import type { Sql } from 'postgres';
 import {
-  fetchAccounts, toCanonical, collectErrors, institutionName,
+  fetchAccounts, toCanonical, collectErrors, institutionName, isRateLimitWarning,
   type SimpleFinAccount, type SimpleFinConnection,
 } from './simplefin';
 import { upsertTransactions } from './upsert';
@@ -32,6 +32,11 @@ export interface SyncResult {
   errors: string[];
   /** Things worth telling the user that are NOT failures (a new account). */
   notices: string[];
+  /**
+   * The bridge disables an access token that keeps exceeding ~24 requests/day.
+   * A warning here means STOP syncing, not retry.
+   */
+  rateLimited: boolean;
   windowStart: string;
 }
 
@@ -125,6 +130,7 @@ export async function runSync(
     duplicate: 0,
     errors: [],
     notices: [],
+    rateLimited: false,
     windowStart: start.toISOString().slice(0, 10),
   };
 
@@ -139,6 +145,11 @@ export async function runSync(
       const label = err.code ? `[${err.code}] ` : '';
       result.errors.push(`${label}${err.msg}`);
       log(`  ! ${label}${err.msg}`);
+      if (isRateLimitWarning(err)) {
+        result.rateLimited = true;
+        log('  ! RATE LIMIT WARNING — stop syncing. Continuing past this will ' +
+            'get the access token disabled and require re-claiming a setup token.');
+      }
     }
 
     for (const sfAccount of set.accounts) {
