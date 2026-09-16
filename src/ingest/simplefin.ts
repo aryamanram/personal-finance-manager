@@ -160,7 +160,21 @@ export async function fetchAccounts(
   if (opts.balancesOnly) url.searchParams.set('balances-only', '1');
   for (const id of opts.accountIds ?? []) url.searchParams.append('account', id);
 
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  // Node's fetch REFUSES a URL carrying credentials ("Request cannot be
+  // constructed from a URL that includes credentials"), and a SimpleFIN access
+  // URL is credentials-in-URL by design. Strip them off the URL and send them
+  // as the Basic auth header they already represent.
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  const username = decodeURIComponent(url.username);
+  const password = decodeURIComponent(url.password);
+  if (username || password) {
+    headers.Authorization =
+      'Basic ' + Buffer.from(`${username}:${password}`).toString('base64');
+    url.username = '';
+    url.password = '';
+  }
+
+  const res = await fetch(url, { headers });
 
   if (res.status === 403) {
     throw new SimpleFinError_(

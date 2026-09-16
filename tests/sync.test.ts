@@ -8,7 +8,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi, afterEach } from 'vitest';
 import type { Sql } from 'postgres';
 import { createTestDb, categoryByName } from './helpers/db';
-import { runSync, inferAccountType } from '@/ingest/sync';
+import { runSync, inferAccountType, splitWindows } from '@/ingest/sync';
 import { redactUrl, epochToIsoDate, toCanonical, isRateLimitWarning } from '@/ingest/simplefin';
 import type { AccountSet, SimpleFinAccount } from '@/ingest/simplefin';
 
@@ -59,6 +59,39 @@ describe('credential hygiene', () => {
   });
 });
 
+describe('window splitting', () => {
+  const day = 24 * 60 * 60 * 1000;
+
+  it('returns one window for a routine daily sync', () => {
+    const end = new Date('2026-09-16T12:00:00Z');
+    const start = new Date(end.getTime() - 5 * day);
+    expect(splitWindows(start, end, 45)).toHaveLength(1);
+  });
+
+  it('splits a 89-day backfill into windows within the recommended range', () => {
+    const end = new Date('2026-09-16T12:00:00Z');
+    const start = new Date(end.getTime() - 89 * day);
+    const windows = splitWindows(start, end, 45);
+
+    expect(windows.length).toBeGreaterThan(1);
+    // No window may exceed the limit — that warning is what this exists to avoid.
+    for (const [from, to] of windows) {
+      expect(to.getTime() - from.getTime()).toBeLessThanOrEqual(45 * day);
+    }
+    // Contiguous and complete: no gap can silently drop transactions.
+    expect(windows[0]![0].getTime()).toBe(start.getTime());
+    expect(windows[windows.length - 1]![1].getTime()).toBe(end.getTime());
+    for (let i = 1; i < windows.length; i++) {
+      expect(windows[i]![0].getTime()).toBe(windows[i - 1]![1].getTime());
+    }
+  });
+
+  it('never returns zero windows', () => {
+    const t = new Date('2026-09-16T12:00:00Z');
+    expect(splitWindows(t, t, 45).length).toBeGreaterThanOrEqual(1);
+  });
+});
+
 describe('bridge request contract', () => {
   it('asks for protocol version 2 explicitly', async () => {
     const spy = vi.fn(async (_input: unknown) =>
@@ -72,6 +105,26 @@ describe('bridge request contract', () => {
     expect(requested.searchParams.get('version')).toBe('2');
     expect(requested.searchParams.get('pending')).toBe('1');
     expect(requested.searchParams.get('start-date')).toBeTruthy();
+  });
+
+  it('sends credentials as a Basic header, never in the URL', async () => {
+    const spy = vi.fn(async (_input: unknown, _init?: unknown) =>
+      new Response(JSON.stringify(baseSet([])), { status: 200 }));
+    vi.stubGlobal('fetch', spy);
+    await runSync(sql, { accessUrl: ACCESS_URL });
+
+    // Node's fetch throws "Request cannot be constructed from a URL that
+    // includes credentials", and a SimpleFIN access URL is credentials-in-URL
+    // by design — so every real sync fails unless they are moved to a header.
+    const requested = new URL(String(spy.mock.calls[0]![0]));
+    expect(requested.username).toBe('');
+    expect(requested.password).toBe('');
+    expect(String(spy.mock.calls[0]![0])).not.toContain('secret');
+
+    const init = spy.mock.calls[0]![1] as { headers: Record<string, string> };
+    const auth = init.headers.Authorization;
+    expect(auth).toMatch(/^Basic /);
+    expect(Buffer.from(auth.slice(6), 'base64').toString()).toBe('user:secret');
   });
 
   it('flags a rate-limit warning — the token gets DISABLED if ignored', async () => {

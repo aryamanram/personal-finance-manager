@@ -8,7 +8,7 @@
 import type { Sql } from 'postgres';
 import {
   fetchAccounts, toCanonical, collectErrors, institutionName, isRateLimitWarning,
-  type SimpleFinAccount, type SimpleFinConnection,
+  type SimpleFinAccount, type SimpleFinConnection, type AccountSet,
 } from './simplefin';
 import { upsertTransactions } from './upsert';
 import { parseCents } from '../money';
@@ -16,8 +16,18 @@ import type { AccountType } from '../lib/types';
 
 /** Overlap re-fetched on every sync to catch late-posting transactions. */
 const OVERLAP_DAYS = 5;
-/** SimpleFIN's maximum lookback on a first run. */
-const FIRST_RUN_DAYS = 90;
+/**
+ * First-run lookback. 90 days is the bridge's hard cap on a single request.
+ */
+const FIRST_RUN_DAYS = 89;
+
+/**
+ * The bridge warns above 45 days ("exceeds recommended range ... this may be
+ * capped") even though 90 is still accepted. Fetch a long first run as
+ * successive windows of this size rather than one oversized request, so the
+ * backfill keeps working when the recommendation becomes the limit.
+ */
+const MAX_WINDOW_DAYS = 45;
 
 export interface SyncResult {
   syncRunId: string;
@@ -135,22 +145,66 @@ export async function runSync(
   };
 
   try {
-    log(`· fetching from ${result.windowStart}`);
-    const set = await fetchAccounts(opts.accessUrl, { startDate: start, pending: true });
+    // Split the range into windows the bridge is happy with. A routine daily
+    // sync is one window; only a first run or a long --since is more.
+    const windows = splitWindows(start, new Date(), MAX_WINDOW_DAYS);
+    log(`· fetching from ${result.windowStart}` +
+        (windows.length > 1 ? ` in ${windows.length} windows` : ''));
 
-    // Protocol checklist: display error messages from /accounts to the user.
-    // A con.auth error means one institution is broken while others still work,
-    // which is a partial sync, not a failure.
-    for (const err of collectErrors(set)) {
-      const label = err.code ? `[${err.code}] ` : '';
-      result.errors.push(`${label}${err.msg}`);
-      log(`  ! ${label}${err.msg}`);
-      if (isRateLimitWarning(err)) {
-        result.rateLimited = true;
-        log('  ! RATE LIMIT WARNING — stop syncing. Continuing past this will ' +
-            'get the access token disabled and require re-claiming a setup token.');
+    // Merge the windows into one account set. Transactions accumulate per
+    // account; the balance from the newest window wins.
+    const merged = new Map<string, SimpleFinAccount>();
+    let connections: SimpleFinConnection[] = [];
+    const seenErrors = new Set<string>();
+
+    for (const [from, to] of windows) {
+      const set = await fetchAccounts(opts.accessUrl, {
+        startDate: from,
+        endDate: to,
+        pending: true,
+      });
+      connections = set.connections ?? connections;
+
+      // Protocol checklist: display error messages from /accounts to the user.
+      // A con.auth error means one institution is broken while others still
+      // work, which is a partial sync, not a failure. Deduped across windows.
+      for (const err of collectErrors(set)) {
+        const label = err.code ? `[${err.code}] ` : '';
+        const line = `${label}${err.msg}`;
+        if (!seenErrors.has(line)) {
+          seenErrors.add(line);
+          result.errors.push(line);
+          log(`  ! ${line}`);
+        }
+        if (isRateLimitWarning(err)) {
+          result.rateLimited = true;
+          log('  ! RATE LIMIT WARNING — stop syncing. Continuing past this will ' +
+              'get the access token disabled and require re-claiming a setup token.');
+        }
+      }
+
+      // A rate-limit warning mid-backfill means stop, not keep hammering.
+      if (result.rateLimited) break;
+
+      for (const account of set.accounts) {
+        const existing = merged.get(account.id);
+        if (!existing) {
+          merged.set(account.id, { ...account, transactions: [...(account.transactions ?? [])] });
+          continue;
+        }
+        // Later windows are newer, so their balance is the current one.
+        existing.balance = account.balance;
+        existing['balance-date'] = account['balance-date'];
+        if (account.holdings?.length) existing.holdings = account.holdings;
+
+        const seen = new Set(existing.transactions?.map((t) => t.id));
+        for (const t of account.transactions ?? []) {
+          if (!seen.has(t.id)) existing.transactions!.push(t);
+        }
       }
     }
+
+    const set: AccountSet = { accounts: Array.from(merged.values()), connections };
 
     for (const sfAccount of set.accounts) {
       const { id: accountId, created } = await resolveAccount(sql, sfAccount, set.connections ?? []);
@@ -259,4 +313,26 @@ async function recordSnapshot(sql: Sql, accountId: string, sfAccount: SimpleFinA
 
 function safeCents(v: string): number | null {
   try { return parseCents(v); } catch { return null; }
+}
+
+
+/**
+ * Split [start, end] into consecutive windows of at most `days` each, oldest
+ * first. Always returns at least one window.
+ */
+export function splitWindows(start: Date, end: Date, days: number): [Date, Date][] {
+  const windows: [Date, Date][] = [];
+  const span = days * 24 * 60 * 60 * 1000;
+
+  let from = new Date(start);
+  while (from < end) {
+    const to = new Date(Math.min(from.getTime() + span, end.getTime()));
+    windows.push([from, to]);
+    if (to.getTime() >= end.getTime()) break;
+    // Next window begins where this one ended; the bridge's range is
+    // inclusive, and upsert dedups any transaction that lands in both.
+    from = to;
+  }
+
+  return windows.length > 0 ? windows : [[start, end]];
 }
