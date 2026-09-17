@@ -1,0 +1,39 @@
+{
+  "_comment": "Snapshot of the Figma design system's Primitives collection. tests/design-tokens.test.ts asserts these still match src/app/globals.css. Update BOTH together, or the test fails and names the drift.",
+  "_file": "https://www.figma.com/design/KTM2F9Ho9lVMuSOlFQUT7j",
+  "_updated": "2026-09-17",
+  "primitives": {
+    "ink/900": "#0d0f13",
+    "ink/850": "#12141a",
+    "ink/800": "#171a21",
+    "ink/700": "#1f232c",
+    "ink/600": "#2a2f3a",
+    "ink/500": "#3a4150",
+    "paper/base": "#e8e6e1",
+    "paper/dim": "#a8a69f",
+    "paper/faint": "#878b94",
+    "green/base": "#5b9c85",
+    "green/dim": "#3d6b5c",
+    "clay/base": "#c4644f",
+    "clay/dim": "#8a4638",
+    "amber/base": "#d9a441",
+    "blue/base": "#7b8fc4"
+  },
+  "cssVariableFor": {
+    "ink/900": "--color-ink-900",
+    "ink/850": "--color-ink-850",
+    "ink/800": "--color-ink-800",
+    "ink/700": "--color-ink-700",
+    "ink/600": "--color-ink-600",
+    "ink/500": "--color-ink-500",
+    "paper/base": "--color-paper",
+    "paper/dim": "--color-paper-dim",
+    "paper/faint": "--color-paper-faint",
+    "green/base": "--color-in",
+    "green/dim": "--color-in-dim",
+    "clay/base": "--color-out",
+    "clay/dim": "--color-out-dim",
+    "amber/base": "--color-edited",
+    "blue/base": "--color-invest"
+  }
+}
