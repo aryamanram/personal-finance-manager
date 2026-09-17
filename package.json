@@ -21,7 +21,7 @@
     "transfers": "tsx scripts/match-transfers.ts",
     "recategorize": "tsx scripts/recategorize.ts",
     "check:privacy": "tsx scripts/check-privacy.ts",
-    "prepush": "npm run check:privacy && npm run typecheck && npm test",
+    "prepush": "npm run check:privacy && npm run typecheck && npm test && npm run check:diagrams",
     "check:diagrams": "tsx scripts/check-diagrams.ts"
   },
   "dependencies": {
@@ -44,6 +44,7 @@
     "zod": "^4.6.4"
   },
   "devDependencies": {
+    "@mermaid-js/mermaid-cli": "^11.12.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/d3-sankey": "^0.12.5",
     "@types/node": "^26.5.1",

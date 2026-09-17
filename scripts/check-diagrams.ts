@@ -11,11 +11,21 @@
  * Run it when you change a diagram.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 const DOCS = 'docs/architecture';
+/** The locally installed Mermaid CLI. A devDependency, so no network fetch. */
+const MMDC = join('node_modules', '.bin', 'mmdc');
+if (!existsSync(MMDC)) {
+  console.error(
+    `Mermaid CLI not found at ${MMDC}.\n` +
+    'Run `npm install` — @mermaid-js/mermaid-cli is a devDependency.',
+  );
+  process.exit(1);
+}
+
 const work = mkdtempSync(join(tmpdir(), 'diagrams-'));
 let checked = 0;
 const failures: string[] = [];
@@ -32,11 +42,15 @@ try {
       checked++;
 
       try {
-        // execFileSync with an argument array: no shell, so a path cannot be
-        // interpreted as a command.
-        execFileSync('npx', ['-y', 'mmdc', '-i', src, '-o', join(work, `${name}.svg`)], {
-          stdio: 'pipe',
-        });
+        // Run the LOCAL binary from node_modules rather than fetching one.
+        // `npx -y mmdc` resolves whatever registry package happens to be named
+        // "mmdc" — which is not the Mermaid CLI — and only worked here because
+        // the CLI was already installed. It is now a devDependency, so this is
+        // both correct and offline.
+        //
+        // execFileSync with an argument array runs no shell, so nothing below
+        // is interpreted as a command.
+        execFileSync(MMDC, ['-i', src, '-o', join(work, `${name}.svg`)], { stdio: 'pipe' });
         console.log(`  ✓ ${file} diagram ${i + 1}`);
       } catch (err) {
         const detail = err instanceof Error && 'stderr' in err
