@@ -179,9 +179,15 @@ export default async function DashboardPage({
             <h2 className="eyebrow">Top categories</h2>
           </div>
           <ul className="mt-2">
-            {breakdown.slice(0, 12).map((b) => (
+            {breakdown.slice(0, 12).map((b, i) => (
               <li
-                key={`${b.category_id}-${b.necessity}`}
+                // Index, not the row's identity. A key derived from the query's
+                // grouping breaks the moment that grouping changes — which it
+                // did: the breakdown used to be split by cost_type as well, so
+                // Entertainment and Shopping each rendered twice with the same
+                // key. The list is read-only and re-renders whole, so position
+                // is a safe identity here.
+                key={`${i}-${b.category_id ?? 'uncategorized'}`}
                 className="rule-b flex items-baseline justify-between gap-4 py-2 text-sm"
               >
                 <Link
