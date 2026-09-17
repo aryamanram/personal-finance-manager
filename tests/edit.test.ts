@@ -13,6 +13,7 @@ let sql: Sql;
 let drop: () => Promise<void>;
 let acct: Awaited<ReturnType<typeof seedAccounts>>;
 let edit: typeof import('@/lib/edit');
+let queries: typeof import('@/lib/queries');
 let txnId: string;
 
 beforeAll(async () => {
@@ -26,6 +27,7 @@ beforeAll(async () => {
     ? buildUrl(sql)
     : process.env.DATABASE_URL!;
   edit = await import('@/lib/edit');
+  queries = await import('@/lib/queries');
 
   const { upsertTransactions } = await import('@/ingest/upsert');
   await upsertTransactions(sql, [{
@@ -190,6 +192,53 @@ describe('validation', () => {
 
   it('accepts an explicit null to clear an override', () => {
     expect(edit.TransactionPatchSchema.safeParse({ category_id: null }).success).toBe(true);
+  });
+});
+
+describe('getCategoryBreakdownRange returns one row per category', () => {
+  it('does not split a category across its cost types', async () => {
+    // Calls the exported query rather than re-implementing its SQL: a test that
+    // rebuilds the aggregation passes even when the real function is wrong,
+    // which defeats the point of having it.
+    const entertainment = await categoryByName(sql, 'Entertainment');
+    const { upsertTransactions } = await import('@/ingest/upsert');
+
+    await upsertTransactions(sql, [
+      { accountId: acct.checkingId, amountCents: -25196, postedDate: '2026-03-10',
+        status: 'posted', rawDescription: 'FIXED INSTALMENT', source: 'csv', externalId: null },
+      { accountId: acct.checkingId, amountCents: -4200, postedDate: '2026-03-12',
+        status: 'posted', rawDescription: 'VARIABLE NIGHT OUT', source: 'csv', externalId: null },
+    ]);
+    await sql`
+      UPDATE transactions SET category_id = ${entertainment}, category_source = 'manual',
+        cost_type_override = CASE WHEN raw_description = 'FIXED INSTALMENT'
+                                  THEN 'fixed'::cost_type ELSE 'variable'::cost_type END
+      WHERE raw_description IN ('FIXED INSTALMENT', 'VARIABLE NIGHT OUT')`;
+
+    // Both cost types are genuinely present on this category...
+    const [{ axes }] = await sql<{ axes: number }[]>`
+      SELECT count(DISTINCT eff_cost_type)::int AS axes FROM v_transactions
+      WHERE category_id = ${entertainment} AND counts_as_spending`;
+    expect(axes).toBe(2);
+
+    const rows = await queries.getCategoryBreakdownRange('2026-01-01', '2026-12-31');
+
+    // ...but the breakdown still returns exactly one row for it.
+    const forCategory = rows.filter((r) => r.category_id === entertainment);
+    expect(forCategory).toHaveLength(1);
+
+    // Carrying the WHOLE amount, not one half of it.
+    expect(forCategory[0].total_cents).toBe(25196 + 4200);
+    expect(forCategory[0].txn_count).toBe(2);
+
+    // And reporting the cost type that holds more money — the fixed instalment
+    // at $251.96 outweighs the variable $42.00.
+    expect(forCategory[0].cost_type).toBe('fixed');
+
+    // Keys built from (category_id, necessity) are therefore unique, which is
+    // what the duplicate-React-key error was about.
+    const keys = rows.map((r) => `${r.category_id}-${r.necessity}`);
+    expect(new Set(keys).size).toBe(keys.length);
   });
 });
 
