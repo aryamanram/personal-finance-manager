@@ -73,6 +73,55 @@ describe('the opening balance is not a gain', () => {
   });
 });
 
+describe('the category breakdown returns one row per category', () => {
+  it('does not split a category across its cost types', async () => {
+    // A category whose transactions are mixed — Entertainment holds both fixed
+    // instalments and variable spending — used to come back as two rows, so the
+    // dashboard rendered it twice under the same React key and the Sankey drew
+    // two nodes with the same label.
+    const entertainment = await categoryByName(sql, 'Entertainment');
+    await upsertTransactions(sql, [
+      { accountId: acct.checkingId, amountCents: -25196, postedDate: '2026-03-10',
+        status: 'posted', rawDescription: 'FIXED INSTALMENT', source: 'csv', externalId: null },
+      { accountId: acct.checkingId, amountCents: -4200, postedDate: '2026-03-12',
+        status: 'posted', rawDescription: 'VARIABLE NIGHT OUT', source: 'csv', externalId: null },
+    ]);
+    await sql`
+      UPDATE transactions SET category_id = ${entertainment}, category_source = 'manual',
+        cost_type_override = CASE WHEN raw_description = 'FIXED INSTALMENT'
+                                  THEN 'fixed'::cost_type ELSE 'variable'::cost_type END
+      WHERE raw_description IN ('FIXED INSTALMENT', 'VARIABLE NIGHT OUT')`;
+
+    // Both cost types are present...
+    const [{ axes }] = await sql<{ axes: number }[]>`
+      SELECT count(DISTINCT eff_cost_type)::int AS axes FROM v_transactions
+      WHERE category_id = ${entertainment} AND counts_as_spending`;
+    expect(axes).toBe(2);
+
+    // ...but the breakdown still returns exactly one row for the category.
+    const rows = await sql<{ category_id: string; necessity: string; total_cents: number }[]>`
+      WITH per_axis AS (
+        SELECT category_id, eff_necessity::text AS necessity, eff_cost_type::text AS cost_type,
+               -SUM(eff_amount_cents)::bigint AS total_cents
+        FROM v_transactions
+        WHERE counts_as_spending
+          AND eff_posted_date >= '2026-01-01'::date AND eff_posted_date <= '2026-12-31'::date
+        GROUP BY 1,2,3
+      )
+      SELECT category_id, necessity, SUM(total_cents)::bigint AS total_cents
+      FROM per_axis GROUP BY 1,2 HAVING SUM(total_cents) > 0`;
+
+    const forCategory = rows.filter((r) => r.category_id === entertainment);
+    expect(forCategory).toHaveLength(1);
+    // And the single row carries the whole amount, not half of it.
+    expect(forCategory[0].total_cents).toBe(25196 + 4200);
+
+    // Keys built from (category_id, necessity) are therefore unique.
+    const keys = rows.map((r) => `${r.category_id}-${r.necessity}`);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
 describe('period totals agree with the monthly view', () => {
   it('matches v_monthly_cashflow for the same single month', async () => {
     // The dashboard reads getPeriodTotals for an arbitrary range while the bar

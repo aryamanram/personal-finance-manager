@@ -23,7 +23,22 @@ export interface SankeyInput {
 }
 
 interface N { name: string; kind: 'income' | 'bucket' | 'category'; cents: number; tone: string }
-interface L { source: number; target: number; value: number; tone: string }
+interface L {
+  source: number;
+  target: number;
+  value: number;
+  tone: string;
+  /**
+   * The tooltip text, resolved when the link is built.
+   *
+   * d3-sankey REPLACES `source`/`target` with node object references as part of
+   * layout, so reading `link.source.name` at render time depends on d3's
+   * internal mutation having happened. Server and client disagreed about that,
+   * which React reported as a hydration mismatch. Computing the label up front
+   * from data we own removes the dependency entirely.
+   */
+  label: string;
+}
 
 const TONE = {
   in: 'var(--color-in)',
@@ -81,6 +96,17 @@ export function Sankey({ data }: { data: SankeyInput }) {
     const nodes: N[] = [];
     const links: L[] = [];
 
+    /** Push a link with its tooltip resolved from our own node array. */
+    const addLink = (source: number, target: number, value: number, tone: string) => {
+      links.push({
+        source,
+        target,
+        value,
+        tone,
+        label: `${nodes[source]!.name} → ${nodes[target]!.name}  ${formatCents(value)}`,
+      });
+    };
+
     const sourceIndexes: number[] = [];
     if (incomeCents > 0) {
       sourceIndexes.push(nodes.length);
@@ -112,7 +138,7 @@ export function Sankey({ data }: { data: SankeyInput }) {
       poolIndex = nodes.length;
       nodes.push({ name: 'Available', kind: 'bucket', cents: sourceTotal, tone: TONE.left });
       for (const si of sourceIndexes) {
-        links.push({ source: si, target: poolIndex, value: nodes[si].cents, tone: nodes[si].tone });
+        addLink(si, poolIndex, nodes[si]!.cents, nodes[si]!.tone);
       }
     }
 
@@ -121,14 +147,13 @@ export function Sankey({ data }: { data: SankeyInput }) {
       const i = nodes.length;
       nodes.push({ name: b.name, kind: 'bucket', cents: b.cents, tone: b.tone });
       bucketIndex.set(b.necessity, i);
-      links.push({ source: poolIndex, target: i, value: b.cents, tone: b.tone });
+      addLink(poolIndex, i, b.cents, b.tone);
     }
 
-    // Callers may pass the same category more than once — the breakdown query
-    // groups by cost_type as well, so Entertainment arrives split into its
-    // fixed and variable halves. This diagram is about WHERE money went, not
-    // how predictable it was, so fold those back together first. Without this,
-    // one category renders as two nodes with the same name.
+    // Fold any repeated (necessity, name) pair. getCategoryBreakdownRange now
+    // returns one row per category, but this component takes a plain array from
+    // whoever calls it, and a duplicate here would render as two nodes with the
+    // same label rather than failing visibly.
     const merged = new Map<string, { name: string; necessity: string; cents: number }>();
     for (const c of data.categories) {
       if (c.cents <= 0) continue;
@@ -163,7 +188,7 @@ export function Sankey({ data }: { data: SankeyInput }) {
       for (const c of shown) {
         const i = nodes.length;
         nodes.push({ name: c.name, kind: 'category', cents: c.cents, tone: nodes[parent].tone });
-        links.push({ source: parent, target: i, value: c.cents, tone: nodes[parent].tone });
+        addLink(parent, i, c.cents, nodes[parent]!.tone);
       }
       if (rest.length > 0) {
         const total = rest.reduce((a, c) => a + c.cents, 0);
@@ -172,7 +197,7 @@ export function Sankey({ data }: { data: SankeyInput }) {
         // other are indistinguishable, which defeats the point of folding.
         const label = `${rest.length} more ${nodes[parent].name.toLowerCase()}`;
         nodes.push({ name: label, kind: 'category', cents: total, tone: nodes[parent].tone });
-        links.push({ source: parent, target: i, value: total, tone: nodes[parent].tone });
+        addLink(parent, i, total, nodes[parent]!.tone);
       }
     }
 
@@ -234,11 +259,7 @@ export function Sankey({ data }: { data: SankeyInput }) {
                 onMouseEnter={() => setHover(i)}
                 onMouseLeave={() => setHover(null)}
               >
-                <title>
-                  {(link.source as unknown as N).name} → {(link.target as unknown as N).name}
-                  {'  '}
-                  {formatCents(link.value)}
-                </title>
+                <title>{link.label}</title>
               </path>
             );
           })}

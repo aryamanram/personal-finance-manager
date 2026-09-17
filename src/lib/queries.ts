@@ -145,24 +145,49 @@ export async function getPeriodTotals(from: string, to: string): Promise<PeriodT
 }
 
 /** Category breakdown over an arbitrary range. */
+/**
+ * One row per (category, necessity) — deliberately NOT per cost_type.
+ *
+ * Grouping by cost_type as well splits a category whose transactions are mixed:
+ * Entertainment arrives as its fixed half (instalment plans) and its variable
+ * half. Both consumers then have to fold it back, and the one that forgets
+ * renders the same category twice under the same React key.
+ *
+ * cost_type is still reported, as whichever side holds more money, because the
+ * list shows it as a hint. The fixed/variable split proper belongs to the bar
+ * chart, which reads v_monthly_cashflow.
+ */
 export async function getCategoryBreakdownRange(
   from: string,
   to: string,
 ): Promise<CategoryBreakdownRow[]> {
   return sql<CategoryBreakdownRow[]>`
+    WITH per_axis AS (
+      SELECT
+        category_id,
+        COALESCE(category_name, 'Uncategorized')   AS category_name,
+        COALESCE(category_group_name, 'Other')     AS category_group_name,
+        eff_necessity::text                        AS necessity,
+        eff_cost_type::text                        AS cost_type,
+        -SUM(eff_amount_cents)::bigint             AS total_cents,
+        count(*)::int                              AS txn_count
+      FROM v_transactions
+      WHERE counts_as_spending
+        AND eff_posted_date >= ${from}::date AND eff_posted_date <= ${to}::date
+      GROUP BY 1,2,3,4,5
+    )
     SELECT
       category_id,
-      COALESCE(category_name, 'Uncategorized')     AS category_name,
-      COALESCE(category_group_name, 'Other')       AS category_group_name,
-      eff_necessity::text                          AS necessity,
-      eff_cost_type::text                          AS cost_type,
-      -SUM(eff_amount_cents)::bigint               AS total_cents,
-      count(*)::int                                AS txn_count
-    FROM v_transactions
-    WHERE counts_as_spending
-      AND eff_posted_date >= ${from}::date AND eff_posted_date <= ${to}::date
-    GROUP BY 1,2,3,4,5
-    HAVING -SUM(eff_amount_cents) > 0
+      category_name,
+      category_group_name,
+      necessity,
+      -- The cost type carrying the larger share of the money.
+      (ARRAY_AGG(cost_type ORDER BY total_cents DESC))[1] AS cost_type,
+      SUM(total_cents)::bigint                            AS total_cents,
+      SUM(txn_count)::int                                 AS txn_count
+    FROM per_axis
+    GROUP BY 1,2,3,4
+    HAVING SUM(total_cents) > 0
     ORDER BY total_cents DESC`;
 }
 
