@@ -102,6 +102,41 @@ if (historyHits.length > 0) {
   );
 }
 
+// --- 3b. Financial figures in tracked docs ---------------------------------
+// Prose is where this leaks. A balance written into a design note is as public
+// as one written into code, and easier to overlook in review — this check exists
+// because exactly that happened: a real brokerage balance reached docs/STATE.md
+// in the same commit that added a rule forbidding it.
+const DOC_PATHS = tracked.filter(
+  (f) => f.endsWith('.md') && !f.startsWith('node_modules'),
+);
+/** Four or more significant digits: $1,234.56 or $12345. Ignores $0-$999. */
+const BIG_MONEY = /\$\s?\d{1,3}(,\d{3})+(\.\d{2})?|\$\s?\d{4,}(\.\d{2})?/g;
+
+for (const file of DOC_PATHS) {
+  let content: string;
+  try {
+    content = readFileSync(file, 'utf8');
+  } catch {
+    continue;
+  }
+  // Fenced code blocks hold worked examples and schema snippets.
+  const prose = content.replace(/```[\s\S]*?```/g, '');
+  const hits = [...new Set(prose.match(BIG_MONEY) ?? [])];
+
+  // Figures that are illustrative rather than personal, used in the design docs
+  // to explain a calculation.
+  const ILLUSTRATIVE = new Set(['$80,000', '$87,200', '$4,000', '$3,200', '$2,000', '$1,234.56']);
+  const real = hits.filter((h) => !ILLUSTRATIVE.has(h.replace(/\s/g, '')));
+
+  if (real.length > 0) {
+    problems.push(
+      `${file} — contains ${real.length} large dollar figure(s) (${real.slice(0, 3).join(', ')}). ` +
+      `Real balances belong in private/, not a tracked doc. If illustrative, add to ILLUSTRATIVE.`,
+    );
+  }
+}
+
 // --- 4. Warn on things that are legal but worth a second look --------------
 const envExample = tracked.includes('.env.example')
   ? readFileSync('.env.example', 'utf8') : '';

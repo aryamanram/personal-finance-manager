@@ -2,20 +2,23 @@
 
 Two kinds of thing live here, and they age differently.
 
-**Most of this file is decisions** — why Venmo out is spending, why ATM cash has
-its own category, why 2024–2026 cannot anchor a budget. Those do not go stale.
-They are the things you would otherwise re-explain at the start of every session,
-and the reason they are written down is that re-deriving them wastes time and
-sometimes gets a different answer.
+**Most of this file is decisions** — why a peer-payment rail counts as spending,
+why withdrawn cash gets its own category, why a partial year cannot anchor a
+budget. Those do not go stale. They are what you would otherwise re-explain at
+the start of every session, and re-deriving them wastes time and sometimes
+reaches a different answer.
 
-**One section is volatile** (Right now, below). A state doc that nobody updates
-is worse than none, because it gets believed. So that section is kept short
-enough that being out of date is obvious, and it carries the date it was last
-touched.
+**One section is volatile** (Right now, below). A state doc nobody updates is
+worse than none, because it gets believed. So that section is kept short enough
+that being out of date is obvious, and it carries the date it was last touched.
 
 `CLAUDE.md` says *how* to work here. This says *what has been settled*.
 
 > **If you change an answer below, change it in the same commit.**
+
+**This file is public.** Balances, account names, employers, merchants, and
+transaction counts belong in `private/STATE.local.md`, which is gitignored.
+Describe the *shape* of a decision here and keep the specifics there.
 
 ---
 
@@ -23,66 +26,56 @@ touched.
 
 Nothing blocking. Everything merged to `main`; tests green.
 
-Two standing tasks the owner tracks:
+Two standing tasks the owner tracks — details in `private/STATE.local.md`:
 
-- Record a Morgan Stanley balance monthly, so performance has a period to
-  measure over.
-- Add a payroll rule once McKinsey deposits start, so income categorises itself.
+- Record a brokerage balance monthly, so investment performance has a period to
+  measure over. One snapshot is a starting line, not a return.
+- Add a payroll rule when a new income source starts, so it categorises itself.
+
+Next up: design work on the look and feel, using the Figma integration.
 
 ---
 
 ## Where the project got to
 
 All seven milestones from `docs/DESIGN.md` are done and accepted against their
-own checks. The app runs against live bank accounts, not fixtures.
+own checks. The app runs against live bank accounts, not fixtures: several
+hundred transactions spanning about two years, fully categorised, reconciling
+against the banks' own balances.
 
-| | |
-|---|---|
-| Transactions | ~383, Sept 2024 → present, 100% categorised |
-| Accounts | Chase checking, United Explorer, Apple Card (all SimpleFIN), Morgan Stanley (manual snapshots) |
-| Reconciliation | Clean, except a rolling few dollars for charges the bank has not settled into its own balance yet |
-| Tests | 126 |
-
-## What is connected
-
-**SimpleFIN** pulls all three card/bank accounts daily. The setup token is
-minted from "Connect an App" in the bridge dashboard — not from account
-settings, which is where people look first. Rate limit is ~24 requests/day and
-**exceeding it disables the token**; `sync` detects the warning and says to stop.
-
-**Claude Haiku** categorises unknown merchants, batched per merchant so each is
-decided once. Optional: without `ANTHROPIC_API_KEY` the step is skipped and
-unknown merchants stay `Uncategorized`.
-
-**Morgan Stanley** is snapshot-tracked by hand. Opening position recorded
-2026-09-16 at $207,227.41. Needs a second reading before Modified Dietz has a
-period to measure — one snapshot is a starting line, and the page says so rather
-than printing a meaningless 0.00%.
+Connected: two card/bank feeds through SimpleFIN on a daily pull, one
+snapshot-tracked brokerage, and Claude Haiku for unknown merchants.
 
 ## Decisions worth not relitigating
 
-**Peer-payment rails.** Venmo `PAYMENT` out is spending; Venmo `CASHOUT` in is a
-transfer. Zelle to an individual has consistently been splitting a food bill.
-PayPal `INST XFER` was paying down a PayPal Credit line for a Magic: the
-Gathering purchase, categorised by what the money *bought* rather than the rail
-it travelled.
+**Peer-payment rails.** Money going *out* through Venmo, Zelle, or PayPal is
+spending; a cash-*out* back to checking is a transfer. The direction is the
+signal, not the rail. Where such a payment funded a purchase on credit, it is
+categorised by what the money *bought*, not by the rail it travelled.
 
 **The LLM reliably gets those rails wrong**, routing them to `Account Transfer`
-— mechanically defensible, wrong for a spending ledger, and it once hid $5,048.
-Those rails are claimed by explicit rules so the model cannot re-decide them. If
-it ever touches them again, clear `merchants.default_category_id` too, or the
-mistake becomes permanent.
+— mechanically defensible, since money does move through a rail, but wrong for a
+spending ledger. That category carries `necessity='transfer'`, so anything
+landing there leaves the totals entirely. It once hid several thousand dollars of
+real spending. Those rails are now claimed by explicit rules so the model cannot
+re-decide them each run. If it ever touches them again, clear
+`merchants.default_category_id` too, or the mistake becomes permanent.
 
-**ATM cash** goes to `Cash Withdrawn`, not `Uncategorized`. It *is* an
+**Withdrawn cash** goes to `Cash Withdrawn`, not `Uncategorized`. It *is* an
 expenditure — it left the account — but its destination is unknowable.
 `Uncategorized` means "nobody has decided yet"; conflating the two makes the
 backlog count meaningless.
 
-**Income history is thin and that is correct.** McKinsey starting 2026-09-25 is
-the first real full-time job; before that, mostly unpaid internships and a
-six-week Perficient stint. 2024–2025 has no salary baseline at all, so those
-years cannot anchor a budget. **2027 is the first year with full data.** Do not
-read 2024–2026 as a trend or propose a budget from it.
+**Income history is thin, and that is correct, not a gap.** The owner's first
+full-time job starts late 2026; before that, mostly unpaid internships and one
+short contract. The early years have no salary baseline at all, so they cannot
+anchor a budget. **The first year with full data is 2027.** Do not read the
+earlier months as a trend, and do not propose a budget from them.
+
+**One snapshot is not a return.** An investment account with a single balance
+reading has no period to measure over. The page says tracking starts here rather
+than printing a meaningless 0.00%, and Modified Dietz only becomes meaningful at
+the second reading.
 
 ## Known and deliberate
 
@@ -100,7 +93,7 @@ read 2024–2026 as a trend or propose a budget from it.
 
 Flagged rather than guessed at, per `docs/DESIGN.md` §12:
 
-- **Annual fee amortisation.** The Explorer's fee spikes one month's fixed
+- **Annual fee amortisation.** A card's annual fee spikes one month's fixed
   costs. Shown as-is today; spreading it over twelve months is a view change now
   and a data migration later.
 - **LLM proposing new categories.** Currently it may only pick from the existing
@@ -111,13 +104,14 @@ Flagged rather than guessed at, per `docs/DESIGN.md` §12:
 ## Where things live
 
 ```
-db/schema.sql          authoritative DDL
-docs/DESIGN.md         the spec, invariants I1–I8
-docs/INGEST_NOTES.md   dedup, supersession, transfer matching
-docs/architecture/     four diagrams, system context → module detail
-docs/STATE.md          this file
-private/my-rules.ts    real categorisation rules — gitignored
-src/money.ts           the only cents↔display path
-src/lib/queries.ts     every read, through v_transactions
-src/lib/edit.ts        every manual write, plus the audit log
+db/schema.sql            authoritative DDL
+docs/DESIGN.md           the spec, invariants I1–I8
+docs/INGEST_NOTES.md     dedup, supersession, transfer matching
+docs/architecture/       four diagrams, system context → module detail
+docs/STATE.md            this file — public, no personal specifics
+private/STATE.local.md   the same picture with real numbers — gitignored
+private/my-rules.ts      real categorisation rules — gitignored
+src/money.ts             the only cents↔display path
+src/lib/queries.ts       every read, through v_transactions
+src/lib/edit.ts          every manual write, plus the audit log
 ```

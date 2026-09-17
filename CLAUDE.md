@@ -56,8 +56,8 @@ These come from `docs/DESIGN.md` §2. Each has a test; `npm test` is the check.
 **Verify against reality, not against the code.** Nearly every bug found in this
 project was invisible from reading: a transfer join that silently dropped half
 its pairs, dates off by one west of Greenwich, `fetch` refusing a credentialed
-URL, an LLM hiding $5,048 by calling spending a transfer. Run it, hit the real
-service, look at the rendered page.
+URL, an LLM hiding thousands of dollars by calling spending a transfer. Run it,
+hit the real service, look at the rendered page.
 
 **Tests assert arithmetic, not execution.** "12 pairs link, and exactly 12" beats
 "the function returned". A test that re-implements the logic it is testing passes

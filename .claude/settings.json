@@ -21,9 +21,10 @@
       "Bash(gh pr diff:*)"
     ],
     "deny": [
-      "Read(.env.local)",
       "Read(.env)",
-      "Read(private/**)"
+      "Read(.env.*)",
+      "Read(private/**)",
+      "Read(**/*.env)"
     ]
   }
 }
