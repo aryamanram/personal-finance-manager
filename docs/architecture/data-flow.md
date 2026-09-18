@@ -8,10 +8,10 @@ where to look when that number is wrong.
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{
   'background':'transparent',
-  'primaryColor':'#1f232c','primaryTextColor':'#e8e6e1','primaryBorderColor':'#3a4150',
-  'lineColor':'#6b6f78','secondaryColor':'#171a21','tertiaryColor':'#12141a',
-  'clusterBkg':'#12141a','clusterBorder':'#2a2f3a',
-  'edgeLabelBackground':'#0d0f13','fontSize':'14px'
+  'primaryColor':'#1b2430','primaryTextColor':'#e6eaec','primaryBorderColor':'#34424f',
+  'lineColor':'#84919a','secondaryColor':'#131922','tertiaryColor':'#0f141b',
+  'clusterBkg':'#0f141b','clusterBorder':'#25303e',
+  'edgeLabelBackground':'#0b0f14','fontSize':'14px'
 }}}%%
 flowchart LR
     bank["Bank"]
@@ -51,11 +51,11 @@ flowchart LR
     screen -.->|"PATCH"| human
     human -.->|"locks the row"| view
 
-    classDef ing fill:#1f232c,stroke:#5b9c85,color:#e8e6e1
-    classDef enr fill:#1f232c,stroke:#7b8fc4,color:#e8e6e1
-    classDef rd fill:#1f232c,stroke:#d9a441,color:#e8e6e1
-    classDef ext fill:#171a21,stroke:#3a4150,color:#a8a69f
-    classDef hum fill:#3d6b5c,stroke:#5b9c85,color:#e8e6e1
+    classDef ing fill:#1b2430,stroke:#6ee7c0,color:#e6eaec
+    classDef enr fill:#1b2430,stroke:#9a86e0,color:#e6eaec
+    classDef rd fill:#1b2430,stroke:#d9a441,color:#e6eaec
+    classDef ext fill:#131922,stroke:#34424f,color:#a5b0b7
+    classDef hum fill:#2f8a72,stroke:#6ee7c0,color:#e6eaec
     class fetch,fp,insert,skip ing
     class merchant,rule,model,uncat,pair enr
     class view,totals,screen rd
@@ -71,10 +71,10 @@ because two identical $4.50 coffees on the same day are **not** duplicates.
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{
   'background':'transparent',
-  'primaryColor':'#1f232c','primaryTextColor':'#e8e6e1','primaryBorderColor':'#3a4150',
-  'lineColor':'#6b6f78','secondaryColor':'#171a21','tertiaryColor':'#12141a',
-  'clusterBkg':'#12141a','clusterBorder':'#2a2f3a',
-  'edgeLabelBackground':'#0d0f13','fontSize':'14px'
+  'primaryColor':'#1b2430','primaryTextColor':'#e6eaec','primaryBorderColor':'#34424f',
+  'lineColor':'#84919a','secondaryColor':'#131922','tertiaryColor':'#0f141b',
+  'clusterBkg':'#0f141b','clusterBorder':'#25303e',
+  'edgeLabelBackground':'#0b0f14','fontSize':'14px'
 }}}%%
 flowchart TB
     start(["incoming row"]) --> hasext{"has an<br/>aggregator id?"}
@@ -90,8 +90,8 @@ flowchart TB
     delta -->|yes| ins2["insert the difference"]
     delta -->|no| nothing["insert nothing"]
 
-    classDef act fill:#1f232c,stroke:#5b9c85,color:#e8e6e1
-    classDef imp fill:#1f232c,stroke:#d9a441,color:#e8e6e1
+    classDef act fill:#1b2430,stroke:#6ee7c0,color:#e6eaec
+    classDef imp fill:#1b2430,stroke:#d9a441,color:#e6eaec
     class update,ins1,ins2,nothing act
     class claim imp
 ```

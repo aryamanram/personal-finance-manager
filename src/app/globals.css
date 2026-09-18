@@ -2,36 +2,56 @@
 
 /* ---------------------------------------------------------------------------
    A ledger, not a dashboard.
-   Ink ground, paper figures, columns that align to the digit. Accounting's own
-   two colors — verdigris in, clay out — desaturated so they read as
-   information rather than alarm. Amber is reserved, everywhere and only, for
-   "a human changed this."
+   Ink ground, paper figures, columns that align to the digit. The palette is
+   deliberately cool throughout — this is a tool for sitting with your spending,
+   not an alarm panel. Inflow is a bright aqua, outflow a deep ocean blue: they
+   are separated by LIGHTNESS (3.50:1), not hue, so the distinction survives
+   red-green colourblindness. Amber is the only warm colour on the page and is
+   reserved, everywhere and only, for "a human changed this" — it earns its
+   warmth by being the one thing you must not miss.
    --------------------------------------------------------------------------- */
 
 @theme {
-  --color-ink-900: #0d0f13;
-  --color-ink-850: #12141a;
-  --color-ink-800: #171a21;
-  --color-ink-700: #1f232c;
-  --color-ink-600: #2a2f3a;
-  --color-ink-500: #3a4150;
+  --color-ink-900: #0b0f14;
+  --color-ink-850: #0f141b;
+  --color-ink-800: #131922;
+  --color-ink-700: #1b2430;
+  --color-ink-600: #25303e;
+  --color-ink-500: #34424f;
 
-  --color-paper:     #e8e6e1;
-  --color-paper-dim: #a8a69f;
-  /* Lightened from #6b6f78 (3.81:1) to clear WCAG AA. Used at 11-14px for
-     eyebrows and metadata, which is below the large-text threshold, so it
-     needs 4.5:1. Now 5.62:1 on the page ground and 4.61:1 on inputs. */
-  --color-paper-faint: #878b94;
+  --color-paper:     #e6eaec;
+  --color-paper-dim: #a5b0b7;
+  /* Used at 11-14px for eyebrows and metadata, which is below the large-text
+     threshold, so it needs 4.5:1. 5.95:1 on the page ground. */
+  --color-paper-faint: #84919a;
 
-  --color-in:    #5b9c85;
-  --color-in-dim:#3d6b5c;
-  --color-out:   #c4644f;
-  --color-out-dim:#8a4638;
+  --color-in:    #6ee7c0;
+  --color-in-dim:#2f8a72;
+  --color-out:   #3a6ea5;
+  /* Darker than --color-out, not lighter. "Dim" is used for the recessive half
+     of a two-tone pair (the fixed band in a stacked bar, an unfilled track),
+     so inverting the relationship makes those read backwards. */
+  --color-out-dim:#2f5f8f;
+  /* The cost-mix chart stacks fixed under variable. Both used to be outflow
+     tones one step apart, which was legible when outflow was orange and is not
+     now that it is blue — this is the light end of the same hue, far enough
+     above --color-out to read as a separate band. */
+  --color-out-lift:#7fc4e8;
 
   /* Reserved for human edits. Never use for anything else. */
   --color-edited: #d9a441;
 
-  --color-invest: #7b8fc4;
+  --color-invest: #7c6bc9;
+
+  /* The Sankey's four buckets. A single "outflow" colour was enough when
+     outflow was orange against a green inflow; in an all-cool palette every
+     ribbon collapses into the same blue. These alternate light/dark down the
+     stack so adjacent ribbons always separate by lightness, and differ in hue
+     for the pairs that never touch. tests/design-tokens.test.ts pins both. */
+  --color-flow-required:      #3a6ea5;
+  --color-flow-discretionary: #5bbfe0;
+  --color-flow-invest:        #6a5cb8;
+  --color-flow-leftover:      #6ee7c0;
 
   --font-sans: "Inter Tight", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;

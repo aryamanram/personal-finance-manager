@@ -7,10 +7,10 @@ Which module does what, and which ones you must not bypass.
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{
   'background':'transparent',
-  'primaryColor':'#1f232c','primaryTextColor':'#e8e6e1','primaryBorderColor':'#3a4150',
-  'lineColor':'#6b6f78','secondaryColor':'#171a21','tertiaryColor':'#12141a',
-  'clusterBkg':'#12141a','clusterBorder':'#2a2f3a',
-  'edgeLabelBackground':'#0d0f13','fontSize':'14px'
+  'primaryColor':'#1b2430','primaryTextColor':'#e6eaec','primaryBorderColor':'#34424f',
+  'lineColor':'#84919a','secondaryColor':'#131922','tertiaryColor':'#0f141b',
+  'clusterBkg':'#0f141b','clusterBorder':'#25303e',
+  'edgeLabelBackground':'#0b0f14','fontSize':'14px'
 }}}%%
 flowchart TB
     subgraph write["Write path — batch passes"]
@@ -63,11 +63,11 @@ flowchart TB
     pages --> money
     api --> edit
 
-    classDef ing fill:#1f232c,stroke:#5b9c85,color:#e8e6e1
-    classDef enr fill:#1f232c,stroke:#7b8fc4,color:#e8e6e1
-    classDef dat fill:#1f232c,stroke:#d9a441,color:#e8e6e1
-    classDef uic fill:#2a2f3a,stroke:#6b6f78,color:#e8e6e1
-    classDef store fill:#171a21,stroke:#5b9c85,color:#e8e6e1
+    classDef ing fill:#1b2430,stroke:#6ee7c0,color:#e6eaec
+    classDef enr fill:#1b2430,stroke:#9a86e0,color:#e6eaec
+    classDef dat fill:#1b2430,stroke:#d9a441,color:#e6eaec
+    classDef uic fill:#25303e,stroke:#84919a,color:#e6eaec
+    classDef store fill:#131922,stroke:#6ee7c0,color:#e6eaec
     class sources,fingerprint,upsert ing
     class runcat,rules,llm,match enr
     class queries,edit,dbmod dat
