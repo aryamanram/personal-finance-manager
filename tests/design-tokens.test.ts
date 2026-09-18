@@ -133,6 +133,19 @@ describe('contrast stays within WCAG AA', () => {
     }
   });
 
+  // The cost-mix chart stacks fixed under variable as two touching bands whose
+  // colours are the only thing identifying them, which WCAG 1.4.11 puts at
+  // 3:1 against each other. Unlike the Sankey's four buckets (below), two
+  // bands can reach that comfortably, so they are held to the full bar.
+  it('separates the cost-mix chart bands by 3:1', () => {
+    const r = contrast(P['clay/base'], P['clay/lift']);
+    expect(
+      r,
+      `the fixed band ${P['clay/base']} and the variable band ${P['clay/lift']} are ` +
+        `${r.toFixed(2)}:1 apart, below the 3:1 WCAG asks of meaningful graphics`,
+    ).toBeGreaterThanOrEqual(3);
+  });
+
   it('keeps the flow colours distinguishable from the ground', () => {
     for (const token of ['green/base', 'clay/base', 'blue/base']) {
       const r = contrast(P[token], P['ink/900']);
@@ -159,6 +172,15 @@ describe('contrast stays within WCAG AA', () => {
   // different hues. Four cool colours cannot satisfy pairwise lightness
   // separation, so encoding the adjacency is what makes an all-cool diagram
   // legible at all.
+  //
+  // This bar is 1.8:1, not the 3:1 the chart bands above are held to, and that
+  // is a deliberate limit rather than an oversight. A strict 3:1 chain across
+  // four buckets is satisfiable at exactly two luminances (0.114 and 0.442 on
+  // this ground) — every dark bucket forced to one, every light bucket to the
+  // other. That leaves non-adjacent pairs at 1.01:1: identical lightness,
+  // separated by hue alone, which is strictly worse for colourblind viewers
+  // than what this alternating scheme gives them. Two touching bands can reach
+  // 3:1; four cannot, without giving up the thing 3:1 exists to protect.
   it('keeps adjacent Sankey buckets distinguishable', () => {
     const STACK = ['flow/required', 'flow/discretionary', 'flow/invest', 'flow/leftover'];
 

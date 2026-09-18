@@ -55,7 +55,7 @@ flowchart LR
     classDef enr fill:#1b2430,stroke:#9a86e0,color:#e6eaec
     classDef rd fill:#1b2430,stroke:#d9a441,color:#e6eaec
     classDef ext fill:#131922,stroke:#34424f,color:#a5b0b7
-    classDef hum fill:#2f8a72,stroke:#6ee7c0,color:#e6eaec
+    classDef hum fill:#2f8a72,stroke:#6ee7c0,color:#0b0f14
     class fetch,fp,insert,skip ing
     class merchant,rule,model,uncat,pair enr
     class view,totals,screen rd

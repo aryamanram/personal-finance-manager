@@ -36,7 +36,7 @@
      tones one step apart, which was legible when outflow was orange and is not
      now that it is blue — this is the light end of the same hue, far enough
      above --color-out to read as a separate band. */
-  --color-out-lift:#7fc4e8;
+  --color-out-lift:#8ccdf0;
 
   /* Reserved for human edits. Never use for anything else. */
   --color-edited: #d9a441;

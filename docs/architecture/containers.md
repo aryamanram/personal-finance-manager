@@ -46,7 +46,7 @@ flowchart TB
     envfile -.->|"read at startup"| web
     envfile -.-> passes
 
-    classDef person fill:#2f8a72,stroke:#6ee7c0,color:#e6eaec
+    classDef person fill:#2f8a72,stroke:#6ee7c0,color:#0b0f14
     classDef app fill:#25303e,stroke:#84919a,color:#e6eaec
     classDef store fill:#1b2430,stroke:#6ee7c0,color:#e6eaec
     classDef ext fill:#131922,stroke:#34424f,color:#a5b0b7

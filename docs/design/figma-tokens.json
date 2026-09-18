@@ -22,7 +22,7 @@
     "flow/discretionary": "#5bbfe0",
     "flow/invest": "#6a5cb8",
     "flow/leftover": "#6ee7c0",
-    "clay/lift": "#7fc4e8"
+    "clay/lift": "#8ccdf0"
   },
   "cssVariableFor": {
     "ink/900": "--color-ink-900",
