@@ -133,10 +133,123 @@ describe('contrast stays within WCAG AA', () => {
     }
   });
 
+  // The cost-mix chart stacks fixed under variable as two touching bands whose
+  // colours are the only thing identifying them, which WCAG 1.4.11 puts at
+  // 3:1 against each other. Unlike the Sankey's four buckets (below), two
+  // bands can reach that comfortably, so they are held to the full bar.
+  it('separates the cost-mix chart bands by 3:1', () => {
+    const r = contrast(P['clay/base'], P['clay/lift']);
+    expect(
+      r,
+      `the fixed band ${P['clay/base']} and the variable band ${P['clay/lift']} are ` +
+        `${r.toFixed(2)}:1 apart, below the 3:1 WCAG asks of meaningful graphics`,
+    ).toBeGreaterThanOrEqual(3);
+  });
+
   it('keeps the flow colours distinguishable from the ground', () => {
     for (const token of ['green/base', 'clay/base', 'blue/base']) {
       const r = contrast(P[token], P['ink/900']);
       expect(r, `${token} on ink/900 is ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  // The palette is entirely cool, so inflow and outflow are close in hue by
+  // design. That makes LIGHTNESS the only thing keeping them apart, and a
+  // well-meaning tweak toward "prettier" could silently merge the two colours
+  // that a ledger must never confuse. Pin the gap.
+  it('separates inflow from outflow by lightness, not hue alone', () => {
+    const r = contrast(P['green/base'], P['clay/base']);
+    expect(
+      r,
+      `inflow ${P['green/base']} vs outflow ${P['clay/base']} is only ${r.toFixed(2)}:1. ` +
+        'They must differ in lightness by at least 3:1 so the distinction survives ' +
+        'red-green colourblindness.',
+    ).toBeGreaterThanOrEqual(3);
+  });
+
+  // The Sankey stacks its buckets in a fixed order. Only ribbons that touch
+  // need to be told apart by lightness; the pairs that never touch just need
+  // different hues. Four cool colours cannot satisfy pairwise lightness
+  // separation, so encoding the adjacency is what makes an all-cool diagram
+  // legible at all.
+  //
+  // This bar is 1.8:1, not the 3:1 the chart bands above are held to, and that
+  // is a deliberate limit rather than an oversight. A strict 3:1 chain across
+  // four buckets is satisfiable at exactly two luminances (0.114 and 0.442 on
+  // this ground) — every dark bucket forced to one, every light bucket to the
+  // other. That leaves non-adjacent pairs at 1.01:1: identical lightness,
+  // separated by hue alone, which is strictly worse for colourblind viewers
+  // than what this alternating scheme gives them. Two touching bands can reach
+  // 3:1; four cannot, without giving up the thing 3:1 exists to protect.
+  it('keeps adjacent Sankey buckets distinguishable', () => {
+    const STACK = ['flow/required', 'flow/discretionary', 'flow/invest', 'flow/leftover'];
+
+    for (const token of STACK) {
+      const r = contrast(P[token], P['ink/900']);
+      expect(r, `${token} on ink/900 is ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
+    }
+
+    for (let i = 0; i < STACK.length - 1; i++) {
+      const [a, b] = [STACK[i], STACK[i + 1]];
+      const r = contrast(P[a], P[b]);
+      expect(
+        r,
+        `${a} and ${b} sit next to each other in the diagram but are only ` +
+          `${r.toFixed(2)}:1 apart — their ribbons will merge`,
+      ).toBeGreaterThanOrEqual(1.8);
+    }
+  });
+
+  it('gives non-adjacent Sankey buckets different hues', () => {
+    const hue = (hex: string) => {
+      const { r, g, b } = parse(hex);
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const d = max - min;
+      if (d === 0) return 0;
+      const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      return (h * 60 + 360) % 360;
+    };
+    const STACK = ['flow/required', 'flow/discretionary', 'flow/invest', 'flow/leftover'];
+
+    for (let i = 0; i < STACK.length; i++) {
+      for (let j = i + 2; j < STACK.length; j++) {
+        let d = Math.abs(hue(P[STACK[i]]) - hue(P[STACK[j]]));
+        if (d > 180) d = 360 - d;
+        expect(d, `${STACK[i]} and ${STACK[j]} are only ${Math.round(d)}deg apart in hue`)
+          .toBeGreaterThanOrEqual(30);
+      }
+    }
+  });
+
+  it('keeps inflow and outflow apart under red-green colourblindness', () => {
+    // Brettel-style linear approximations. Not a substitute for real testing,
+    // but enough to catch a palette change that collapses the two.
+    const toLinear = (c: number) => channel(c);
+    const toSrgb = (c: number) => {
+      const v = c <= 0.0031308 ? c * 12.92 : 1.055 * Math.max(c, 0) ** (1 / 2.4) - 0.055;
+      return Math.round(Math.min(1, Math.max(0, v)) * 255);
+    };
+    const simulate = (hex: string, m: number[]) => {
+      const { r, g, b } = parse(hex);
+      const [R, G, B] = [toLinear(r), toLinear(g), toLinear(b)];
+      const out = [
+        m[0] * R + m[1] * G + m[2] * B,
+        m[3] * R + m[4] * G + m[5] * B,
+        m[6] * R + m[7] * G + m[8] * B,
+      ];
+      return `#${out.map(toSrgb).map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+    };
+
+    const FORMS = {
+      deuteranopia: [0.625, 0.375, 0, 0.7, 0.3, 0, 0, 0.3, 0.7],
+      protanopia: [0.567, 0.433, 0, 0.558, 0.442, 0, 0, 0.242, 0.758],
+    };
+
+    for (const [name, matrix] of Object.entries(FORMS)) {
+      const r = contrast(simulate(P['green/base'], matrix), simulate(P['clay/base'], matrix));
+      expect(r, `under ${name} inflow and outflow are ${r.toFixed(2)}:1 apart`)
+        .toBeGreaterThanOrEqual(2.5);
     }
   });
 });

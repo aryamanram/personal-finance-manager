@@ -172,3 +172,47 @@ describe('every npm script the docs name still exists', () => {
       .toEqual([]);
   });
 });
+
+/**
+ * The diagrams hardcode their palette — Mermaid has no access to CSS custom
+ * properties — so a recolour of the app has to be repeated here by hand. That
+ * is exactly the kind of edit that changes a fill and forgets the text sitting
+ * on it: the cool-palette pass left three person nodes at 3.47:1 because the
+ * fill moved and `color:` did not.
+ */
+describe('diagram text stays legible on its own fill', () => {
+  const channel = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const parse = (hex: string) => ({
+    r: parseInt(hex.slice(1, 3), 16) / 255,
+    g: parseInt(hex.slice(3, 5), 16) / 255,
+    b: parseInt(hex.slice(5, 7), 16) / 255,
+  });
+  const luminance = (hex: string) => {
+    const { r, g, b } = parse(hex);
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+  };
+  const contrast = (a: string, b: string) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+
+  it('keeps every classDef above 4.5:1', () => {
+    // Node labels render at 14px with 11px spans — normal-size text, so AA is
+    // 4.5:1 rather than the 3:1 large-text threshold.
+    const failures: string[] = [];
+
+    for (const { file, text } of docs) {
+      for (const line of text.split('\n')) {
+        const m = /classDef\s+(\w+).*?fill:(#[0-9a-fA-F]{6}).*?color:(#[0-9a-fA-F]{6})/.exec(line);
+        if (!m) continue;
+        const [, name, fill, color] = m;
+        const ratio = contrast(color, fill);
+        if (ratio < 4.5) {
+          failures.push(`${file} classDef ${name}: ${color} on ${fill} is ${ratio.toFixed(2)}:1`);
+        }
+      }
+    }
+
+    expect(failures, `diagram text below WCAG AA:\n  ${failures.join('\n  ')}`).toEqual([]);
+  });
+});

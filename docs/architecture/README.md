@@ -31,10 +31,10 @@ One person, their banks, and two outside services.
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{
   'background':'transparent',
-  'primaryColor':'#1f232c','primaryTextColor':'#e8e6e1','primaryBorderColor':'#3a4150',
-  'lineColor':'#6b6f78','secondaryColor':'#171a21','tertiaryColor':'#12141a',
-  'clusterBkg':'#12141a','clusterBorder':'#2a2f3a',
-  'edgeLabelBackground':'#0d0f13','fontSize':'14px'
+  'primaryColor':'#1b2430','primaryTextColor':'#e6eaec','primaryBorderColor':'#34424f',
+  'lineColor':'#84919a','secondaryColor':'#131922','tertiaryColor':'#0f141b',
+  'clusterBkg':'#0f141b','clusterBorder':'#25303e',
+  'edgeLabelBackground':'#0b0f14','fontSize':'14px'
 }}}%%
 flowchart TB
     owner["<b>You</b><br/><span style='font-size:11px'>the only user</span>"]
@@ -51,9 +51,9 @@ flowchart TB
     owner -->|"exports a statement<br/>when a bank has no feed"| ledger
     ledger -.->|"only unknown merchants,<br/>never amounts"| anthropic
 
-    classDef person fill:#3d6b5c,stroke:#5b9c85,color:#e8e6e1
-    classDef core fill:#2a2f3a,stroke:#6b6f78,color:#e8e6e1
-    classDef ext fill:#171a21,stroke:#3a4150,color:#a8a69f
+    classDef person fill:#2f8a72,stroke:#6ee7c0,color:#0b0f14
+    classDef core fill:#25303e,stroke:#84919a,color:#e6eaec
+    classDef ext fill:#131922,stroke:#34424f,color:#a5b0b7
     class owner person
     class ledger core
     class banks,simplefin,anthropic ext

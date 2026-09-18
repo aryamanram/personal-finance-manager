@@ -3,21 +3,26 @@
   "_file": "https://www.figma.com/design/KTM2F9Ho9lVMuSOlFQUT7j",
   "_updated": "2026-09-17",
   "primitives": {
-    "ink/900": "#0d0f13",
-    "ink/850": "#12141a",
-    "ink/800": "#171a21",
-    "ink/700": "#1f232c",
-    "ink/600": "#2a2f3a",
-    "ink/500": "#3a4150",
-    "paper/base": "#e8e6e1",
-    "paper/dim": "#a8a69f",
-    "paper/faint": "#878b94",
-    "green/base": "#5b9c85",
-    "green/dim": "#3d6b5c",
-    "clay/base": "#c4644f",
-    "clay/dim": "#8a4638",
+    "ink/900": "#0b0f14",
+    "ink/850": "#0f141b",
+    "ink/800": "#131922",
+    "ink/700": "#1b2430",
+    "ink/600": "#25303e",
+    "ink/500": "#34424f",
+    "paper/base": "#e6eaec",
+    "paper/dim": "#a5b0b7",
+    "paper/faint": "#84919a",
+    "green/base": "#6ee7c0",
+    "green/dim": "#2f8a72",
+    "clay/base": "#3a6ea5",
+    "clay/dim": "#2f5f8f",
     "amber/base": "#d9a441",
-    "blue/base": "#7b8fc4"
+    "blue/base": "#7c6bc9",
+    "flow/required": "#3a6ea5",
+    "flow/discretionary": "#5bbfe0",
+    "flow/invest": "#6a5cb8",
+    "flow/leftover": "#6ee7c0",
+    "clay/lift": "#8ccdf0"
   },
   "cssVariableFor": {
     "ink/900": "--color-ink-900",
@@ -34,6 +39,11 @@
     "clay/base": "--color-out",
     "clay/dim": "--color-out-dim",
     "amber/base": "--color-edited",
-    "blue/base": "--color-invest"
+    "blue/base": "--color-invest",
+    "flow/required": "--color-flow-required",
+    "flow/discretionary": "--color-flow-discretionary",
+    "flow/invest": "--color-flow-invest",
+    "flow/leftover": "--color-flow-leftover",
+    "clay/lift": "--color-out-lift"
   }
 }
