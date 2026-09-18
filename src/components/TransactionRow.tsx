@@ -35,7 +35,12 @@ export function TransactionRow({
       className={clsx(
         'rule-b group transition-colors',
         voided ? 'text-paper-faint' : 'hover:bg-ink-850',
-        pending && 'opacity-60',
+        /* Dim the row's own text, not the subtree. `opacity` on the <tr>
+           composites every descendant against the page — including the
+           "pending" badge, whose background and text fade together. That took
+           the badge to 2.46:1, well under AA, and the badge is the one thing
+           on a pending row you actually need to read. */
+        pending && !voided && 'text-paper-dim',
       )}
     >
       <td className="w-8 py-2 pl-1">

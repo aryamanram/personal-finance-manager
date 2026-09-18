@@ -18,7 +18,10 @@
 
   --color-paper:     #e8e6e1;
   --color-paper-dim: #a8a69f;
-  --color-paper-faint: #6b6f78;
+  /* Lightened from #6b6f78 (3.81:1) to clear WCAG AA. Used at 11-14px for
+     eyebrows and metadata, which is below the large-text threshold, so it
+     needs 4.5:1. Now 5.62:1 on the page ground and 4.61:1 on inputs. */
+  --color-paper-faint: #878b94;
 
   --color-in:    #5b9c85;
   --color-in-dim:#3d6b5c;
