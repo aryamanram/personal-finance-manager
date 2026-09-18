@@ -95,6 +95,44 @@ describe('contrast stays within WCAG AA', () => {
     expect(r, `amber on ink/900 is ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
   });
 
+  // A token pair can pass on its own and still fail on screen: CSS `opacity`
+  // on an ancestor composites the whole subtree, so a badge's background and
+  // its text fade together and the ratio between them collapses. The pending
+  // row used to carry `opacity-60` on the <tr>, which took the "pending" badge
+  // to 2.46:1 — the one label on that row you need to read. It now dims its own
+  // text instead. This asserts the badge survives whatever dimming is applied.
+  it('keeps the pending badge legible however the row is dimmed', () => {
+    const composite = (fg: string, bg: string, alpha: number) => {
+      const f = parse(fg);
+      const b = parse(bg);
+      const mix = (x: number, y: number) => Math.round((x * alpha + y * (1 - alpha)) * 255);
+      return `#${[mix(f.r, b.r), mix(f.g, b.g), mix(f.b, b.b)]
+        .map((v) => v.toString(16).padStart(2, '0'))
+        .join('')}`;
+    };
+
+    // 1 = today's behaviour (text-only dim, badge untouched). The lower values
+    // stand in for anyone reintroducing a subtree opacity.
+    for (const alpha of [1, 0.6]) {
+      const bg = composite(P['ink/700'], P['ink/900'], alpha);
+      const fg = composite(P['paper/faint'], P['ink/900'], alpha);
+      const r = contrast(fg, bg);
+
+      if (alpha === 1) {
+        expect(r, `the undimmed pending badge is ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+      } else {
+        // Documents why the subtree opacity had to go, and fails loudly if a
+        // future change makes it survivable-looking without actually fixing it.
+        expect(
+          r,
+          `compositing the badge at ${alpha} gives ${r.toFixed(2)}:1. If this now ` +
+            'passes, the palette changed — re-check whether dimming the row subtree ' +
+            'is safe again before reintroducing it.',
+        ).toBeLessThan(4.5);
+      }
+    }
+  });
+
   it('keeps the flow colours distinguishable from the ground', () => {
     for (const token of ['green/base', 'clay/base', 'blue/base']) {
       const r = contrast(P[token], P['ink/900']);
