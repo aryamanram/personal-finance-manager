@@ -57,6 +57,11 @@ npm-debug.log*
 pnpm-debug.log*
 yarn-error.log*
 
+# Claude Code: .claude/settings.json is shared team config and IS committed.
+# settings.local.json is personal overrides and must not be.
+.claude/settings.local.json
+CLAUDE.local.md
+
 # Editor / OS
 .DS_Store
 .idea/
