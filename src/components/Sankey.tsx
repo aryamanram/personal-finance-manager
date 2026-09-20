@@ -42,8 +42,14 @@ interface L {
 
 const TONE = {
   in: 'var(--color-in)',
-  out: 'var(--color-out)',
-  invest: 'var(--color-invest)',
+  /* Each bucket gets its own colour. Sharing one "outflow" tone made the whole
+     diagram a single blue once the palette went cool — Required and
+     Discretionary were indistinguishable, and so was every category under
+     them. */
+  required: 'var(--color-flow-required)',
+  discretionary: 'var(--color-flow-discretionary)',
+  invest: 'var(--color-flow-invest)',
+  leftover: 'var(--color-flow-leftover)',
   left: 'var(--color-paper-dim)',
 } as const;
 
@@ -123,10 +129,10 @@ export function Sankey({ data }: { data: SankeyInput }) {
     }
 
     const buckets: { name: string; cents: number; tone: string; necessity: string }[] = [
-      { name: 'Required', cents: requiredCents, tone: TONE.out, necessity: 'required' },
-      { name: 'Discretionary', cents: discretionaryCents, tone: TONE.out, necessity: 'discretionary' },
+      { name: 'Required', cents: requiredCents, tone: TONE.required, necessity: 'required' },
+      { name: 'Discretionary', cents: discretionaryCents, tone: TONE.discretionary, necessity: 'discretionary' },
       { name: 'Invested', cents: investedCents, tone: TONE.invest, necessity: 'investment' },
-      { name: 'Unspent', cents: leftover, tone: TONE.left, necessity: 'leftover' },
+      { name: 'Unspent', cents: leftover, tone: TONE.leftover, necessity: 'leftover' },
     ].filter((b) => b.cents > 0);
 
     // With two sources, fanning each one into every bucket produces a mess of
@@ -248,19 +254,35 @@ export function Sankey({ data }: { data: SankeyInput }) {
           {graph.links.map((link, i) => {
             const active = hover === null || hover === i;
             return (
-              <path
-                key={i}
-                d={path(link) ?? undefined}
-                fill="none"
-                stroke={link.tone}
-                strokeWidth={Math.max(1, link.width ?? 1)}
-                strokeOpacity={active ? 0.28 : 0.08}
-                className="transition-[stroke-opacity] duration-150"
-                onMouseEnter={() => setHover(i)}
-                onMouseLeave={() => setHover(null)}
-              >
-                <title>{link.label}</title>
-              </path>
+              <g key={i}>
+                {/* A ribbon drawn in the page ground, one pixel wider than the
+                    real one, so touching ribbons are always parted by a visible
+                    seam. Buckets can appear in any combination — zero-valued
+                    ones are filtered out above — so which pair ends up adjacent
+                    depends on the month's data, and no four-colour palette can
+                    separate every reachable pair by lightness while keeping the
+                    hue spread that colourblind viewers rely on. The seam does
+                    not depend on colour at all. */}
+                <path
+                  d={path(link) ?? undefined}
+                  fill="none"
+                  stroke="var(--color-ink-900)"
+                  strokeWidth={Math.max(1, link.width ?? 1) + 1.5}
+                  aria-hidden
+                />
+                <path
+                  d={path(link) ?? undefined}
+                  fill="none"
+                  stroke={link.tone}
+                  strokeWidth={Math.max(1, link.width ?? 1)}
+                  strokeOpacity={active ? 0.28 : 0.08}
+                  className="transition-[stroke-opacity] duration-150"
+                  onMouseEnter={() => setHover(i)}
+                  onMouseLeave={() => setHover(null)}
+                >
+                  <title>{link.label}</title>
+                </path>
+              </g>
             );
           })}
         </g>

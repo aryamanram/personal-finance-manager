@@ -56,8 +56,8 @@ export function CostMixChart({ data }: { data: MonthlyCashflow[] }) {
           wrapperStyle={{ fontSize: 11, color: 'var(--color-paper-dim)', paddingTop: 8 }}
         />
         {/* Fixed sits on the bottom: it is the floor you cannot move. */}
-        <Bar dataKey="Fixed" stackId="a" fill="var(--color-out-dim)" />
-        <Bar dataKey="Variable" stackId="a" fill="var(--color-out)" radius={[2, 2, 0, 0]} />
+        <Bar dataKey="Fixed" stackId="a" fill="var(--color-out)" />
+        <Bar dataKey="Variable" stackId="a" fill="var(--color-out-lift)" radius={[2, 2, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );
