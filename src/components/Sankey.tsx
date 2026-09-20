@@ -254,19 +254,35 @@ export function Sankey({ data }: { data: SankeyInput }) {
           {graph.links.map((link, i) => {
             const active = hover === null || hover === i;
             return (
-              <path
-                key={i}
-                d={path(link) ?? undefined}
-                fill="none"
-                stroke={link.tone}
-                strokeWidth={Math.max(1, link.width ?? 1)}
-                strokeOpacity={active ? 0.28 : 0.08}
-                className="transition-[stroke-opacity] duration-150"
-                onMouseEnter={() => setHover(i)}
-                onMouseLeave={() => setHover(null)}
-              >
-                <title>{link.label}</title>
-              </path>
+              <g key={i}>
+                {/* A ribbon drawn in the page ground, one pixel wider than the
+                    real one, so touching ribbons are always parted by a visible
+                    seam. Buckets can appear in any combination — zero-valued
+                    ones are filtered out above — so which pair ends up adjacent
+                    depends on the month's data, and no four-colour palette can
+                    separate every reachable pair by lightness while keeping the
+                    hue spread that colourblind viewers rely on. The seam does
+                    not depend on colour at all. */}
+                <path
+                  d={path(link) ?? undefined}
+                  fill="none"
+                  stroke="var(--color-ink-900)"
+                  strokeWidth={Math.max(1, link.width ?? 1) + 1.5}
+                  aria-hidden
+                />
+                <path
+                  d={path(link) ?? undefined}
+                  fill="none"
+                  stroke={link.tone}
+                  strokeWidth={Math.max(1, link.width ?? 1)}
+                  strokeOpacity={active ? 0.28 : 0.08}
+                  className="transition-[stroke-opacity] duration-150"
+                  onMouseEnter={() => setHover(i)}
+                  onMouseLeave={() => setHover(null)}
+                >
+                  <title>{link.label}</title>
+                </path>
+              </g>
             );
           })}
         </g>

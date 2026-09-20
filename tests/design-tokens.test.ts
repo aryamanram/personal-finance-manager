@@ -167,40 +167,33 @@ describe('contrast stays within WCAG AA', () => {
     ).toBeGreaterThanOrEqual(3);
   });
 
-  // The Sankey stacks its buckets in a fixed order. Only ribbons that touch
-  // need to be told apart by lightness; the pairs that never touch just need
-  // different hues. Four cool colours cannot satisfy pairwise lightness
-  // separation, so encoding the adjacency is what makes an all-cool diagram
-  // legible at all.
+  // `Sankey.tsx` filters out zero-valued buckets before layout, so ANY pair can
+  // end up touching depending on the month's data — a month with nothing
+  // discretionary puts Required directly against Invested. The earlier version
+  // of this test only checked the full four-bucket order, which is the best
+  // case rather than the guaranteed one.
   //
-  // This bar is 1.8:1, not the 3:1 the chart bands above are held to, and that
-  // is a deliberate limit rather than an oversight. A strict 3:1 chain across
-  // four buckets is satisfiable at exactly two luminances (0.114 and 0.442 on
-  // this ground) — every dark bucket forced to one, every light bucket to the
-  // other. That leaves non-adjacent pairs at 1.01:1: identical lightness,
-  // separated by hue alone, which is strictly worse for colourblind viewers
-  // than what this alternating scheme gives them. Two touching bands can reach
-  // 3:1; four cannot, without giving up the thing 3:1 exists to protect.
-  it('keeps adjacent Sankey buckets distinguishable', () => {
-    const STACK = ['flow/required', 'flow/discretionary', 'flow/invest', 'flow/leftover'];
+  // Four cool colours cannot separate all six pairs by lightness and keep the
+  // hue spread colourblind viewers depend on. The ceiling is 1.86:1 — four
+  // luminances in geometric progression, each clearing 3:1 against the ground,
+  // with the lightest forced to pure white. Chasing it flattens the palette to
+  // near-identical hues and drops the worst deuteranopia pair to 1.08:1, which
+  // is worse than what it replaces.
+  //
+  // So the guarantee does not come from colour: every ribbon is drawn over a
+  // ground-coloured stroke 1.5px wider than itself, parting touching ribbons
+  // with a visible seam, and every bucket carries a text label. Colour is a
+  // secondary cue (WCAG 1.4.1), which is what makes the remaining overlap
+  // acceptable. These assertions keep it honest as a secondary cue.
+  it('keeps every reachable bucket pair distinguishable', () => {
+    const BUCKETS = ['flow/required', 'flow/discretionary', 'flow/invest', 'flow/leftover'];
 
-    for (const token of STACK) {
+    for (const token of BUCKETS) {
       const r = contrast(P[token], P['ink/900']);
       expect(r, `${token} on ink/900 is ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
     }
 
-    for (let i = 0; i < STACK.length - 1; i++) {
-      const [a, b] = [STACK[i], STACK[i + 1]];
-      const r = contrast(P[a], P[b]);
-      expect(
-        r,
-        `${a} and ${b} sit next to each other in the diagram but are only ` +
-          `${r.toFixed(2)}:1 apart — their ribbons will merge`,
-      ).toBeGreaterThanOrEqual(1.8);
-    }
-  });
-
-  it('gives non-adjacent Sankey buckets different hues', () => {
+    // Every pair, since any of them can become adjacent.
     const hue = (hex: string) => {
       const { r, g, b } = parse(hex);
       const max = Math.max(r, g, b);
@@ -210,14 +203,21 @@ describe('contrast stays within WCAG AA', () => {
       const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
       return (h * 60 + 360) % 360;
     };
-    const STACK = ['flow/required', 'flow/discretionary', 'flow/invest', 'flow/leftover'];
 
-    for (let i = 0; i < STACK.length; i++) {
-      for (let j = i + 2; j < STACK.length; j++) {
-        let d = Math.abs(hue(P[STACK[i]]) - hue(P[STACK[j]]));
-        if (d > 180) d = 360 - d;
-        expect(d, `${STACK[i]} and ${STACK[j]} are only ${Math.round(d)}deg apart in hue`)
-          .toBeGreaterThanOrEqual(30);
+    for (let i = 0; i < BUCKETS.length; i++) {
+      for (let j = i + 1; j < BUCKETS.length; j++) {
+        const [a, b] = [BUCKETS[i], BUCKETS[j]];
+        const ratio = contrast(P[a], P[b]);
+        let deg = Math.abs(hue(P[a]) - hue(P[b]));
+        if (deg > 180) deg = 360 - deg;
+
+        // A pair may be told apart by lightness OR by hue. Requiring both is
+        // what the maths above shows to be impossible for four cool colours.
+        expect(
+          ratio >= 1.8 || deg >= 30,
+          `${a} and ${b} can end up adjacent but differ by only ${ratio.toFixed(2)}:1 ` +
+            `and ${Math.round(deg)}deg — they need one of lightness (1.8:1) or hue (30deg)`,
+        ).toBe(true);
       }
     }
   });
