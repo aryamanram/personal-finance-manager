@@ -36,6 +36,31 @@ const vary = (cents: number, pct = 0.25) =>
   Math.round(cents * (1 + (rand() - 0.5) * 2 * pct));
 
 async function main() {
+  // This script TRUNCATEs. Run against a database holding real accounts, it
+  // destroys them, and there is no undo: the rows can be re-synced but every
+  // human decision on them — locked categories, overrides, voids, merchant
+  // defaults, the edit log — exists nowhere else. That has happened once.
+  //
+  // A real account is one linked to a live source. The seed's own accounts
+  // carry a `demo-` external_id, so reseeding over a previous seed is still a
+  // one-liner.
+  const [{ n: real }] = await sql<{ n: number }[]>`
+    SELECT count(*)::int AS n
+    FROM transactions t
+    JOIN accounts a ON a.id = t.account_id
+    WHERE a.external_id IS NOT NULL AND a.external_id NOT LIKE 'demo-%'`;
+
+  if (real > 0 && !process.argv.includes('--force')) {
+    console.error(
+      `\nRefusing to seed: ${real} real transactions are in this database.\n\n` +
+      `  npm run backup                 snapshot them first\n` +
+      `  npx tsx scripts/purge-demo.ts  remove seed data, keep real rows\n\n` +
+      `Pass --force only if you are certain you want them TRUNCATED.\n`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+
   console.log('· clearing existing data');
   await sql`TRUNCATE transactions, transfers, import_batches, sync_runs,
             balance_snapshots, holdings, merchants, rules, recurring_series,

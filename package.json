@@ -22,7 +22,8 @@
     "recategorize": "tsx scripts/recategorize.ts",
     "check:privacy": "tsx scripts/check-privacy.ts",
     "prepush": "npm run check:privacy && npm run typecheck && npm test && npm run check:diagrams",
-    "check:diagrams": "tsx scripts/check-diagrams.ts"
+    "check:diagrams": "tsx scripts/check-diagrams.ts",
+    "backup": "tsx scripts/backup.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",
