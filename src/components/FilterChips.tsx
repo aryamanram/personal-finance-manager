@@ -38,20 +38,42 @@ export function FilterChips({
     return q ? `${pathname}?${q}` : pathname;
   }
 
+  // A backlog chip is a to-do, so an empty one is not worth a control. They
+  // disappear at zero rather than sitting greyed out forever — which is the
+  // steady state once a month has been confirmed, and the point at which the
+  // register should look finished rather than merely quiet.
+  const showReview = needsReview > 0;
+  const showUncategorized = uncategorized > 0;
+  const filtering = active.review || active.uncategorized;
+
   return (
-    <div className="flex flex-wrap items-center gap-2 text-xs">
-      <Chip href={href('review', active.review)} on={active.review} disabled={needsReview === 0}>
-        Needs review · <span className="figure">{needsReview}</span>
-      </Chip>
-      <Chip
-        href={href('uncategorized', active.uncategorized)}
-        on={active.uncategorized}
-        disabled={uncategorized === 0}
-      >
-        Uncategorized · <span className="figure">{uncategorized}</span>
-      </Chip>
-      <Chip href={href('voided', active.voided)} on={active.voided}>
-        Show voided
+    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+      {/* "All" is what makes the selected state legible: with only togglable
+          chips, nothing-selected and everything-selected look identical. */}
+      {(showReview || showUncategorized) && (
+        <Chip href={clearBacklog()} on={!filtering}>
+          All
+        </Chip>
+      )}
+
+      {showReview && (
+        <Chip href={href('review', active.review)} on={active.review}>
+          Needs review · <span className="figure">{needsReview}</span>
+        </Chip>
+      )}
+
+      {showUncategorized && (
+        <Chip href={href('uncategorized', active.uncategorized)} on={active.uncategorized}>
+          Uncategorized · <span className="figure">{uncategorized}</span>
+        </Chip>
+      )}
+
+      {!showReview && !showUncategorized && (
+        <span className="text-paper-faint">Everything is categorised.</span>
+      )}
+
+      <Chip href={href('voided', active.voided)} on={active.voided} quiet>
+        Voided
       </Chip>
 
       {hasFilters && (
@@ -64,29 +86,29 @@ export function FilterChips({
       )}
     </div>
   );
+
+  /** Drops both backlog filters, keeping search, account and date range. */
+  function clearBacklog(): string {
+    const next = new URLSearchParams(params.toString());
+    next.delete('review');
+    next.delete('uncategorized');
+    const q = next.toString();
+    return q ? `${pathname}?${q}` : pathname;
+  }
 }
 
 function Chip({
   href,
   on,
-  disabled,
+  quiet,
   children,
 }: {
   href: string;
   on: boolean;
-  disabled?: boolean;
+  /** A view toggle rather than a backlog — recessive until switched on. */
+  quiet?: boolean;
   children: React.ReactNode;
 }) {
-  // A zero-count backlog is worth showing (it is good news) but not worth
-  // clicking — it would filter to an empty table.
-  if (disabled && !on) {
-    return (
-      <span className="rounded-sm border border-ink-700 px-3 py-1.5 text-paper-faint opacity-60">
-        {children}
-      </span>
-    );
-  }
-
   return (
     <Link
       href={href}
@@ -95,7 +117,9 @@ function Chip({
         'rounded-sm border px-3 py-1.5 transition-colors',
         on
           ? 'border-out bg-out/10 text-out'
-          : 'border-ink-600 text-paper-dim hover:border-ink-500 hover:text-paper',
+          : quiet
+            ? 'border-transparent text-paper-faint hover:border-ink-600 hover:text-paper-dim'
+            : 'border-ink-600 text-paper-dim hover:border-ink-500 hover:text-paper',
       )}
     >
       {children}

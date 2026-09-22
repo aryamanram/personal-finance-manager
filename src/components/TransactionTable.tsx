@@ -98,10 +98,20 @@ export function TransactionTable({
   return (
     <div>
       <div className="rule-b flex flex-wrap items-baseline justify-between gap-4 pb-2">
+        {/* The header already carries the total, so repeating "n of N" here
+            said the same number twice on one screen. What this line adds is
+            the money — and the fact that the view is truncated, which only
+            matters when it actually is. */}
         <div className="text-xs text-paper-faint">
-          <span className="figure text-paper-dim">{rows.length}</span> of{' '}
-          <span className="figure text-paper-dim">{total}</span> shown ·{' '}
-          spending <Figure cents={shownTotal} tone="neutral" showCents={false} />
+          Spending <Figure cents={shownTotal} tone="neutral" showCents={false} />
+          {rows.length < total && (
+            <>
+              {' · showing the latest '}
+              <span className="figure text-paper-dim">{rows.length}</span>
+              {' of '}
+              <span className="figure text-paper-dim">{total}</span>
+            </>
+          )}
         </div>
 
         {selected.size > 0 && (
