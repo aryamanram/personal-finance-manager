@@ -131,6 +131,19 @@ export function TransactionRow({
               guess
             </span>
           )}
+          {/* The fixed/variable and required/discretionary axes used to have a
+              column of their own, restating what the category already implies
+              on all 396 rows. They only carry information when a human has
+              overridden them for one transaction — which is exactly the case
+              amber marks. */}
+          {(txn.cost_type_override || txn.necessity_override) && (
+            <span
+              className="eyebrow shrink-0 text-[9px] text-edited"
+              title={`Overridden by hand: ${txn.eff_cost_type} · ${abbrev(txn.eff_necessity)}`}
+            >
+              {txn.eff_cost_type === 'fixed' ? 'fixed' : 'var'} · {abbrev(txn.eff_necessity)}
+            </span>
+          )}
           {txn.category_locked && (
             <span className="shrink-0 text-edited" title="Set by hand — machine passes will not change it">
               ◆
@@ -138,12 +151,6 @@ export function TransactionRow({
           )}
         </button>
       </td>
-      <td className="w-28 py-2 text-xs">
-        <span className="eyebrow" style={{ fontSize: '0.625rem' }}>
-          {txn.eff_cost_type === 'fixed' ? 'fixed' : 'var'} · {abbrev(txn.eff_necessity)}
-        </span>
-      </td>
-
       <td className="w-32 py-2 pr-2 text-right">
         {editing === 'amount' ? (
           <input
@@ -185,7 +192,7 @@ export function TransactionRow({
 
     {expanded && (
       <tr className="rule-b">
-        <td colSpan={6} className="p-0">
+        <td colSpan={5} className="p-0">
           <RowEditor
             txn={txn}
             categories={categories}

@@ -140,7 +140,6 @@ export function TransactionTable({
             <th className="eyebrow w-24 py-2 text-left">Date</th>
             <th className="eyebrow py-2 text-left">Description</th>
             <th className="eyebrow w-56 py-2 text-left">Category</th>
-            <th className="eyebrow w-28 py-2 text-left">Type</th>
             <th className="eyebrow w-32 py-2 pr-2 text-right">Amount</th>
           </tr>
         </thead>
