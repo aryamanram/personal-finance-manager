@@ -4,14 +4,14 @@ import {
   getLastSync, getReconciliation, getLedgerBounds, getActiveMonths,
 } from '@/lib/queries';
 import { PeriodPicker } from '@/components/PeriodPicker';
-import { buildPeriods } from '@/lib/periods';
+import { buildPeriods, describePeriod } from '@/lib/periods';
 import { resolvePeriod } from '@/lib/resolve-period';
 import { StatCard } from '@/components/StatCard';
 import { CostMixChart } from '@/components/CostMixChart';
 import { CategoryRows } from '@/components/CategoryRows';
 import { Figure } from '@/components/Figure';
 import { formatCents } from '@/money';
-import { formatMonthLong, formatTimestampShort } from '@/lib/format-date';
+import { formatTimestampShort } from '@/lib/format-date';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,14 +45,13 @@ export default async function DashboardPage({
     getReconciliation(),
   ]);
 
-  // Month-over-month deltas only mean something for a single month.
-  const isMonth = /^\d{4}-\d{2}$/.test(period.key);
+  // Month-over-month deltas only mean something for a single whole month —
+  // not for a year, and not for half of one.
+  const isMonth = period.scope === 'month';
   const idx = cashflow.findIndex((m) => m.month.startsWith(period.key));
   const previous = isMonth && idx > 0 ? cashflow[idx - 1] : undefined;
 
-  // A yearly or all-time period has no month to name — formatting its `from`
-  // date rendered the year 2026 as "Jan 26".
-  const monthLabel = isMonth ? formatMonthLong(period.from) : period.label;
+  const heading = describePeriod(period);
 
   const income = totals.income_cents;
   const required = totals.required_cents;
@@ -66,7 +65,7 @@ export default async function DashboardPage({
         <div>
           <div className="eyebrow">Cashflow</div>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-            {period.key === 'all' ? 'All time' : monthLabel}
+            {heading}
           </h1>
           <div className="mt-3">
             <PeriodPicker options={periods} active={period.key} />

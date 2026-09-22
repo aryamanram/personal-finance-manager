@@ -4,11 +4,10 @@ import {
   getLedgerBounds, getActiveMonths,
 } from '@/lib/queries';
 import { PeriodPicker } from '@/components/PeriodPicker';
-import { buildPeriods } from '@/lib/periods';
+import { buildPeriods, describePeriod } from '@/lib/periods';
 import { resolvePeriod } from '@/lib/resolve-period';
 import { Sankey } from '@/components/Sankey';
 import { FlowDrilldown } from '@/components/FlowDrilldown';
-import { formatMonthLong } from '@/lib/format-date';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,13 +40,10 @@ export default async function FlowPage({
     getCategoryBreakdownRange(period.from, period.to),
   ]);
 
-  const isMonth = /^\d{4}-\d{2}$/.test(period.key);
   const title =
-    period.key === 'all'
+    period.scope === 'all'
       ? 'Where it all went'
-      : isMonth
-        ? `Where ${formatMonthLong(period.from).replace(/\s+\d{4}$/, '')} went`
-        : `Where ${period.label} went`;
+      : `Where ${describePeriod(period)} went`;
 
   return (
     <div className="space-y-10">

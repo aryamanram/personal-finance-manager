@@ -4,16 +4,31 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import type { PeriodOption } from '@/lib/periods';
 
 /**
- * Period selector for the cashflow view.
+ * Period selector for the cashflow and flow views.
  *
- * A native <select> rather than a row of links: the list grows by one entry
- * every month this app runs, and a row of links would eventually wrap across
- * the header. A select stays one control forever, and gets keyboard handling,
- * scrolling and touch behaviour from the platform.
+ * A native <select> rather than a row of links or a custom menu: the list
+ * grows by two entries every month this app runs, and it gets keyboard
+ * handling, scrolling and touch behaviour from the platform for free.
+ *
+ * The list is a hierarchy — all time, then each year, then that year's months,
+ * then each month's two pay periods — and the nesting is carried by
+ * indentation rather than by nested <optgroup>, which HTML does not allow.
+ * A leading space is the only tool a native option has; it is enough, because
+ * the labels shorten as you descend ("2026" → "Sep" → "1st – 15th") so depth
+ * reads from the shape of the list as much as the indent.
  *
  * The period lives in the URL rather than component state, so a view is
  * shareable and survives a reload.
  */
+
+/** Indent per level. Figure space (U+2007) keeps width stable in any font. */
+const INDENT: Record<string, string> = {
+  all: '',
+  year: '',
+  month: '  ',
+  half: '    ',
+};
+
 export function PeriodPicker({
   options,
   active,
@@ -25,11 +40,6 @@ export function PeriodPicker({
   const pathname = usePathname();
   const params = useSearchParams();
 
-  // Group so months, years and all-time are visually separated in the list.
-  const months = options.filter((o) => /^\d{4}-\d{2}$/.test(o.key));
-  const years = options.filter((o) => /^\d{4}$/.test(o.key));
-  const rest = options.filter((o) => !/^\d{4}(-\d{2})?$/.test(o.key));
-
   /** Navigates to the current page with the selected period in its query. */
   function go(key: string) {
     const next = new URLSearchParams(params.toString());
@@ -37,35 +47,22 @@ export function PeriodPicker({
     router.push(`${pathname}?${next.toString()}`);
   }
 
+  // buildPeriods already emits the hierarchy in order — all, then each year
+  // followed by its own months and halves — so rendering is a straight map.
+  // Re-deriving the order here would be a second place to keep it correct.
   return (
     <label className="inline-flex items-center gap-2">
       <span className="sr-only">Period</span>
       <select
         value={active}
         onChange={(e) => go(e.target.value)}
-        className="figure cursor-pointer rounded-sm border border-ink-600 bg-ink-800 px-2 py-1 text-xs text-paper transition-colors hover:border-ink-500"
+        className="figure max-w-[220px] cursor-pointer rounded-sm border border-ink-600 bg-ink-800 px-2 py-1 text-xs text-paper transition-colors hover:border-ink-500"
       >
-        {months.length > 0 && (
-          <optgroup label="Month">
-            {months.map((o) => (
-              <option key={o.key} value={o.key}>{o.label}</option>
-            ))}
-          </optgroup>
-        )}
-        {years.length > 0 && (
-          <optgroup label="Year">
-            {years.map((o) => (
-              <option key={o.key} value={o.key}>{o.label}</option>
-            ))}
-          </optgroup>
-        )}
-        {rest.length > 0 && (
-          <optgroup label="Everything">
-            {rest.map((o) => (
-              <option key={o.key} value={o.key}>{o.label}</option>
-            ))}
-          </optgroup>
-        )}
+        {options.map((o) => (
+          <option key={o.key} value={o.key}>
+            {INDENT[o.scope] ?? ''}{o.label}
+          </option>
+        ))}
       </select>
     </label>
   );
