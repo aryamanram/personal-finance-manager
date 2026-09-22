@@ -10,7 +10,7 @@
  * tested directly.
  */
 import { describe, it, expect } from 'vitest';
-import { toggleHref, clearBacklogHref } from '@/components/FilterChips';
+import { toggleHref, clearBacklogHref, backlogChips } from '@/components/FilterChips';
 
 const P = '/transactions';
 /** A realistic URL: both backlog filters plus filters that must survive. */
@@ -19,10 +19,18 @@ const busy = () => new URLSearchParams({
   q: 'coffee', account: 'abc-123', from: '2026-01-01', to: '2026-01-31',
 });
 
-/** Mirrors FilterChips' own derivation of which chips to render. */
-function chipsFor(counts: { needsReview: number; uncategorized: number }) {
-  const showReview = counts.needsReview > 0;
-  const showUncategorized = counts.uncategorized > 0;
+const NONE = { review: false, uncategorized: false };
+
+/**
+ * The chips the component renders, derived from ITS OWN backlogChips() rather
+ * than a copy of it. The previous version of this helper re-implemented the
+ * conditions, so reversing them in the component failed nothing.
+ */
+function chipsFor(
+  counts: { needsReview: number; uncategorized: number },
+  active: { review: boolean; uncategorized: boolean } = NONE,
+) {
+  const { showReview, showUncategorized } = backlogChips(counts, active);
   const out: string[] = [];
   if (showReview || showUncategorized) out.push('All');
   if (showReview) out.push('Needs review');
@@ -129,5 +137,27 @@ describe('toggling one filter', () => {
     );
     expect(url.searchParams.get('voided')).toBe('1');
     expect(url.searchParams.get('review')).toBe('1');
+  });
+});
+
+describe('a chip whose filter is on stays visible at zero', () => {
+  it('keeps the chip and All after the last row is confirmed', () => {
+    // The workflow this protects: filter to "Needs review", confirm the final
+    // row, count drops to 0. Hiding the chip and All here would leave
+    // ?review=1 in the URL with no visible way back to everything.
+    expect(chipsFor({ needsReview: 0, uncategorized: 0 }, { review: true, uncategorized: false }))
+      .toEqual(['All', 'Needs review', 'Voided']);
+  });
+
+  it('still says nothing is left when no filter is on', () => {
+    expect(chipsFor({ needsReview: 0, uncategorized: 0 }))
+      .toEqual(['Everything is categorised.', 'Voided']);
+  });
+
+  it('reports filtering only while a backlog filter is active', () => {
+    const counts = { needsReview: 5, uncategorized: 0 };
+    expect(backlogChips(counts, NONE).filtering).toBe(false);
+    expect(backlogChips(counts, { review: true, uncategorized: false }).filtering).toBe(true);
+    expect(backlogChips(counts, { review: false, uncategorized: true }).filtering).toBe(true);
   });
 });

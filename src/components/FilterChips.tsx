@@ -32,9 +32,10 @@ export function FilterChips({
   // disappear at zero rather than sitting greyed out forever — which is the
   // steady state once a month has been confirmed, and the point at which the
   // register should look finished rather than merely quiet.
-  const showReview = needsReview > 0;
-  const showUncategorized = uncategorized > 0;
-  const filtering = active.review || active.uncategorized;
+  const { showReview, showUncategorized, filtering } = backlogChips(
+    { needsReview, uncategorized },
+    active,
+  );
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 text-xs">
@@ -76,6 +77,31 @@ export function FilterChips({
       )}
     </div>
   );
+}
+
+/**
+ * Which backlog chips to render, and whether a backlog filter is on.
+ *
+ * Exported and called by the component rather than mirrored in a test: a test
+ * that re-implements this would pass with the real conditions reversed
+ * (CLAUDE.md — "a test that re-implements the logic it is testing passes when
+ * the real code is wrong").
+ *
+ * A chip stays visible while its filter is ON even at zero. Otherwise clearing
+ * the last row of a backlog hides the chip AND "All" while leaving ?review=1
+ * in the URL, stranding you on an empty table whose only escape is Reset —
+ * which also discards the search and account you had set. That is exactly the
+ * moment this ledger reaches when the final row of a month is confirmed.
+ */
+export function backlogChips(
+  counts: { needsReview: number; uncategorized: number },
+  active: { review: boolean; uncategorized: boolean },
+): { showReview: boolean; showUncategorized: boolean; filtering: boolean } {
+  return {
+    showReview: counts.needsReview > 0 || active.review,
+    showUncategorized: counts.uncategorized > 0 || active.uncategorized,
+    filtering: active.review || active.uncategorized,
+  };
 }
 
 /** The two backlog filters. Alternatives, never held together. */
