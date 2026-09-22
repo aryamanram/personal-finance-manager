@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import clsx from 'clsx';
 import {
@@ -47,14 +47,16 @@ export function PeriodPicker({
   const byKey = new Map(options.map((o) => [o.key, o]));
   const current = byKey.get(active) ?? options[0]!;
 
-  // Held in a ref so the keyboard listener never closes over a stale router.
-  const go = useRef<(key: string) => void>(() => {});
-  go.current = (key: string) => {
+  // useCallback rather than a ref assigned during render: a render that React
+  // interrupts or discards would still have mutated the ref, leaving a
+  // committed handler to navigate with a pathname and params that were never
+  // committed. The dependencies keep the keyboard listener fresh instead.
+  const go = useCallback((key: string) => {
     const next = new URLSearchParams(params.toString());
     next.set('period', key);
     router.push(`${pathname}?${next.toString()}`);
     setOpen(null);
-  };
+  }, [router, pathname, params]);
 
   const older = stepPeriod(options, current, -1);
   const newer = stepPeriod(options, current, 1);
@@ -72,11 +74,11 @@ export function PeriodPicker({
       const to = e.key === 'ArrowLeft' ? older : newer;
       if (!to) return;
       e.preventDefault();
-      go.current(to.key);
+      go(to.key);
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [older, newer]);
+  }, [older, newer, go]);
 
   // Close on an outside click or Escape.
   useEffect(() => {
@@ -140,11 +142,11 @@ export function PeriodPicker({
   return (
     <div ref={root} className={clsx('flex flex-col gap-2', edge)}>
       <div className="flex items-center gap-1">
-        <Arrow dir="older" onClick={() => older && go.current(older.key)} disabled={!older} />
+        <Arrow dir="older" onClick={() => older && go(older.key)} disabled={!older} />
         <h1 className="min-w-[13ch] px-1 text-center text-2xl font-semibold tracking-tight text-paper">
           {describePeriod(current)}
         </h1>
-        <Arrow dir="newer" onClick={() => newer && go.current(newer.key)} disabled={!newer} />
+        <Arrow dir="newer" onClick={() => newer && go(newer.key)} disabled={!newer} />
       </div>
 
       {/* One line, four segments at most, fixed width however long the
@@ -153,7 +155,7 @@ export function PeriodPicker({
         <Segment
           label="All time"
           on={current.key === 'all'}
-          onClick={() => go.current('all')}
+          onClick={() => go('all')}
         />
 
         {segments.map((seg) => (
@@ -186,7 +188,7 @@ export function PeriodPicker({
                   {seg.items.map((o) => (
                     <button
                       key={o.key}
-                      onClick={() => go.current(o.key)}
+                      onClick={() => go(o.key)}
                       aria-pressed={o.key === current.key}
                       className={clsx(
                         'figure whitespace-nowrap rounded-sm px-2 py-1 text-xs transition-colors',
