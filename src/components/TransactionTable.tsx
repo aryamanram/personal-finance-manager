@@ -14,11 +14,14 @@ import type { VTransaction, CategoryWithGroup, Account } from '@/lib/types';
 export function TransactionTable({
   initial,
   categories,
+  usage,
   accounts,
   total,
 }: {
   initial: VTransaction[];
   categories: CategoryWithGroup[];
+  /** Hand-pick counts per category, for ranking the palette. */
+  usage: Record<string, number>;
   accounts: Account[];
   total: number;
 }) {
@@ -125,7 +128,12 @@ export function TransactionTable({
         <p className="mt-2 text-xs text-out">{(patch.error as Error).message}</p>
       )}
 
-      <table className="w-full table-fixed">
+      {/* Six fixed-width columns together need more than a phone's width.
+          Scrolling the table inside its own container keeps the columns
+          aligned and the page free of a horizontal scrollbar, rather than
+          collapsing a ledger into cards where figures stop lining up. */}
+      <div className="-mx-6 overflow-x-auto px-6 sm:mx-0 sm:px-0">
+      <table className="w-full min-w-[680px] table-fixed">
         <thead>
           <tr className="rule-b">
             <th className="w-8" />
@@ -142,6 +150,7 @@ export function TransactionTable({
               key={txn.id}
               txn={txn}
               categories={categories}
+              usage={usage}
               selected={selected.has(txn.id)}
               onSelect={toggle}
               onPatch={(id, p) => patch.mutate({ id, patch: p })}
@@ -150,6 +159,7 @@ export function TransactionTable({
           ))}
         </tbody>
       </table>
+      </div>
 
       {rows.length === 0 && (
         <p className="py-12 text-center text-sm text-paper-faint">
