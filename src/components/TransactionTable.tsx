@@ -75,6 +75,13 @@ export function TransactionTable({
     },
   });
 
+  // The year most of the register is in — dates outside it carry a short year
+  // so two rows twelve months apart can never look adjacent.
+  const viewYear = useMemo(() => {
+    const first = initial[0]?.eff_posted_date;
+    return first ? Number(first.slice(0, 4)) : new Date().getFullYear();
+  }, [initial]);
+
   const shownTotal = useMemo(
     () => rows.filter((r) => r.counts_as_spending).reduce((a, r) => a + r.eff_amount_cents, 0),
     [rows],
@@ -144,12 +151,16 @@ export function TransactionTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((txn) => (
+          {rows.map((txn, i) => (
             <TransactionRow
               key={txn.id}
               txn={txn}
               categories={categories}
               usage={usage}
+              // Rows are sorted by date descending, so a repeat is always the
+              // row immediately above.
+              repeatsDate={i > 0 && rows[i - 1]!.eff_posted_date === txn.eff_posted_date}
+              viewYear={viewYear}
               selected={selected.has(txn.id)}
               onSelect={toggle}
               onPatch={(id, p) => patch.mutate({ id, patch: p })}

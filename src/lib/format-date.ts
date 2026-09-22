@@ -53,6 +53,21 @@ export function formatDayShort(isoDate: string): string {
 }
 
 /**
+ * A register date: "Sep 16" within the current year, "Sep 16 '24" outside it.
+ *
+ * The ledger spans several years, so dropping the year entirely would make two
+ * rows twelve months apart look adjacent. Carrying a full ISO date on all 396
+ * rows is the other extreme — four characters of "2026-" repeated down a
+ * column that is already sorted by date. This shows the year only when it is
+ * not the one you are presumed to be looking at.
+ */
+export function formatRegisterDate(isoDate: string, currentYear: number): string {
+  const { y, m, d } = parts(isoDate);
+  const base = `${MONTHS[m - 1]} ${d}`;
+  return y === currentYear ? base : `${base} '${String(y).slice(2)}`;
+}
+
+/**
  * A timestamptz to "Sep 16". Formatted in UTC deliberately: the alternative is
  * the server's zone, which the browser does not share.
  */

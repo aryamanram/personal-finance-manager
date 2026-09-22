@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import { Figure } from './Figure';
 import { RowEditor } from './RowEditor';
 import { formatCents } from '@/money';
+import { formatRegisterDate } from '@/lib/format-date';
 import type { VTransaction, CategoryWithGroup } from '@/lib/types';
 
 /**
@@ -21,11 +22,17 @@ export function TransactionRow({
   onSelect,
   onPatch,
   pending,
+  repeatsDate,
+  viewYear,
 }: {
   txn: VTransaction;
   categories: CategoryWithGroup[];
   usage: Record<string, number>;
   selected: boolean;
+  /** The row above shares this date, so printing it again says nothing. */
+  repeatsDate?: boolean;
+  /** Dates in this year print without one; others carry a short year. */
+  viewYear: number;
   onSelect: (id: string, on: boolean) => void;
   onPatch: (id: string, patch: Record<string, unknown>) => void;
   pending?: boolean;
@@ -69,16 +76,22 @@ export function TransactionRow({
         />
       </td>
 
-      <td className="figure w-24 py-2 text-xs text-paper-faint">
+      <td className="figure w-20 py-2 text-xs text-paper-faint">
+        {/* The register is sorted by date and averages 1.7 rows per date, so
+            a repeat is the same string twice in a column. The row still knows
+            its date — the title and the expanded editor both carry it. */}
         <span
-          className={clsx(txn.posted_date_override && 'edited')}
+          className={clsx(
+            txn.posted_date_override && 'edited',
+            repeatsDate && !txn.posted_date_override && 'invisible',
+          )}
           title={
             txn.posted_date_override
               ? `Bank reported ${txn.posted_date} — corrected by hand`
-              : undefined
+              : txn.eff_posted_date
           }
         >
-          {txn.eff_posted_date}
+          {formatRegisterDate(txn.eff_posted_date, viewYear)}
         </span>
       </td>
 
@@ -86,10 +99,21 @@ export function TransactionRow({
         <button
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
+          title={`${txn.account_name} · ${txn.eff_posted_date}`}
           className="block w-full text-left"
         >
-          <span className={clsx('block truncate text-sm', voided && 'line-through')}>
-            {txn.eff_description}
+          {/* Badges sit INLINE with the description rather than on their own
+              line. Given to a line of their own they made the 9 rows that
+              carry one 54px tall against 41px everywhere else, and an uneven
+              row rhythm reads as disorder even when each row is clean. */}
+          <span className="flex items-baseline gap-2">
+            <span className={clsx('truncate text-sm', voided && 'line-through')}>
+              {txn.eff_description}
+            </span>
+            {txn.status === 'pending' && <Badge tone="neutral">pending</Badge>}
+            {txn.transfer_id && <Badge tone="neutral">transfer</Badge>}
+            {voided && <Badge tone="out">{txn.void_reason ?? 'voided'}</Badge>}
+            {txn.exclude_from_totals && <Badge tone="neutral">excluded</Badge>}
           </span>
           {/* The bank's own string, kept visible under the rename (I2). */}
           {renamed && (
@@ -98,13 +122,7 @@ export function TransactionRow({
             </span>
           )}
         </button>
-        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-paper-faint">
-          <span>{txn.account_name}</span>
-          {txn.status === 'pending' && <Badge tone="neutral">pending</Badge>}
-          {txn.transfer_id && <Badge tone="neutral">transfer</Badge>}
-          {voided && <Badge tone="out">{txn.void_reason ?? 'voided'}</Badge>}
-          {txn.exclude_from_totals && <Badge tone="neutral">excluded</Badge>}
-        </div>
+
       </td>
 
       <td className="w-56 py-2 align-top">
