@@ -41,24 +41,20 @@ export default async function TransactionsPage({
 
   return (
     <div className="space-y-6">
-      <header className="space-y-4">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <div className="eyebrow">Register</div>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-              <span className="figure">{total.toLocaleString('en-US')}</span>{' '}
+      {/* Identity and state on one line, controls on the next. The old header
+          said the count three ways — an h1 "396 transactions", a sentence
+          repeating the review backlog, and a chip carrying the same number —
+          across 127px before the first row. */}
+      <header className="space-y-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+          <div className="flex items-baseline gap-3">
+            <h1 className="text-2xl font-semibold tracking-tight">Register</h1>
+            <span className="text-xs text-paper-faint">
+              <span className="figure text-paper-dim">
+                {total.toLocaleString('en-US')}
+              </span>{' '}
               {total === 1 ? 'transaction' : 'transactions'}
-            </h1>
-            <p className="mt-2 text-xs leading-relaxed text-paper-faint">
-              Renamed rows keep the bank’s original underneath.
-              {review.needs_review > 0 && (
-                <>
-                  {' '}
-                  <span className="figure text-paper-dim">{review.needs_review}</span>
-                  {' '}still carry a machine guess.
-                </>
-              )}
-            </p>
+            </span>
           </div>
 
           <form className="flex flex-wrap items-center gap-2 text-xs">

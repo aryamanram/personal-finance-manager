@@ -75,6 +75,13 @@ export function TransactionTable({
     },
   });
 
+  // The year most of the register is in — dates outside it carry a short year
+  // so two rows twelve months apart can never look adjacent.
+  const viewYear = useMemo(() => {
+    const first = initial[0]?.eff_posted_date;
+    return first ? Number(first.slice(0, 4)) : new Date().getFullYear();
+  }, [initial]);
+
   const shownTotal = useMemo(
     () => rows.filter((r) => r.counts_as_spending).reduce((a, r) => a + r.eff_amount_cents, 0),
     [rows],
@@ -91,10 +98,20 @@ export function TransactionTable({
   return (
     <div>
       <div className="rule-b flex flex-wrap items-baseline justify-between gap-4 pb-2">
+        {/* The header already carries the total, so repeating "n of N" here
+            said the same number twice on one screen. What this line adds is
+            the money — and the fact that the view is truncated, which only
+            matters when it actually is. */}
         <div className="text-xs text-paper-faint">
-          <span className="figure text-paper-dim">{rows.length}</span> of{' '}
-          <span className="figure text-paper-dim">{total}</span> shown ·{' '}
-          spending <Figure cents={shownTotal} tone="neutral" showCents={false} />
+          Spending <Figure cents={shownTotal} tone="neutral" showCents={false} />
+          {rows.length < total && (
+            <>
+              {' · showing the latest '}
+              <span className="figure text-paper-dim">{rows.length}</span>
+              {' of '}
+              <span className="figure text-paper-dim">{total}</span>
+            </>
+          )}
         </div>
 
         {selected.size > 0 && (
@@ -140,17 +157,20 @@ export function TransactionTable({
             <th className="eyebrow w-24 py-2 text-left">Date</th>
             <th className="eyebrow py-2 text-left">Description</th>
             <th className="eyebrow w-56 py-2 text-left">Category</th>
-            <th className="eyebrow w-28 py-2 text-left">Type</th>
             <th className="eyebrow w-32 py-2 pr-2 text-right">Amount</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((txn) => (
+          {rows.map((txn, i) => (
             <TransactionRow
               key={txn.id}
               txn={txn}
               categories={categories}
               usage={usage}
+              // Rows are sorted by date descending, so a repeat is always the
+              // row immediately above.
+              repeatsDate={i > 0 && rows[i - 1]!.eff_posted_date === txn.eff_posted_date}
+              viewYear={viewYear}
               selected={selected.has(txn.id)}
               onSelect={toggle}
               onPatch={(id, p) => patch.mutate({ id, patch: p })}
