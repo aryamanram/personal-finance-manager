@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import clsx from 'clsx';
 import { Figure } from './Figure';
-import { CategoryPalette } from './CategoryPalette';
 import { RowEditor } from './RowEditor';
 import { formatCents } from '@/money';
 import type { VTransaction, CategoryWithGroup } from '@/lib/types';
@@ -31,7 +30,7 @@ export function TransactionRow({
   onPatch: (id: string, patch: Record<string, unknown>) => void;
   pending?: boolean;
 }) {
-  const [editing, setEditing] = useState<null | 'category' | 'amount'>(null);
+  const [editing, setEditing] = useState<null | 'amount'>(null);
   const [expanded, setExpanded] = useState(false);
   const voided = txn.voided_at !== null;
 
@@ -45,20 +44,6 @@ export function TransactionRow({
     txn.category_id !== null &&
     ['rule', 'llm', 'import'].includes(txn.category_source);
 
-  /** Agreeing with the machine: same category, but now a human decision. */
-  async function confirmGuess(id: string) {
-    const res = await fetch(`/api/transactions/${id}/merchant`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        category_id: txn.category_id,
-        set_default: false,
-        apply_to_siblings: false,
-      }),
-    });
-    // The lock and the backlog count both live server-side.
-    if (res.ok) window.location.reload();
-  }
 
   return (
     <>
@@ -123,59 +108,36 @@ export function TransactionRow({
       </td>
 
       <td className="w-56 py-2 align-top">
-        {editing === 'category' ? (
-          <div className="relative">
-            <div className="absolute left-0 top-0 z-20">
-              <CategoryPalette
-                categories={categories}
-                usage={usage}
-                suggestedId={txn.suggested_category_id}
-                unconfirmedId={isGuess ? txn.category_id : null}
-                currentId={txn.category_id}
-                onPick={(id) => {
-                  setEditing(null);
-                  // Picking the category the row already has is a
-                  // CONFIRMATION, not a change: applyPatch would no-op and
-                  // leave it unlocked, so the row would stay in the backlog
-                  // after an apparent confirmation. Route it to the endpoint
-                  // that flips category_source instead.
-                  if (id !== null && id === txn.category_id && isGuess) {
-                    void confirmGuess(txn.id);
-                    return;
-                  }
-                  onPatch(txn.id, { category_id: id });
-                }}
-                onClose={() => setEditing(null)}
-              />
-            </div>
-          </div>
-        ) : (
-          <button
-            onClick={() => setEditing('category')}
-            className="flex w-full items-center gap-2 text-left text-sm text-paper-dim transition-colors hover:text-paper"
-          >
-            <span className="truncate">{txn.category_name ?? 'Uncategorized'}</span>
-            {/* A quiet mark, not a boxed chip. On a freshly synced ledger
-                nearly every row is a machine guess, and a chip on all of them
-                marks nothing. The "Needs review" filter works the backlog;
-                this just says where the category came from. */}
-            {isGuess && (
-              <span
-                className="eyebrow shrink-0 text-[9px] text-paper-faint"
-                title={`Categorised by ${txn.category_source} — click to confirm or change`}
-              >
-                guess
-              </span>
-            )}
-            {txn.category_locked && (
-              <span className="shrink-0 text-edited" title="Set by hand — machine passes will not change it">
-                ◆
-              </span>
-            )}
-          </button>
-        )}
+        {/* Opens the expanded editor rather than anchoring a palette here.
+            The table scrolls (overflow-x-auto forces overflow-y: auto), and an
+            absolutely-positioned 340px panel on a row near the bottom extends
+            past the scrollport and gets clipped. In the editor the palette is
+            in normal flow, and the row's other decisions — renaming,
+            remembering the merchant — are in reach at the same time. */}
+        <button
+          onClick={() => setExpanded(true)}
+          className="flex w-full items-center gap-2 text-left text-sm text-paper-dim transition-colors hover:text-paper"
+        >
+          <span className="truncate">{txn.category_name ?? 'Uncategorized'}</span>
+          {/* A quiet mark, not a boxed chip. On a freshly synced ledger nearly
+              every row is a machine guess, and a chip on all of them marks
+              nothing. The "Needs review" filter works the backlog; this just
+              says where the category came from. */}
+          {isGuess && (
+            <span
+              className="eyebrow shrink-0 text-[9px] text-paper-faint"
+              title={`Categorised by ${txn.category_source} — open the row to confirm or change`}
+            >
+              guess
+            </span>
+          )}
+          {txn.category_locked && (
+            <span className="shrink-0 text-edited" title="Set by hand — machine passes will not change it">
+              ◆
+            </span>
+          )}
+        </button>
       </td>
-
       <td className="w-28 py-2 text-xs">
         <span className="eyebrow" style={{ fontSize: '0.625rem' }}>
           {txn.eff_cost_type === 'fixed' ? 'fixed' : 'var'} · {abbrev(txn.eff_necessity)}
