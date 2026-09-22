@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import clsx from 'clsx';
 import {
@@ -12,23 +12,22 @@ import {
  * Period selector. It IS the page heading — the timeframe is the only thing
  * the title needs to say, so no sentence wraps around it.
  *
- *   ‹   August 2026   ›
- *   All time › 2026 · 2025 · 2024
- *             Sep · Aug · Jul …
- *             1st – 15th · 16th – 31st
+ *   ‹   September 2026, first half   ›
+ *   All time › 2026 ▾ › Sep ▾ › 1st – 15th ▾
  *
- * Two mechanisms, deliberately independent:
+ * Four segments, always four, whatever the ledger holds: each is a dropdown
+ * over one level, so ten years of data is the same width as one. A segment
+ * appears only once its parent is chosen — picking a year is what reveals the
+ * month segment — so the row never presents a choice that has no meaning yet.
  *
  * STEP (‹ ›, or ← →) walks the ledger at the current zoom, FLAT. Stepping
  * back twice from the first half of September reaches the second half of
- * August — the arrows mean "the period before this one", and a pay period
+ * August: the arrows mean "the period before this one", and a pay period
  * before the 1st belongs to last month whatever the tree says about
  * parentage. Only the true ends of the ledger disable an arrow.
  *
- * DRILL (the rows beneath) reveals one level at a time. You see All time and
- * the years; pick a year and its months appear; pick a month and its halves
- * appear. Nothing deeper is on screen until it is relevant, so the control
- * never exceeds four rows however many years accumulate.
+ * Time runs LEFT TO RIGHT everywhere here — in the dropdowns, and in what the
+ * arrows do. `›` and `→` always move forward in time and rightward on screen.
  */
 export function PeriodPicker({
   options,
@@ -42,6 +41,8 @@ export function PeriodPicker({
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
+  const [open, setOpen] = useState<PeriodScope | null>(null);
+  const root = useRef<HTMLDivElement>(null);
 
   const byKey = new Map(options.map((o) => [o.key, o]));
   const current = byKey.get(active) ?? options[0]!;
@@ -52,6 +53,7 @@ export function PeriodPicker({
     const next = new URLSearchParams(params.toString());
     next.set('period', key);
     router.push(`${pathname}?${next.toString()}`);
+    setOpen(null);
   };
 
   const older = stepPeriod(options, current, -1);
@@ -76,103 +78,161 @@ export function PeriodPicker({
     return () => document.removeEventListener('keydown', onKey);
   }, [older, newer]);
 
-  // The trail from the root to where we are, which decides how many drill
-  // rows to show and which pill in each is lit.
+  // Close on an outside click or Escape.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!root.current?.contains(e.target as Node)) setOpen(null);
+    };
+    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(null); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onEsc);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onEsc);
+    };
+  }, [open]);
+
   const trail: PeriodOption[] = [];
   for (let p: PeriodOption | undefined = current; p; p = p.parent ? byKey.get(p.parent) : undefined) {
     trail.unshift(p);
   }
-  const onTrail = new Set(trail.map((p) => p.key));
-
-  const years = options.filter((o) => o.scope === 'year');
   const year = trail.find((p) => p.scope === 'year');
   const month = trail.find((p) => p.scope === 'month');
 
-  const deeperRows: { scope: PeriodScope; items: PeriodOption[] }[] = [];
+  /** Oldest first, so the menu reads the way time does. */
+  const chrono = (ps: PeriodOption[]) =>
+    [...ps].sort((a, b) => a.from.localeCompare(b.from));
+
+  const segments: {
+    scope: PeriodScope;
+    label: string;
+    chosen: boolean;
+    items: PeriodOption[];
+  }[] = [
+    {
+      scope: 'year',
+      label: year ? year.label : 'Year',
+      chosen: !!year,
+      items: chrono(options.filter((o) => o.scope === 'year')),
+    },
+  ];
   if (year) {
-    deeperRows.push({ scope: 'month', items: options.filter((o) => o.parent === year.key) });
+    segments.push({
+      scope: 'month',
+      label: month ? month.label.replace(/\s+\d{2}$/, '') : 'Month',
+      chosen: !!month,
+      items: chrono(options.filter((o) => o.parent === year.key)),
+    });
   }
   if (month) {
-    deeperRows.push({ scope: 'half', items: options.filter((o) => o.parent === month.key) });
+    const half = trail.find((p) => p.scope === 'half');
+    segments.push({
+      scope: 'half',
+      label: half ? half.label : 'Pay period',
+      chosen: !!half,
+      items: chrono(options.filter((o) => o.parent === month.key)),
+    });
   }
 
   const edge = align === 'end' ? 'items-end' : 'items-start';
 
   return (
-    <div className={clsx('flex flex-col gap-3', edge)}>
+    <div ref={root} className={clsx('flex flex-col gap-2', edge)}>
       <div className="flex items-center gap-1">
         <Arrow dir="older" onClick={() => older && go.current(older.key)} disabled={!older} />
-        {/* The heading. No sentence around it: the timeframe is the title. */}
         <h1 className="min-w-[13ch] px-1 text-center text-2xl font-semibold tracking-tight text-paper">
           {describePeriod(current)}
         </h1>
         <Arrow dir="newer" onClick={() => newer && go.current(newer.key)} disabled={!newer} />
       </div>
 
-      <div className={clsx('flex flex-col gap-1.5', edge)}>
-        <div className="flex flex-wrap items-center gap-1">
-          <Pill on={current.key === 'all'} onClick={() => go.current('all')}>
-            All time
-          </Pill>
-          {years.length > 0 && (
-            <span className="px-0.5 text-xs text-ink-500" aria-hidden>›</span>
-          )}
-          {years.map((o) => (
-            <Pill
-              key={o.key}
-              on={o.key === current.key}
-              dim={!onTrail.has(o.key)}
-              onClick={() => go.current(o.key)}
-            >
-              {o.label}
-            </Pill>
-          ))}
-        </div>
+      {/* One line, four segments at most, fixed width however long the
+          ledger runs. */}
+      <div className="flex flex-wrap items-center gap-0.5 text-xs">
+        <Segment
+          label="All time"
+          on={current.key === 'all'}
+          onClick={() => go.current('all')}
+        />
 
-        {deeperRows.map((row) => (
-          <div key={row.scope} className="flex flex-wrap items-center gap-1">
-            {row.items.map((o) => (
-              <Pill
-                key={o.key}
-                on={o.key === current.key}
-                dim={!onTrail.has(o.key)}
-                onClick={() => go.current(o.key)}
-              >
-                {row.scope === 'month' ? o.label.replace(/\s+\d{2}$/, '') : o.label}
-              </Pill>
-            ))}
-          </div>
+        {segments.map((seg) => (
+          <span key={seg.scope} className="flex items-center gap-0.5">
+            <span className="px-0.5 text-ink-500" aria-hidden>›</span>
+            <div className="relative">
+              <Segment
+                label={seg.label}
+                on={seg.chosen && current.scope === seg.scope}
+                muted={!seg.chosen}
+                caret
+                expanded={open === seg.scope}
+                onClick={() => setOpen((v) => (v === seg.scope ? null : seg.scope))}
+              />
+              {open === seg.scope && (
+                <div
+                  className={clsx(
+                    'absolute top-full z-30 mt-1 max-h-[280px] overflow-y-auto rounded-sm',
+                    'border border-ink-600 bg-ink-800 p-1 shadow-2xl shadow-black/50',
+                    seg.scope === 'month' ? 'grid grid-cols-3 gap-0.5' : 'flex flex-col gap-0.5',
+                    align === 'end' ? 'right-0' : 'left-0',
+                  )}
+                >
+                  {seg.items.map((o) => (
+                    <button
+                      key={o.key}
+                      onClick={() => go.current(o.key)}
+                      aria-pressed={o.key === current.key}
+                      className={clsx(
+                        'figure whitespace-nowrap rounded-sm px-2 py-1 text-left text-xs transition-colors',
+                        o.key === current.key
+                          ? 'bg-ink-700 text-paper'
+                          : 'text-paper-dim hover:bg-ink-700 hover:text-paper',
+                      )}
+                    >
+                      {seg.scope === 'month' ? o.label.replace(/\s+\d{2}$/, '') : o.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </span>
         ))}
       </div>
     </div>
   );
 }
 
-function Pill({
+function Segment({
+  label,
   on,
-  dim,
+  muted,
+  caret,
+  expanded,
   onClick,
-  children,
 }: {
+  label: string;
   on: boolean;
-  dim?: boolean;
+  muted?: boolean;
+  caret?: boolean;
+  expanded?: boolean;
   onClick: () => void;
-  children: React.ReactNode;
 }) {
   return (
     <button
       onClick={onClick}
       aria-pressed={on}
+      aria-expanded={caret ? !!expanded : undefined}
       className={clsx(
-        'figure rounded-sm border px-2 py-0.5 text-xs transition-colors',
+        'figure rounded-sm border px-2 py-0.5 transition-colors',
         on
           ? 'border-ink-500 bg-ink-700 text-paper'
-          : dim
+          : muted
             ? 'border-transparent text-paper-faint hover:border-ink-600 hover:text-paper-dim'
             : 'border-ink-700 text-paper-dim hover:border-ink-500 hover:text-paper',
       )}
     >
-      {children}
+      {label}
+      {caret && <span className="ml-1 text-ink-500" aria-hidden>▾</span>}
     </button>
   );
 }

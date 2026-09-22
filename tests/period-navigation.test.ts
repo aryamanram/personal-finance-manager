@@ -139,6 +139,29 @@ describe('zooming', () => {
   });
 });
 
+describe('time reads left to right', () => {
+  it('lists each dropdown oldest first, so → moves rightward AND forward', () => {
+    // The confusion this fixes: buildPeriods emits newest-first, so a row
+    // rendered in emission order ran 2026 · 2025 · 2024 and pressing → for a
+    // newer period moved the highlight LEFT. The menus sort chronologically.
+    const chrono = (ps: PeriodOption[]) =>
+      [...ps].sort((a, b) => a.from.localeCompare(b.from));
+
+    const years = chrono(periods.filter((p) => p.scope === 'year'));
+    expect(years.map((y) => y.key)).toEqual(['2024', '2025', '2026']);
+
+    const monthsOf2026 = chrono(periods.filter((p) => p.parent === '2026'));
+    expect(monthsOf2026.map((m) => m.key)).toEqual(['2026-07', '2026-08', '2026-09']);
+
+    const halves = chrono(periods.filter((p) => p.parent === '2026-08'));
+    expect(halves.map((h) => h.key)).toEqual(['2026-08-H1', '2026-08-H2']);
+
+    // And the step that → performs lands further right in that same list.
+    const at = monthsOf2026.findIndex((m) => m.key === '2026-07');
+    expect(step(periods, '2026-07', 'newer')).toBe(monthsOf2026[at + 1]!.key);
+  });
+});
+
 describe('the jump popover stays bounded', () => {
   it('shows one year column and one year’s months, however long the ledger', () => {
     // Ten years of full data: a flat list would be 1 + 10 + 120 + 240 = 371.
