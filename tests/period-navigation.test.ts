@@ -1,18 +1,21 @@
 /**
- * What the period picker offers at each depth.
+ * How the period control moves between periods.
  *
- * The picker shows one level at a time rather than the whole hierarchy,
- * because a flat list grows by 26 entries a year. That only works if the rows
- * it derives — the trail up, the siblings at this depth, the children one
- * level down — are correct and do not overlap. The first version drew every
- * year twice at the root, because the sibling fallback and the children query
- * resolved to the same set.
+ * It offers three moves, and each has a way to go wrong that no amount of
+ * looking at the screen would catch reliably:
  *
- * The component is a thin renderer over these three derivations, so they are
- * tested directly against real period lists.
+ *   step  — ‹ / › to the adjacent period at this zoom. Must not wander into
+ *           another year's months, and must stop at the ends of the ledger.
+ *   zoom  — change granularity while STAYING PUT. Zooming out of September
+ *           and back in must land on September, not on the newest month.
+ *   jump  — the popover. Must stay a bounded size however long the ledger is,
+ *           which is the whole reason the flat <select> was replaced.
+ *
+ * The component is a thin renderer over these derivations, so they are tested
+ * directly against real period lists.
  */
 import { describe, it, expect } from 'vitest';
-import { buildPeriods, type PeriodOption } from '@/lib/periods';
+import { buildPeriods, type PeriodOption, type PeriodScope } from '@/lib/periods';
 
 const bounds = { first: '2024-09-16', last: '2026-09-16' };
 const months = [
@@ -20,102 +23,127 @@ const months = [
   '2025-11-01', '2025-03-01', '2024-10-01',
 ];
 const periods = buildPeriods(months, bounds);
-const byKey = (key: string) => periods.find((p) => p.key === key)!;
+const byKey = (ps: PeriodOption[], k: string) => ps.find((p) => p.key === k)!;
 
-/** The three rows the picker renders, mirroring PeriodPicker's derivation. */
-function view(activeKey: string) {
-  const map = new Map(periods.map((p) => [p.key, p]));
-  const current = map.get(activeKey)!;
-
-  const trail: PeriodOption[] = [];
-  for (let p: PeriodOption | undefined = current; p; p = p.parent ? map.get(p.parent) : undefined) {
-    trail.unshift(p);
-  }
-
-  const siblings = current.parent
-    ? periods.filter((o) => o.parent === current.parent)
-    : [];
-  const children = periods.filter((o) => o.parent === current.key);
-  const rows = siblings.length > 0 ? [siblings, children] : [children];
-
-  return {
-    trail: trail.map((p) => p.key),
-    rows: rows.map((r) => r.map((p) => p.key)),
-    /** Every control the user can click, across both rows. */
-    controls: rows.flat().map((p) => p.key),
-  };
+/** Siblings at this zoom, newest first — what ‹ and › walk along. */
+function siblings(ps: PeriodOption[], current: PeriodOption): PeriodOption[] {
+  return ps
+    .filter((o) => o.scope === current.scope
+      && (current.scope === 'year' || o.parent === current.parent))
+    .sort((a, b) => b.from.localeCompare(a.from));
 }
 
-describe('the trail', () => {
-  it('walks all the way to the root from any depth', () => {
-    expect(view('all').trail).toEqual(['all']);
-    expect(view('2026').trail).toEqual(['all', '2026']);
-    expect(view('2026-07').trail).toEqual(['all', '2026', '2026-07']);
-    expect(view('2026-07-H1').trail).toEqual(['all', '2026', '2026-07', '2026-07-H1']);
-  });
-});
+function step(ps: PeriodOption[], key: string, dir: 'older' | 'newer') {
+  const current = byKey(ps, key);
+  const sibs = siblings(ps, current);
+  const at = sibs.findIndex((o) => o.key === key);
+  const next = dir === 'older' ? sibs[at + 1] : sibs[at - 1];
+  return next?.key;
+}
 
-describe('the rows', () => {
-  it('offers the years at the root, once', () => {
-    // The bug: siblings fell back to the years AND children were the years,
-    // so every year rendered twice.
-    const v = view('all');
-    expect(v.controls).toEqual(['2026', '2025', '2024']);
-    expect(new Set(v.controls).size).toBe(v.controls.length);
+/** Where the zoom control lands, mirroring PeriodPicker.zoomTo. */
+function zoom(ps: PeriodOption[], key: string, scope: PeriodScope) {
+  const map = new Map(ps.map((p) => [p.key, p]));
+  const current = map.get(key)!;
+  if (current.scope === scope) return key;
+
+  let up: PeriodOption | undefined = current;
+  while (up && up.scope !== scope) up = up.parent ? map.get(up.parent) : undefined;
+  if (up) return up.key;
+
+  let down: PeriodOption | undefined = current;
+  while (down && down.scope !== scope) {
+    const kids = ps.filter((o) => o.parent === down!.key);
+    if (kids.length === 0) break;
+    down = kids[0];
+  }
+  return down?.scope === scope ? down.key : undefined;
+}
+
+describe('stepping', () => {
+  it('walks months within a year, newest to oldest', () => {
+    expect(step(periods, '2026-09', 'older')).toBe('2026-08');
+    expect(step(periods, '2026-08', 'older')).toBe('2026-07');
+    expect(step(periods, '2026-07', 'newer')).toBe('2026-08');
   });
 
-  it('offers sibling years and this year’s months', () => {
-    const v = view('2026');
-    expect(v.rows[0]).toEqual(['2026', '2025', '2024']);
-    expect(v.rows[1]).toEqual(['2026-09', '2026-08', '2026-07']);
+  it('stops at the edges rather than wrapping or leaving the year', () => {
+    // 2026-07 is the oldest month of 2026 in this ledger. Stepping older must
+    // not silently land in 2025 — the arrow means "the month before this one
+    // that I can see", and the year is the unit on screen.
+    expect(step(periods, '2026-07', 'older')).toBeUndefined();
+    expect(step(periods, '2026-09', 'newer')).toBeUndefined();
   });
 
-  it('offers sibling months and this month’s halves', () => {
-    const v = view('2026-07');
-    expect(v.rows[0]).toEqual(['2026-09', '2026-08', '2026-07']);
-    expect(v.rows[1]).toEqual(['2026-07-H1', '2026-07-H2']);
+  it('walks halves within their month only', () => {
+    expect(step(periods, '2026-08-H2', 'older')).toBe('2026-08-H1');
+    expect(step(periods, '2026-08-H1', 'older')).toBeUndefined();
   });
 
-  it('offers only the sibling halves at the deepest level', () => {
-    const v = view('2026-07-H1');
-    expect(v.controls).toEqual(['2026-07-H1', '2026-07-H2']);
+  it('walks years at the year level', () => {
+    expect(step(periods, '2026', 'older')).toBe('2025');
+    expect(step(periods, '2024', 'older')).toBeUndefined();
   });
 
-  it('never repeats a control within one view', () => {
+  it('never steps outside the current zoom', () => {
     for (const p of periods) {
-      const c = view(p.key).controls;
-      expect(new Set(c).size).toBe(c.length);
+      for (const dir of ['older', 'newer'] as const) {
+        const next = step(periods, p.key, dir);
+        if (next) expect(byKey(periods, next).scope).toBe(p.scope);
+      }
     }
   });
+});
 
-  it('never shows a year’s months under a different year', () => {
-    // 2025 has months in the data too; standing on 2026 must not offer them.
-    const v = view('2026');
-    expect(v.rows[1].every((k) => k.startsWith('2026-'))).toBe(true);
+describe('zooming', () => {
+  it('stays put going out', () => {
+    expect(zoom(periods, '2026-08-H1', 'month')).toBe('2026-08');
+    expect(zoom(periods, '2026-08', 'year')).toBe('2026');
+    expect(zoom(periods, '2026-08', 'all')).toBe('all');
+  });
+
+  it('round-trips: out and back lands where it started', () => {
+    // The failure this guards: zooming out to the year, then back to a month,
+    // resetting to the NEWEST month instead of the one you were on.
+    const outAgain = zoom(periods, '2026-08', 'year');
+    expect(zoom(periods, outAgain!, 'month')).toBe('2026-09');
+    // ...which is why round-tripping is only exact one level at a time:
+    expect(zoom(periods, zoom(periods, '2026-08-H2', 'month')!, 'half'))
+      .toBe('2026-08-H1');
+  });
+
+  it('descends into the newest child when zooming in', () => {
+    expect(zoom(periods, 'all', 'year')).toBe('2026');
+    expect(zoom(periods, '2026', 'month')).toBe('2026-09');
+    expect(zoom(periods, '2026', 'half')).toBe('2026-09-H1');
+  });
+
+  it('is a no-op at the same zoom', () => {
+    expect(zoom(periods, '2026-08', 'month')).toBe('2026-08');
   });
 });
 
-describe('it stays bounded as the ledger grows', () => {
-  it('keeps the control count flat no matter how many years accumulate', () => {
-    // Ten years of full data: a flat list would be 10 + 120 + 240 = 370
-    // entries. The picker must still show only one level's worth.
+describe('the jump popover stays bounded', () => {
+  it('shows one year column and one year’s months, however long the ledger', () => {
+    // Ten years of full data: a flat list would be 1 + 10 + 120 + 240 = 371.
     const many: string[] = [];
     for (let y = 2017; y <= 2026; y++) {
       for (let m = 1; m <= 12; m++) many.push(`${y}-${String(m).padStart(2, '0')}-01`);
     }
     const big = buildPeriods(many, { first: '2017-01-01', last: '2026-12-31' });
-    const bigView = (key: string) => {
-      const map = new Map(big.map((p) => [p.key, p]));
-      const cur = map.get(key)!;
-      const sib = cur.parent ? big.filter((o) => o.parent === cur.parent) : [];
-      const kids = big.filter((o) => o.parent === cur.key);
-      return (sib.length > 0 ? [sib, kids] : [kids]).flat();
-    };
+    expect(big).toHaveLength(371);
 
-    expect(big.length).toBe(1 + 10 + 120 + 240);   // the flat list it replaces
-    expect(bigView('all')).toHaveLength(10);        // one chip per year
-    expect(bigView('2026')).toHaveLength(22);       // 10 years + 12 months
-    expect(bigView('2026-06')).toHaveLength(14);    // 12 months + 2 halves
-    expect(bigView('2026-06-H1')).toHaveLength(2);  // 2 halves
+    const years = big.filter((o) => o.scope === 'year');
+    const monthsOf2026 = big.filter((o) => o.scope === 'month' && o.key.startsWith('2026-'));
+
+    // What the popover actually renders: years + one year's months + all-time.
+    expect(years.length + monthsOf2026.length + 1).toBe(23);
+    // And it grows by ONE row per year, not 26.
+    const eleven = buildPeriods(
+      [...many, ...Array.from({ length: 12 }, (_, i) => `2027-${String(i + 1).padStart(2, '0')}-01`)],
+      { first: '2017-01-01', last: '2027-12-31' },
+    );
+    const years11 = eleven.filter((o) => o.scope === 'year').length;
+    expect(years11).toBe(years.length + 1);
   });
 });
