@@ -48,6 +48,32 @@ snapshot-tracked brokerage, and Claude Haiku for unknown merchants.
 
 ## Decisions worth not relitigating
 
+**Product-level detail cannot come from the rails.** MCC is assigned per
+merchant, not per product, so it can reach "hobby shop" and never "which
+product". Level 3 data does carry SKUs but exists only on corporate cards and
+flows merchant to acquirer, never back to the cardholder. A live probe of the
+SimpleFIN bridge found `mcc` present in the response and **empty on every
+transaction**, so do not vendor an MCC lookup table for a column that is always
+null. Item detail is therefore a human field, and the design brief is to make
+entering it fast rather than rare. See `docs/CATEGORIZATION.md`.
+
+**The same probe found `payee` populated on every transaction** — a
+bank-normalized merchant name, shorter than the raw descriptor on every sampled
+row, absent from our type definition and dropped on every sync. It is a better
+merchant key than matching a descriptor that drifts with formatting.
+
+**Half the money is in merchants seen exactly once.** 125 of 175 merchants
+appear a single time, and those rows carry 46% of all spending. Merchant memory
+only ever covers the recurring half, so any design premised on "the system
+learns your habits" misses half the ledger by construction.
+
+**LLM correctness is structural, not statistical.** Confidence is a poor
+filter here: the model sits at >=0.90 on half the ledger and below 0.70 on only
+7.6%, and the peer-payment misrouting was almost certainly high-confidence and
+wrong. What makes the model safe is that its rows are never `category_locked`,
+so deterministic passes overwrite them and the register shows them as guesses.
+Use confidence to prioritise review, never to assert correctness.
+
 **Peer-payment rails.** Money going *out* through Venmo, Zelle, or PayPal is
 spending; a cash-*out* back to checking is a transfer. The direction is the
 signal, not the rail. Where such a payment funded a purchase on credit, it is
