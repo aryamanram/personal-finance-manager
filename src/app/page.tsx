@@ -68,7 +68,7 @@ export default async function DashboardPage({
             {heading}
           </h1>
           <div className="mt-3">
-            <PeriodPicker options={periods} active={period.key} />
+            <PeriodPicker options={periods} active={period.key} align="start" />
           </div>
         </div>
         <div className="flex items-center gap-6 text-xs text-paper-faint">

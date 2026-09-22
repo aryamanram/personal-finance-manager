@@ -1,44 +1,48 @@
 'use client';
 
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
+import clsx from 'clsx';
 import type { PeriodOption } from '@/lib/periods';
 
 /**
  * Period selector for the cashflow and flow views.
  *
- * A native <select> rather than a row of links or a custom menu: the list
- * grows by two entries every month this app runs, and it gets keyboard
- * handling, scrolling and touch behaviour from the platform for free.
+ * A flat <select> of the whole hierarchy grows by 26 entries a year — 78
+ * already, on a two-year ledger — and scrolling a list that long to reach one
+ * fortnight is not choosing, it is hunting. So the control shows ONE LEVEL at
+ * a time: a breadcrumb of where you are, and the siblings available at the
+ * depth you are standing at.
  *
- * The list is a hierarchy — all time, then each year, then that year's months,
- * then each month's two pay periods — and the nesting is carried by
- * indentation rather than by nested <optgroup>, which HTML does not allow.
- * A leading space is the only tool a native option has; it is enough, because
- * the labels shorten as you descend ("2026" → "Sep" → "1st – 15th") so depth
- * reads from the shape of the list as much as the indent.
+ *   All time · 2026 · Sep      ← the trail, each step clickable
+ *   [ Sep ][ Aug ][ Jul ] …    ← this level's siblings
+ *   1st – 15th | 16th – 30th   ← one level deeper, when it exists
  *
- * The period lives in the URL rather than component state, so a view is
- * shareable and survives a reload.
+ * The number of controls is therefore constant: twelve months in a year,
+ * twelve-ish years in a lifetime, two halves in a month. Nothing grows without
+ * bound, and the ledger's shape is legible instead of being a scrollbar.
+ *
+ * The period lives in the URL, so a view is shareable and survives a reload.
  */
-
-/** Indent per level. Figure space (U+2007) keeps width stable in any font. */
-const INDENT: Record<string, string> = {
-  all: '',
-  year: '',
-  month: '  ',
-  half: '    ',
-};
-
 export function PeriodPicker({
   options,
   active,
+  align = 'end',
 }: {
   options: PeriodOption[];
   active: string;
+  /**
+   * Which edge the rows hang from. The flow page puts the picker opposite its
+   * heading, so it reads inward from the right; the dashboard stacks it under
+   * the heading, where a right edge would leave a ragged gap.
+   */
+  align?: 'start' | 'end';
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
+
+  const byKey = new Map(options.map((o) => [o.key, o]));
+  const current = byKey.get(active) ?? options[0]!;
 
   /** Navigates to the current page with the selected period in its query. */
   function go(key: string) {
@@ -47,23 +51,120 @@ export function PeriodPicker({
     router.push(`${pathname}?${next.toString()}`);
   }
 
-  // buildPeriods already emits the hierarchy in order — all, then each year
-  // followed by its own months and halves — so rendering is a straight map.
-  // Re-deriving the order here would be a second place to keep it correct.
+  // Walk up to the root, so the trail is always complete however deep we are.
+  const trail: PeriodOption[] = [];
+  for (let p: PeriodOption | undefined = current; p; p = p.parent ? byKey.get(p.parent) : undefined) {
+    trail.unshift(p);
+  }
+
+  // The siblings at this depth are the periods sharing our parent. At the root
+  // there are none — "All time" is alone, and the trail already shows it — so
+  // the first row becomes the years, which would otherwise be the second.
+  const siblings = current.parent
+    ? options.filter((o) => o.parent === current.parent)
+    : [];
+
+  // One level deeper, if this period has children. Months have halves; the
+  // last level has none, and the row simply does not render.
+  //
+  // Skipped when it would repeat the sibling row: at the root, siblings is
+  // empty and the years ARE the children, so rendering both drew every year
+  // twice.
+  const children = options.filter((o) => o.parent === current.key);
+  const rows = siblings.length > 0 ? [siblings, children] : [children];
+
   return (
-    <label className="inline-flex items-center gap-2">
-      <span className="sr-only">Period</span>
-      <select
-        value={active}
-        onChange={(e) => go(e.target.value)}
-        className="figure max-w-[220px] cursor-pointer rounded-sm border border-ink-600 bg-ink-800 px-2 py-1 text-xs text-paper transition-colors hover:border-ink-500"
-      >
-        {options.map((o) => (
-          <option key={o.key} value={o.key}>
-            {INDENT[o.scope] ?? ''}{o.label}
-          </option>
+    <div
+      className={clsx(
+        'flex flex-col gap-2',
+        align === 'end' ? 'items-start sm:items-end' : 'items-start',
+      )}
+    >
+      <nav aria-label="Period" className="flex flex-wrap items-center gap-1 text-xs">
+        {trail.map((p, i) => (
+          <span key={p.key} className="flex items-center gap-1">
+            {i > 0 && <span className="text-ink-500" aria-hidden>·</span>}
+            {p.key === current.key ? (
+              <span className="text-paper" aria-current="true">{crumb(p)}</span>
+            ) : (
+              <button
+                onClick={() => go(p.key)}
+                className="text-paper-faint transition-colors hover:text-paper"
+              >
+                {crumb(p)}
+              </button>
+            )}
+          </span>
         ))}
-      </select>
-    </label>
+      </nav>
+
+      {/* This depth, then one level down. Two rows at most, each bounded:
+          twelve months in a year, two halves in a month. */}
+      {rows.map((row, depth) =>
+        row.length === 0 ? null : (
+          <div key={depth} className="flex flex-wrap items-center gap-1">
+            {row.map((o) => (
+              <Chip
+                key={o.key}
+                on={o.key === current.key}
+                quiet={depth > 0}
+                onClick={() => go(o.key)}
+              >
+                {chipLabel(o)}
+              </Chip>
+            ))}
+          </div>
+        ),
+      )}
+    </div>
   );
+}
+
+function Chip({
+  on,
+  quiet,
+  onClick,
+  children,
+}: {
+  on: boolean;
+  quiet?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={on}
+      className={clsx(
+        'figure rounded-sm border px-2 py-1 text-xs transition-colors',
+        on
+          ? 'border-ink-500 bg-ink-700 text-paper'
+          : quiet
+            ? 'border-transparent text-paper-faint hover:border-ink-600 hover:text-paper-dim'
+            : 'border-ink-700 text-paper-dim hover:border-ink-500 hover:text-paper',
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Breadcrumb text: terse, because the trail supplies the context. */
+function crumb(p: PeriodOption): string {
+  if (p.scope === 'all') return 'All time';
+  if (p.scope === 'month') return stripYear(p.label);
+  return p.label;
+}
+
+/**
+ * Chip text. A month chip drops its year — the trail above already says 2026,
+ * and "Sep 26" beside "Aug 26" repeats a digit pair eleven times for nothing.
+ */
+function chipLabel(p: PeriodOption): string {
+  return p.scope === 'month' ? stripYear(p.label) : p.label;
+}
+
+/** "Sep 26" → "Sep". formatMonthShort appends a two-digit year. */
+function stripYear(label: string): string {
+  return label.replace(/\s+\d{2}$/, '');
 }
