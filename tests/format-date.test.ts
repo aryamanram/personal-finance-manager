@@ -10,7 +10,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import {
   formatMonthLong, formatMonthShort, formatMonthAbbrev,
-  formatDayShort, formatTimestampShort, formatTimestampLong,
+  formatDayShort, formatRegisterDate, formatTimestampShort, formatTimestampLong,
 } from '@/lib/format-date';
 
 const ORIGINAL_TZ = process.env.TZ;
@@ -58,5 +58,23 @@ describe('date formatting is timezone-independent', () => {
 
   it('accepts a Date as well as a string', () => {
     expect(formatTimestampShort(new Date('2026-03-05T12:00:00Z'))).toBe('Mar 5');
+  });
+});
+
+describe('formatRegisterDate', () => {
+  it('omits the year inside the year being viewed', () => {
+    expect(formatRegisterDate('2026-09-16', 2026)).toBe('Sep 16');
+    expect(formatRegisterDate('2026-01-02', 2026)).toBe('Jan 2');
+  });
+
+  it('shows a short year outside it, so rows a year apart cannot be confused', () => {
+    expect(formatRegisterDate('2024-09-16', 2026)).toBe("Sep 16 '24");
+    expect(formatRegisterDate('2025-12-31', 2026)).toBe("Dec 31 '25");
+  });
+
+  it('reads the date as written, with no timezone shift', () => {
+    // The ledger's dates are calendar dates, not instants. Parsing through
+    // Date() west of Greenwich once moved them a day.
+    expect(formatRegisterDate('2026-03-01', 2026)).toBe('Mar 1');
   });
 });
