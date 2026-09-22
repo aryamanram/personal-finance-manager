@@ -25,18 +25,8 @@ export function FilterChips({
   const pathname = usePathname();
   const params = useSearchParams();
 
-  /** Toggles one flag, dropping it from the URL when switched off. */
-  function href(key: string, on: boolean): string {
-    const next = new URLSearchParams(params.toString());
-    if (on) next.delete(key);
-    else next.set(key, '1');
-    // The two review filters are alternatives, not a conjunction: holding both
-    // asks for rows that are simultaneously guessed and unguessed.
-    if (!on && key === 'review') next.delete('uncategorized');
-    if (!on && key === 'uncategorized') next.delete('review');
-    const q = next.toString();
-    return q ? `${pathname}?${q}` : pathname;
-  }
+  const href = (key: string, on: boolean) => toggleHref(pathname, params, key, on);
+  const clearBacklog = () => clearBacklogHref(pathname, params);
 
   // A backlog chip is a to-do, so an empty one is not worth a control. They
   // disappear at zero rather than sitting greyed out forever — which is the
@@ -86,15 +76,45 @@ export function FilterChips({
       )}
     </div>
   );
+}
 
-  /** Drops both backlog filters, keeping search, account and date range. */
-  function clearBacklog(): string {
-    const next = new URLSearchParams(params.toString());
-    next.delete('review');
-    next.delete('uncategorized');
-    const q = next.toString();
-    return q ? `${pathname}?${q}` : pathname;
+/** The two backlog filters. Alternatives, never held together. */
+const BACKLOG_KEYS = ['review', 'uncategorized'] as const;
+
+function withQuery(pathname: string, next: URLSearchParams): string {
+  const q = next.toString();
+  return q ? `${pathname}?${q}` : pathname;
+}
+
+/**
+ * Toggles one filter, dropping it from the URL when switched off.
+ *
+ * Exported for tests: the URL is the whole behaviour of this component, and a
+ * test that rebuilt these strings itself would pass while the real code was
+ * wrong.
+ */
+export function toggleHref(
+  pathname: string,
+  params: URLSearchParams,
+  key: string,
+  on: boolean,
+): string {
+  const next = new URLSearchParams(params.toString());
+  if (on) next.delete(key);
+  else next.set(key, '1');
+  // The two review filters are alternatives, not a conjunction: holding both
+  // asks for rows that are simultaneously guessed and unguessed.
+  if (!on && BACKLOG_KEYS.includes(key as (typeof BACKLOG_KEYS)[number])) {
+    for (const other of BACKLOG_KEYS) if (other !== key) next.delete(other);
   }
+  return withQuery(pathname, next);
+}
+
+/** Drops both backlog filters, keeping search, account and date range. */
+export function clearBacklogHref(pathname: string, params: URLSearchParams): string {
+  const next = new URLSearchParams(params.toString());
+  for (const key of BACKLOG_KEYS) next.delete(key);
+  return withQuery(pathname, next);
 }
 
 function Chip({
