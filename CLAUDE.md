@@ -112,7 +112,32 @@ npm run prepush          # privacy + typecheck + tests + diagrams
 npm run sync             # pull from SimpleFIN, categorise, match transfers
 npm run recategorize     # re-run rules over a date range, after editing them
 npm run import <file>    # a statement the feed cannot reach
-npm run seed             # ~230 synthetic transactions to develop against
+npm run backup           # snapshot the ledger to db/dumps/ (gitignored)
+npm run seed             # synthetic data — DESTRUCTIVE, see below
 ```
 
-Develop against `npm run seed`, not against real data.
+## This database holds real money
+
+**The local Postgres is the live ledger, not a scratch database.** It is the
+only copy: SimpleFIN and the Apple Card CSVs can rebuild the rows, but every
+human decision on them — locked categories, overrides, voids, merchant
+defaults, the `transaction_edits` log — exists nowhere else and does not come
+back from a re-sync.
+
+`npm run seed` opens with `TRUNCATE`. It has destroyed this data once. It now
+refuses when real transactions are present, but before anything destructive:
+
+```bash
+npm run backup                 # then check `npm run backup -- --list`
+```
+
+Check what is in the database before running a command that writes to it:
+
+```bash
+docker exec finance-db psql -U finance -d finance -c 'SELECT count(*) FROM transactions'
+```
+
+To develop against synthetic data, use a separate database — point
+`DATABASE_URL` elsewhere — rather than seeding over this one. Dumps live in
+`db/dumps/` and are gitignored: a dump is the entire ledger in one file and
+must never reach this public repo.

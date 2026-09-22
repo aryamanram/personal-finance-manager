@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import './globals.css';
 import { Providers } from './providers';
+import { Nav } from '@/components/Nav';
 
 export const metadata: Metadata = {
   title: 'Ledger',
@@ -10,6 +11,7 @@ export const metadata: Metadata = {
 
 const NAV = [
   { href: '/', label: 'Cashflow' },
+  { href: '/flow', label: 'Flow' },
   { href: '/transactions', label: 'Register' },
   { href: '/accounts', label: 'Accounts' },
 ] as const;
@@ -32,17 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/" className="figure text-sm font-semibold tracking-tight text-paper">
                 ledger
               </Link>
-              <nav className="flex gap-6">
-                {NAV.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className="text-sm text-paper-dim transition-colors hover:text-paper"
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </nav>
+              <Nav items={NAV} />
             </div>
           </header>
           <main className="mx-auto max-w-[1400px] px-6 py-8">{children}</main>

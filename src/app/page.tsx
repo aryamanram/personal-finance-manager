@@ -5,9 +5,10 @@ import {
 } from '@/lib/queries';
 import { PeriodPicker } from '@/components/PeriodPicker';
 import { buildPeriods } from '@/lib/periods';
+import { resolvePeriod } from '@/lib/resolve-period';
 import { StatCard } from '@/components/StatCard';
-import { Sankey } from '@/components/Sankey';
 import { CostMixChart } from '@/components/CostMixChart';
+import { CategoryRows } from '@/components/CategoryRows';
 import { Figure } from '@/components/Figure';
 import { formatCents } from '@/money';
 import { formatMonthLong, formatTimestampShort } from '@/lib/format-date';
@@ -34,20 +35,7 @@ export default async function DashboardPage({
   if (!bounds || activeMonths.length === 0) return <EmptyState />;
 
   const periods = buildPeriods(activeMonths, bounds);
-  // Default to the most recent month that actually had money moving, rather
-  // than the current calendar month — which, part-way through, or in a month
-  // with no income, has nothing worth charting.
-  const fallback =
-    periods.find((p) => {
-      const row = cashflow.find((m) => m.month.startsWith(p.key));
-      // Any movement counts. Testing income and discretionary only meant a
-      // month of nothing but rent opened an older period instead.
-      return row && [
-        row.income_cents, row.required_cents,
-        row.discretionary_cents, row.invested_cents,
-      ].some((cents) => (cents ?? 0) > 0);
-    }) ?? periods[0];
-  const period = periods.find((p) => p.key === requested) ?? fallback;
+  const period = resolvePeriod(periods, cashflow, requested);
 
   const [totals, breakdown, uncategorized, lastSync, drift] = await Promise.all([
     getPeriodTotals(period.from, period.to),
@@ -135,83 +123,33 @@ export default async function DashboardPage({
       </section>
 
       <section>
-        <div className="rule-b flex items-baseline justify-between pb-2">
+        <div className="rule-b pb-2">
+          {/* Name the span the data actually covers, not the span requested. */}
+          <h2 className="eyebrow">
+            Fixed vs variable · last {Math.min(cashflow.length, 12)} months
+          </h2>
+        </div>
+        <p className="mt-2 mb-6 max-w-lg text-xs leading-relaxed text-paper-faint">
+          Fixed costs are the part of next month you already know. The taller
+          the dark band, the more predictable the month.
+        </p>
+        <CostMixChart data={cashflow.slice(-12)} />
+      </section>
+
+      <section>
+        <div className="rule-b flex flex-wrap items-baseline justify-between gap-2 pb-2">
           <h2 className="eyebrow">Where it went</h2>
           <span className="text-xs text-paper-faint">
             Invested{' '}
             <Figure cents={invested} tone="invest" showCents={false} />
+            {' · '}
+            <Link href="/flow" className="transition-colors hover:text-paper">
+              see the flow →
+            </Link>
           </span>
         </div>
-        <div className="pt-6">
-          <Sankey
-            data={{
-              incomeCents: income,
-              requiredCents: required,
-              discretionaryCents: discretionary,
-              investedCents: invested,
-              categories: breakdown.map((b) => ({
-                name: b.category_name,
-                necessity: b.necessity,
-                cents: b.total_cents,
-              })),
-            }}
-          />
-        </div>
-      </section>
-
-      <section className="grid gap-10 lg:grid-cols-[1fr_360px]">
-        <div>
-          <div className="rule-b pb-2">
-            {/* Name the span the data actually covers, not the span requested. */}
-            <h2 className="eyebrow">
-              Fixed vs variable · last {Math.min(cashflow.length, 12)} months
-            </h2>
-          </div>
-          <p className="mt-2 mb-4 max-w-lg text-xs leading-relaxed text-paper-faint">
-            Fixed costs are the part of next month you already know. The taller
-            the dark band, the more predictable the month.
-          </p>
-          <CostMixChart data={cashflow.slice(-12)} />
-        </div>
-
-        <div>
-          <div className="rule-b pb-2">
-            <h2 className="eyebrow">Top categories</h2>
-          </div>
-          <ul className="mt-2">
-            {breakdown.slice(0, 12).map((b, i) => (
-              <li
-                // Index, not the row's identity. A key derived from the query's
-                // grouping breaks the moment that grouping changes — which it
-                // did: the breakdown used to be split by cost_type as well, so
-                // Entertainment and Shopping each rendered twice with the same
-                // key. The list is read-only and re-renders whole, so position
-                // is a safe identity here.
-                key={`${i}-${b.category_id ?? 'uncategorized'}`}
-                className="rule-b flex items-baseline justify-between gap-4 py-2 text-sm"
-              >
-                <Link
-                  href={b.category_id ? `/categories/${b.category_id}` : '/transactions'}
-                  className="truncate text-paper-dim transition-colors hover:text-paper"
-                >
-                  {b.category_name}
-                </Link>
-                <span className="flex shrink-0 items-baseline gap-3">
-                  <span
-                    className="eyebrow"
-                    style={{
-                      color: b.necessity === 'required'
-                        ? 'var(--color-out-dim)'
-                        : 'var(--color-paper-faint)',
-                    }}
-                  >
-                    {b.cost_type === 'fixed' ? 'fix' : 'var'}
-                  </span>
-                  <Figure cents={b.total_cents} tone="neutral" showCents={false} className="text-sm" />
-                </span>
-              </li>
-            ))}
-          </ul>
+        <div className="mt-2">
+          <CategoryRows rows={breakdown} from={period.from} to={period.to} />
         </div>
       </section>
     </div>

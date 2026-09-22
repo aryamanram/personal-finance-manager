@@ -15,6 +15,8 @@ export interface TransactionFilters {
   costType?: string[];
   search?: string;
   uncategorizedOnly?: boolean;
+  /** Only rows a machine categorised that no human has confirmed. */
+  needsReviewOnly?: boolean;
   includeVoided?: boolean;
   includeTransfers?: boolean;
   limit?: number;
@@ -36,6 +38,10 @@ export async function getTransactions(f: TransactionFilters = {}) {
       ${f.uncategorizedOnly
         ? sql`AND (category_id IS NULL OR category_source IN ('unset','default'))`
         : sql``}
+      ${f.needsReviewOnly
+        ? sql`AND NOT category_locked AND category_id IS NOT NULL
+              AND category_source IN ('rule','llm','import')`
+        : sql``}
       ${f.search
         ? sql`AND (eff_description ILIKE ${'%' + f.search + '%'}
                    OR raw_description ILIKE ${'%' + f.search + '%'})`
@@ -56,6 +62,10 @@ export async function countTransactions(f: TransactionFilters = {}): Promise<num
       ${f.categoryIds?.length ? sql`AND category_id = ANY(${f.categoryIds}::uuid[])` : sql``}
       ${f.uncategorizedOnly
         ? sql`AND (category_id IS NULL OR category_source IN ('unset','default'))`
+        : sql``}
+      ${f.needsReviewOnly
+        ? sql`AND NOT category_locked AND category_id IS NOT NULL
+              AND category_source IN ('rule','llm','import')`
         : sql``}
       ${f.search
         ? sql`AND (eff_description ILIKE ${'%' + f.search + '%'}
@@ -232,6 +242,104 @@ export async function getUncategorizedCount(): Promise<number> {
     WHERE superseded_by_id IS NULL AND voided_at IS NULL
       AND (category_id IS NULL OR category_source IN ('unset','default'))`;
   return c;
+}
+
+/**
+ * The two review backlogs the register filters on.
+ *
+ * Deliberately different questions, and conflating them made the old single
+ * "uncategorized" count hard to act on:
+ *
+ *   needs_review  — a machine (rule or LLM) chose it and no human has
+ *                   confirmed. There IS a category; it may just be wrong.
+ *   uncategorized — nobody and nothing has chosen.
+ *
+ * A locked row is in neither: locking records a human decision (I4), so a
+ * confirmed row cannot also be awaiting confirmation.
+ */
+export interface ReviewCounts {
+  needs_review: number;
+  uncategorized: number;
+}
+
+export async function getReviewCounts(): Promise<ReviewCounts> {
+  const [row] = await sql<ReviewCounts[]>`
+    SELECT
+      count(*) FILTER (
+        WHERE NOT category_locked
+          AND category_id IS NOT NULL
+          AND category_source IN ('rule','llm','import')
+      )::int AS needs_review,
+      count(*) FILTER (
+        WHERE category_id IS NULL OR category_source IN ('unset','default')
+      )::int AS uncategorized
+    FROM v_transactions
+    WHERE superseded_by_id IS NULL AND voided_at IS NULL`;
+  return row;
+}
+
+/**
+ * How often you have *chosen* each category by hand, most-used first.
+ *
+ * Counts only locked rows — machine assignments are what the ranking exists to
+ * correct, so letting them vote would rank the model's habits rather than
+ * yours. This turns a 35-item alphabetical list into the few categories
+ * actually in play (wireframe 34:2).
+ */
+export async function getCategoryUsage(): Promise<Map<string, number>> {
+  const rows = await sql<{ category_id: string; uses: number }[]>`
+    SELECT category_id, count(*)::int AS uses
+    FROM v_transactions
+    WHERE superseded_by_id IS NULL AND voided_at IS NULL
+      AND category_locked AND category_id IS NOT NULL
+    GROUP BY category_id`;
+  return new Map(rows.map((r) => [r.category_id, r.uses]));
+}
+
+/**
+ * What the register knows about one row's merchant, for the edit panel.
+ *
+ * Deliberately not added to v_transactions: the view is the read path for
+ * every page, and this is needed only when a single row is expanded.
+ *
+ * `siblings` counts the OTHER rows from this merchant that no human has
+ * categorised — the "apply to the N other rows" offer. Locked rows are
+ * excluded (I4).
+ */
+export interface MerchantContext {
+  merchant_id: string;
+  merchant_name: string;
+  default_category_id: string | null;
+  default_uses: number;
+  siblings: number;
+}
+
+export async function getMerchantContext(
+  transactionId: string,
+): Promise<MerchantContext | null> {
+  const [row] = await sql<MerchantContext[]>`
+    WITH target AS (
+      SELECT merchant_id FROM transactions WHERE id = ${transactionId}
+    )
+    SELECT
+      m.id           AS merchant_id,
+      m.display_name AS merchant_name,
+      m.default_category_id,
+      (SELECT count(*)::int FROM v_transactions v
+        WHERE v.merchant_id = m.id
+          AND v.category_locked
+          AND v.category_id IS NOT DISTINCT FROM m.default_category_id
+          AND v.voided_at IS NULL AND v.superseded_by_id IS NULL
+      )              AS default_uses,
+      (SELECT count(*)::int FROM v_transactions v
+        WHERE v.merchant_id = m.id
+          AND v.id <> ${transactionId}
+          AND NOT v.category_locked
+          AND v.voided_at IS NULL AND v.superseded_by_id IS NULL
+      )              AS siblings
+    FROM target t
+    JOIN merchants m ON m.id = t.merchant_id`;
+  return row ?? null;
 }
 
 export interface NetWorthRow {

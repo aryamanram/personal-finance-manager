@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import clsx from 'clsx';
 import { Figure } from './Figure';
+import { RowEditor } from './RowEditor';
 import { formatCents } from '@/money';
 import type { VTransaction, CategoryWithGroup } from '@/lib/types';
 
@@ -15,6 +16,7 @@ import type { VTransaction, CategoryWithGroup } from '@/lib/types';
 export function TransactionRow({
   txn,
   categories,
+  usage,
   selected,
   onSelect,
   onPatch,
@@ -22,15 +24,29 @@ export function TransactionRow({
 }: {
   txn: VTransaction;
   categories: CategoryWithGroup[];
+  usage: Record<string, number>;
   selected: boolean;
   onSelect: (id: string, on: boolean) => void;
   onPatch: (id: string, patch: Record<string, unknown>) => void;
   pending?: boolean;
 }) {
-  const [editing, setEditing] = useState<null | 'category' | 'amount'>(null);
+  const [editing, setEditing] = useState<null | 'amount'>(null);
+  const [expanded, setExpanded] = useState(false);
   const voided = txn.voided_at !== null;
 
+  // Renamed: a display override exists, so the bank's string is worth showing.
+  const renamed = txn.description !== null && txn.description !== '';
+  // A machine chose it and no human has confirmed. NOT amber — amber is
+  // reserved for "a human changed this" (CLAUDE.md), and this is the opposite:
+  // nobody has touched it yet.
+  const isGuess =
+    !txn.category_locked &&
+    txn.category_id !== null &&
+    ['rule', 'llm', 'import'].includes(txn.category_source);
+
+
   return (
+    <>
     <tr
       className={clsx(
         'rule-b group transition-colors',
@@ -66,11 +82,23 @@ export function TransactionRow({
         </span>
       </td>
 
-      <td className="py-2 pr-3">
-        <div className={clsx('truncate text-sm', voided && 'line-through')}>
-          {txn.eff_description}
-        </div>
-        <div className="flex items-center gap-2 text-xs text-paper-faint">
+      <td className="py-2 pr-3 align-top">
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          className="block w-full text-left"
+        >
+          <span className={clsx('block truncate text-sm', voided && 'line-through')}>
+            {txn.eff_description}
+          </span>
+          {/* The bank's own string, kept visible under the rename (I2). */}
+          {renamed && (
+            <span className="figure mt-0.5 block truncate text-xs text-paper-faint">
+              {txn.raw_description}
+            </span>
+          )}
+        </button>
+        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-paper-faint">
           <span>{txn.account_name}</span>
           {txn.status === 'pending' && <Badge tone="neutral">pending</Badge>}
           {txn.transfer_id && <Badge tone="neutral">transfer</Badge>}
@@ -79,42 +107,37 @@ export function TransactionRow({
         </div>
       </td>
 
-      <td className="w-56 py-2">
-        {editing === 'category' ? (
-          <select
-            autoFocus
-            defaultValue={txn.category_id ?? ''}
-            onBlur={() => setEditing(null)}
-            onChange={(e) => {
-              onPatch(txn.id, { category_id: e.target.value || null });
-              setEditing(null);
-            }}
-            className="w-full rounded-sm border border-ink-500 bg-ink-800 px-2 py-1 text-sm"
-          >
-            <option value="">—</option>
-            {groupBy(categories).map(([group, items]) => (
-              <optgroup key={group} label={group}>
-                {items.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        ) : (
-          <button
-            onClick={() => setEditing('category')}
-            className="flex w-full items-center gap-2 text-left text-sm text-paper-dim transition-colors hover:text-paper"
-          >
-            <span className="truncate">{txn.category_name ?? 'Uncategorized'}</span>
-            {txn.category_locked && (
-              <span className="text-edited" title="Set by hand — machine passes will not change it">
-                ◆
-              </span>
-            )}
-          </button>
-        )}
+      <td className="w-56 py-2 align-top">
+        {/* Opens the expanded editor rather than anchoring a palette here.
+            The table scrolls (overflow-x-auto forces overflow-y: auto), and an
+            absolutely-positioned 340px panel on a row near the bottom extends
+            past the scrollport and gets clipped. In the editor the palette is
+            in normal flow, and the row's other decisions — renaming,
+            remembering the merchant — are in reach at the same time. */}
+        <button
+          onClick={() => setExpanded(true)}
+          className="flex w-full items-center gap-2 text-left text-sm text-paper-dim transition-colors hover:text-paper"
+        >
+          <span className="truncate">{txn.category_name ?? 'Uncategorized'}</span>
+          {/* A quiet mark, not a boxed chip. On a freshly synced ledger nearly
+              every row is a machine guess, and a chip on all of them marks
+              nothing. The "Needs review" filter works the backlog; this just
+              says where the category came from. */}
+          {isGuess && (
+            <span
+              className="eyebrow shrink-0 text-[9px] text-paper-faint"
+              title={`Categorised by ${txn.category_source} — open the row to confirm or change`}
+            >
+              guess
+            </span>
+          )}
+          {txn.category_locked && (
+            <span className="shrink-0 text-edited" title="Set by hand — machine passes will not change it">
+              ◆
+            </span>
+          )}
+        </button>
       </td>
-
       <td className="w-28 py-2 text-xs">
         <span className="eyebrow" style={{ fontSize: '0.625rem' }}>
           {txn.eff_cost_type === 'fixed' ? 'fixed' : 'var'} · {abbrev(txn.eff_necessity)}
@@ -159,6 +182,21 @@ export function TransactionRow({
         )}
       </td>
     </tr>
+
+    {expanded && (
+      <tr className="rule-b">
+        <td colSpan={6} className="p-0">
+          <RowEditor
+            txn={txn}
+            categories={categories}
+            usage={usage}
+            onPatch={onPatch}
+            onClose={() => setExpanded(false)}
+          />
+        </td>
+      </tr>
+    )}
+    </>
   );
 }
 
@@ -177,16 +215,6 @@ function Badge({ children, tone }: { children: React.ReactNode; tone: 'neutral' 
 
 function abbrev(n: string): string {
   return { required: 'req', discretionary: 'disc', income: 'inc', transfer: 'xfer', investment: 'inv' }[n] ?? n;
-}
-
-function groupBy(categories: CategoryWithGroup[]): [string, CategoryWithGroup[]][] {
-  const map = new Map<string, CategoryWithGroup[]>();
-  for (const c of categories) {
-    const g = map.get(c.group_name);
-    if (g) g.push(c);
-    else map.set(c.group_name, [c]);
-  }
-  return Array.from(map);
 }
 
 /** Parses the inline amount input to signed cents. Never uses parseFloat (I1). */
