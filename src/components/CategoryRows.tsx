@@ -34,7 +34,9 @@ export function CategoryRows({
     <ul>
       {shown.map((r) => (
         <li
-          key={r.category_id ?? r.category_name}
+          // getCategoryBreakdownRange groups by necessity too, so one
+          // category can return two rows; the id alone is not unique here.
+          key={`${r.category_id ?? r.category_name}|${r.necessity}`}
           className="rule-b grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-2 py-3 sm:grid-cols-[200px_minmax(0,1fr)_120px]"
         >
           <div className="min-w-0">

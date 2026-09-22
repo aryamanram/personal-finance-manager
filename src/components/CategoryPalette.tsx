@@ -226,6 +226,21 @@ export function CategoryPalette({
           </li>
         ))}
 
+        {/* onPick accepts null and RowEditor patches category_id: null for
+            it, but nothing in the palette could reach that path — there was no
+            way back to Uncategorized once a category was set. */}
+        {!query.trim() && currentId != null && (
+          <li>
+            <button
+              onClick={() => onPick(null)}
+              className="rule-t flex w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left text-sm text-paper-faint transition-colors hover:bg-ink-700 hover:text-paper-dim"
+            >
+              <span className="truncate">Uncategorized</span>
+              <span className="shrink-0 text-xs">clear</span>
+            </button>
+          </li>
+        )}
+
         {flat.length === 0 && (
           <li className="px-3 py-4 text-center text-xs text-paper-faint">
             No category matches “{query.trim()}”.

@@ -22,10 +22,15 @@ export function Nav({
     <nav className="flex gap-6">
       {items.map((item) => {
         // Exact match for the dashboard, prefix match elsewhere — otherwise
-        // "/" lights up on every page, and /categories/[id] (a drill-down of
-        // the register) lights up nothing.
+        // "/" lights up on every page. /categories/[id] is a drill-down of the
+        // register and has no nav entry of its own, so it marks Register
+        // rather than leaving the whole bar unlit.
         const active =
-          item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+          item.href === '/'
+            ? pathname === '/'
+            : item.href === '/transactions'
+              ? pathname.startsWith('/transactions') || pathname.startsWith('/categories')
+              : pathname.startsWith(item.href);
         return (
           <Link
             key={item.href}

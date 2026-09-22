@@ -45,6 +45,21 @@ export function TransactionRow({
     txn.category_id !== null &&
     ['rule', 'llm', 'import'].includes(txn.category_source);
 
+  /** Agreeing with the machine: same category, but now a human decision. */
+  async function confirmGuess(id: string) {
+    const res = await fetch(`/api/transactions/${id}/merchant`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        category_id: txn.category_id,
+        set_default: false,
+        apply_to_siblings: false,
+      }),
+    });
+    // The lock and the backlog count both live server-side.
+    if (res.ok) window.location.reload();
+  }
+
   return (
     <>
     <tr
@@ -118,8 +133,17 @@ export function TransactionRow({
                 unconfirmedId={isGuess ? txn.category_id : null}
                 currentId={txn.category_id}
                 onPick={(id) => {
-                  onPatch(txn.id, { category_id: id });
                   setEditing(null);
+                  // Picking the category the row already has is a
+                  // CONFIRMATION, not a change: applyPatch would no-op and
+                  // leave it unlocked, so the row would stay in the backlog
+                  // after an apparent confirmation. Route it to the endpoint
+                  // that flips category_source instead.
+                  if (id !== null && id === txn.category_id && isGuess) {
+                    void confirmGuess(txn.id);
+                    return;
+                  }
+                  onPatch(txn.id, { category_id: id });
                 }}
                 onClose={() => setEditing(null)}
               />

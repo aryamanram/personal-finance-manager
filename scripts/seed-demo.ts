@@ -41,14 +41,17 @@ async function main() {
   // human decision on them — locked categories, overrides, voids, merchant
   // defaults, the edit log — exists nowhere else. That has happened once.
   //
-  // A real account is one linked to a live source. The seed's own accounts
-  // carry a `demo-` external_id, so reseeding over a previous seed is still a
-  // one-liner.
+  // Anything NOT explicitly marked demo is treated as real — the safe
+  // direction to be wrong in. Testing `external_id IS NOT NULL` instead would
+  // skip every account without one, and a CSV or manual import creates
+  // exactly that: the Apple Card and the brokerage below have no external_id
+  // either. An account holding the only real rows would then be invisible to
+  // this guard and TRUNCATEd without warning.
   const [{ n: real }] = await sql<{ n: number }[]>`
     SELECT count(*)::int AS n
     FROM transactions t
     JOIN accounts a ON a.id = t.account_id
-    WHERE a.external_id IS NOT NULL AND a.external_id NOT LIKE 'demo-%'`;
+    WHERE a.external_id IS NULL OR a.external_id NOT LIKE 'demo-%'`;
 
   if (real > 0 && !process.argv.includes('--force')) {
     console.error(
@@ -83,12 +86,12 @@ async function main() {
     VALUES (${chase.id}, 'Chase United Explorer', 'credit', 'simplefin', 'demo-exp', '9911')
     RETURNING id`;
   const [apple] = await sql<{ id: string }[]>`
-    INSERT INTO accounts (institution_id, name, type, source, mask)
-    VALUES (${gs.id}, 'Apple Card', 'credit', 'csv', '0007')
+    INSERT INTO accounts (institution_id, name, type, source, external_id, mask)
+    VALUES (${gs.id}, 'Apple Card', 'credit', 'csv', 'demo-apple', '0007')
     RETURNING id`;
   const [brokerage] = await sql<{ id: string }[]>`
-    INSERT INTO accounts (institution_id, name, type, source, mask)
-    VALUES (${ms.id}, 'Morgan Stanley Brokerage', 'investment', 'manual', '1234')
+    INSERT INTO accounts (institution_id, name, type, source, external_id, mask)
+    VALUES (${ms.id}, 'Morgan Stanley Brokerage', 'investment', 'manual', 'demo-brokerage', '1234')
     RETURNING id`;
 
   const txns: CanonicalTxn[] = [];

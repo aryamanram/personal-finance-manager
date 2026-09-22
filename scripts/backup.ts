@@ -23,7 +23,9 @@
  * private — an encrypted volume or a personal drive, never a public remote.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readdirSync, statSync, existsSync, writeFileSync, readFileSync } from 'node:fs';
+import {
+  mkdirSync, readdirSync, statSync, existsSync, writeFileSync, readFileSync, chmodSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { loadEnv } from './env.js';
 
@@ -70,7 +72,12 @@ function list() {
 
 function backup() {
   const { user, database } = parseDbUrl(process.env.DATABASE_URL!);
-  mkdirSync(DUMP_DIR, { recursive: true });
+  // 0700 / 0600: a dump is the entire ledger in one file, and a default 022
+  // umask would leave it 0644 in a 0755 directory — readable by any other
+  // local user. chmod as well as mkdir, since the directory may already exist
+  // from an earlier run with looser permissions.
+  mkdirSync(DUMP_DIR, { recursive: true, mode: 0o700 });
+  chmodSync(DUMP_DIR, 0o700);
 
   // Colons are legal in a filename but awkward to type when restoring.
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
@@ -86,7 +93,7 @@ function backup() {
     { maxBuffer: 1024 ** 3, encoding: 'buffer' },
   );
 
-  writeFileSync(out, dump);
+  writeFileSync(out, dump, { mode: 0o600 });
 
   const counts = execFileSync(
     'docker',
@@ -101,7 +108,7 @@ function backup() {
   console.log('  Keep a copy somewhere private if it matters.');
 }
 
-function restore(file: string) {
+function restore(file: string, confirmed: boolean) {
   if (!existsSync(file)) {
     console.error(`No such backup: ${file}`);
     process.exitCode = 1;
@@ -109,13 +116,40 @@ function restore(file: string) {
   }
   const { user, database } = parseDbUrl(process.env.DATABASE_URL!);
 
+  // A restore REPLACES the ledger: every decision made after this snapshot is
+  // gone, and picking a stale dump looks identical to picking the right one
+  // until you notice months of categorisation missing. Name what is about to
+  // be overwritten and make the caller say so explicitly. stdin is not a TTY
+  // under `npm run`, so this is a flag rather than a prompt.
+  if (!confirmed) {
+    const current = execFileSync(
+      'docker',
+      ['exec', CONTAINER, 'psql', '-U', user, '-d', database, '-t', '-A', '-c',
+        'SELECT count(*) FROM transactions'],
+      { encoding: 'utf8' },
+    ).trim();
+    const stamp = statSync(file).mtime.toISOString().slice(0, 16).replace('T', ' ');
+    console.error(
+      `\nThis REPLACES the "${database}" database.\n\n` +
+      `  now:     ${current} transactions\n` +
+      `  restore: ${file}  (${stamp})\n\n` +
+      `Anything decided since that snapshot is lost. Re-run with --yes to proceed:\n` +
+      `  npm run backup -- --restore ${file} --yes\n`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+
   // --clean --if-exists drops what is there first, so a restore is a
   // replacement rather than a merge into whatever the database currently
   // holds. Merging two ledgers would silently double every row.
   execFileSync(
     'docker',
     ['exec', '-i', CONTAINER, 'pg_restore', '-U', user, '-d', database,
-      '--clean', '--if-exists', '--no-owner'],
+      // --single-transaction so a failure part-way rolls the whole restore
+      // back. Without it --clean has already dropped objects and the database
+      // is left half-replaced.
+      '--clean', '--if-exists', '--no-owner', '--single-transaction'],
     { input: readFileSync(file), maxBuffer: 1024 ** 3, stdio: ['pipe', 'inherit', 'inherit'] },
   );
 
@@ -137,7 +171,7 @@ if (args.includes('--list')) {
     console.error('Usage: npm run backup -- --restore <file>');
     process.exitCode = 1;
   } else {
-    restore(file);
+    restore(file, args.includes('--yes'));
   }
 } else {
   backup();

@@ -54,8 +54,12 @@ export async function POST(
   }
   const { category_id, set_default, apply_to_siblings } = parsed.data;
 
+  // A merchant is required only to REMEMBER something against it. This route
+  // is also the confirm path — picking the category a row already has, which
+  // applyPatch would no-op — and a row with no merchant must still be
+  // confirmable, or the "needs review" backlog cannot be cleared for it.
   const context = await getMerchantContext(id);
-  if (!context) {
+  if (!context && (set_default || apply_to_siblings)) {
     return NextResponse.json(
       { error: 'This transaction has no merchant to remember against.' },
       { status: 400 },
@@ -65,14 +69,14 @@ export async function POST(
   try {
     const transaction = await setOrConfirm(id, category_id);
 
-    if (set_default) {
+    if (set_default && context) {
       await sql`
         UPDATE merchants SET default_category_id = ${category_id}
         WHERE id = ${context.merchant_id}`;
     }
 
     let applied = 0;
-    if (apply_to_siblings) {
+    if (apply_to_siblings && context) {
       // One patch per row rather than a bulk UPDATE: each must write its own
       // transaction_edits row (I6) and trip the lock trigger (I4).
       const rows = await sql<{ id: string }[]>`
