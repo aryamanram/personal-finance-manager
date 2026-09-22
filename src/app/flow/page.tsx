@@ -4,7 +4,7 @@ import {
   getLedgerBounds, getActiveMonths,
 } from '@/lib/queries';
 import { PeriodPicker } from '@/components/PeriodPicker';
-import { buildPeriods, describePeriod } from '@/lib/periods';
+import { buildPeriods } from '@/lib/periods';
 import { resolvePeriod } from '@/lib/resolve-period';
 import { Sankey } from '@/components/Sankey';
 import { FlowDrilldown } from '@/components/FlowDrilldown';
@@ -40,18 +40,11 @@ export default async function FlowPage({
     getCategoryBreakdownRange(period.from, period.to),
   ]);
 
-  const title =
-    period.scope === 'all'
-      ? 'Where it all went'
-      : `Where ${describePeriod(period)} went`;
-
   return (
     <div className="space-y-10">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <div className="eyebrow">Flow</div>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">{title}</h1>
-        </div>
+      {/* The picker carries the heading: the timeframe IS the title. */}
+      <header>
+        <div className="eyebrow mb-1">Flow</div>
         <PeriodPicker options={periods} active={period.key} />
       </header>
 

@@ -115,6 +115,43 @@ export function buildPeriods(
 }
 
 /**
+ * Every period at one zoom level, newest first — the track the ‹ / › arrows
+ * walk along.
+ *
+ * Deliberately flat across the whole ledger rather than scoped to the parent.
+ * Stepping back from the first half of September should reach the second half
+ * of August, not stop dead at a month boundary: the arrows mean "the period
+ * before this one", and a pay period before the 1st is last month's, whatever
+ * the tree says about parentage.
+ */
+export function periodTrack(
+  periods: PeriodOption[],
+  scope: PeriodScope,
+): PeriodOption[] {
+  return periods
+    .filter((p) => p.scope === scope)
+    .sort((a, b) => b.from.localeCompare(a.from));
+}
+
+/**
+ * The period one step older (`-1`) or newer (`+1`) at the same zoom.
+ *
+ * Returns undefined only at the true ends of the ledger, so an arrow disables
+ * only when there is genuinely nothing further to see.
+ */
+export function stepPeriod(
+  periods: PeriodOption[],
+  current: PeriodOption,
+  direction: -1 | 1,
+): PeriodOption | undefined {
+  const track = periodTrack(periods, current.scope);
+  const at = track.findIndex((p) => p.key === current.key);
+  if (at === -1) return undefined;
+  // The track is newest-first, so "older" means a HIGHER index.
+  return track[at + (direction === -1 ? 1 : -1)];
+}
+
+/**
  * A human name for a period, for page headings.
  *
  * The picker's own labels are deliberately terse because they sit under an

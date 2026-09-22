@@ -4,7 +4,7 @@ import {
   getLastSync, getReconciliation, getLedgerBounds, getActiveMonths,
 } from '@/lib/queries';
 import { PeriodPicker } from '@/components/PeriodPicker';
-import { buildPeriods, describePeriod } from '@/lib/periods';
+import { buildPeriods } from '@/lib/periods';
 import { resolvePeriod } from '@/lib/resolve-period';
 import { StatCard } from '@/components/StatCard';
 import { CostMixChart } from '@/components/CostMixChart';
@@ -51,7 +51,6 @@ export default async function DashboardPage({
   const idx = cashflow.findIndex((m) => m.month.startsWith(period.key));
   const previous = isMonth && idx > 0 ? cashflow[idx - 1] : undefined;
 
-  const heading = describePeriod(period);
 
   const income = totals.income_cents;
   const required = totals.required_cents;
@@ -62,14 +61,10 @@ export default async function DashboardPage({
   return (
     <div className="space-y-12">
       <header className="flex flex-wrap items-end justify-between gap-4">
+        {/* The picker carries the heading: the timeframe IS the title. */}
         <div>
-          <div className="eyebrow">Cashflow</div>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-            {heading}
-          </h1>
-          <div className="mt-3">
-            <PeriodPicker options={periods} active={period.key} align="start" />
-          </div>
+          <div className="eyebrow mb-1">Cashflow</div>
+          <PeriodPicker options={periods} active={period.key} align="start" />
         </div>
         <div className="flex items-center gap-6 text-xs text-paper-faint">
           {lastSync?.finished_at && (

@@ -1,237 +1,154 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import clsx from 'clsx';
-import type { PeriodOption, PeriodScope } from '@/lib/periods';
+import {
+  describePeriod, stepPeriod,
+  type PeriodOption, type PeriodScope,
+} from '@/lib/periods';
 
 /**
- * Period selector for the cashflow and flow views.
+ * Period selector. It IS the page heading — the timeframe is the only thing
+ * the title needs to say, so no sentence wraps around it.
  *
- *   ‹  September 2026  ›   Month ▾
+ *   ‹   August 2026   ›
+ *   All time › 2026 · 2025 · 2024
+ *             Sep · Aug · Jul …
+ *             1st – 15th · 16th – 31st
  *
- * Three ideas, in the order they earn their place:
+ * Two mechanisms, deliberately independent:
  *
- * 1. STEPPING is the common case. Looking at one month almost always means
- *    next wanting the month before it. That is an arrow, not a hunt through a
- *    list — the pattern YNAB uses on its plan header.
- * 2. GRANULARITY is a separate control from WHICH ONE. Monarch keeps its
- *    timeframe dropdown apart from its date filter for the same reason:
- *    folding them together turns n periods × m zoom levels into one flat list
- *    of n×m entries, which is exactly what the old <select> was.
- * 3. JUMPING far is rare, so it hides behind the label. Clicking it opens
- *    years beside that year's months — two short columns rather than a tree,
- *    so a decade of data is still one glance.
+ * STEP (‹ ›, or ← →) walks the ledger at the current zoom, FLAT. Stepping
+ * back twice from the first half of September reaches the second half of
+ * August — the arrows mean "the period before this one", and a pay period
+ * before the 1st belongs to last month whatever the tree says about
+ * parentage. Only the true ends of the ledger disable an arrow.
  *
- * Everything lives in the URL, so a view is shareable and survives a reload.
+ * DRILL (the rows beneath) reveals one level at a time. You see All time and
+ * the years; pick a year and its months appear; pick a month and its halves
+ * appear. Nothing deeper is on screen until it is relevant, so the control
+ * never exceeds four rows however many years accumulate.
  */
-
-/** Zoom levels, widest first. */
-const ZOOMS: { scope: PeriodScope; label: string }[] = [
-  { scope: 'all', label: 'All time' },
-  { scope: 'year', label: 'Year' },
-  { scope: 'month', label: 'Month' },
-  { scope: 'half', label: 'Pay period' },
-];
-
 export function PeriodPicker({
   options,
   active,
-  align = 'end',
+  align = 'start',
 }: {
   options: PeriodOption[];
   active: string;
-  /** Which edge the control hangs from; the dashboard stacks it under a heading. */
   align?: 'start' | 'end';
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const [open, setOpen] = useState<null | 'jump' | 'zoom'>(null);
-  const root = useRef<HTMLDivElement>(null);
 
   const byKey = new Map(options.map((o) => [o.key, o]));
   const current = byKey.get(active) ?? options[0]!;
 
-  function go(key: string) {
+  // Held in a ref so the keyboard listener never closes over a stale router.
+  const go = useRef<(key: string) => void>(() => {});
+  go.current = (key: string) => {
     const next = new URLSearchParams(params.toString());
     next.set('period', key);
     router.push(`${pathname}?${next.toString()}`);
-    setOpen(null);
-  }
+  };
 
-  // Close on an outside click or Escape — a popover that traps you is worse
-  // than the dropdown it replaced.
+  const older = stepPeriod(options, current, -1);
+  const newer = stepPeriod(options, current, 1);
+
+  // ← / → do exactly what the arrows do. Ignored while typing, so the
+  // register's search box and rename field keep their own cursor movement.
   useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (!root.current?.contains(e.target as Node)) setOpen(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable
+        || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))) return;
+
+      const to = e.key === 'ArrowLeft' ? older : newer;
+      if (!to) return;
+      e.preventDefault();
+      go.current(to.key);
     };
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(null); };
-    document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [older, newer]);
 
-  // Siblings at this zoom, sorted newest first so ‹ always means older.
-  //
-  // Sorted explicitly rather than trusting emission order: buildPeriods lists
-  // months newest-first but a month's two halves oldest-first, so reading the
-  // array directly made ‹ mean "older" for months and "newer" for halves.
-  const siblings = options
-    .filter((o) => o.scope === current.scope
-      && (current.scope === 'year' || o.parent === current.parent))
-    .sort((a, b) => b.from.localeCompare(a.from));
-  const at = siblings.findIndex((o) => o.key === current.key);
-  const older = at >= 0 ? siblings[at + 1] : undefined;
-  const newer = at > 0 ? siblings[at - 1] : undefined;
+  // The trail from the root to where we are, which decides how many drill
+  // rows to show and which pill in each is lit.
+  const trail: PeriodOption[] = [];
+  for (let p: PeriodOption | undefined = current; p; p = p.parent ? byKey.get(p.parent) : undefined) {
+    trail.unshift(p);
+  }
+  const onTrail = new Set(trail.map((p) => p.key));
 
-  /**
-   * Changing zoom keeps you where you are rather than resetting to the newest
-   * period: zooming out from September lands on 2026, and back in lands on
-   * September again. Walking the parent chain is what makes that true.
-   */
-  function zoomTo(scope: PeriodScope) {
-    if (scope === current.scope) { setOpen(null); return; }
+  const years = options.filter((o) => o.scope === 'year');
+  const year = trail.find((p) => p.scope === 'year');
+  const month = trail.find((p) => p.scope === 'month');
 
-    let up: PeriodOption | undefined = current;
-    while (up && up.scope !== scope) up = up.parent ? byKey.get(up.parent) : undefined;
-    if (up) { go(up.key); return; }
-
-    let down: PeriodOption | undefined = current;
-    while (down && down.scope !== scope) {
-      const kids = options.filter((o) => o.parent === down!.key);
-      if (kids.length === 0) break;
-      down = kids[0];
-    }
-    if (down && down.scope === scope) { go(down.key); return; }
-    setOpen(null);
+  const deeperRows: { scope: PeriodScope; items: PeriodOption[] }[] = [];
+  if (year) {
+    deeperRows.push({ scope: 'month', items: options.filter((o) => o.parent === year.key) });
+  }
+  if (month) {
+    deeperRows.push({ scope: 'half', items: options.filter((o) => o.parent === month.key) });
   }
 
-  const zoomLabel = ZOOMS.find((z) => z.scope === current.scope)?.label ?? 'Period';
+  const edge = align === 'end' ? 'items-end' : 'items-start';
 
   return (
-    <div
-      ref={root}
-      className={clsx('relative flex flex-col', align === 'end' ? 'items-end' : 'items-start')}
-    >
-      <div className="flex items-center gap-0.5">
-        <Step dir="older" onClick={() => older && go(older.key)} disabled={!older} />
-
-        <button
-          onClick={() => setOpen((v) => (v === 'jump' ? null : 'jump'))}
-          aria-expanded={open === 'jump'}
-          className="min-w-[104px] rounded-sm px-1.5 py-1 text-center text-sm text-paper transition-colors hover:bg-ink-800 sm:min-w-[132px] sm:px-2"
-        >
-          {label(current)}
-        </button>
-
-        <Step dir="newer" onClick={() => newer && go(newer.key)} disabled={!newer} />
-
-        <button
-          onClick={() => setOpen((v) => (v === 'zoom' ? null : 'zoom'))}
-          aria-expanded={open === 'zoom'}
-          className="eyebrow ml-0.5 rounded-sm px-1.5 py-1 transition-colors hover:bg-ink-800 hover:text-paper-dim sm:ml-1 sm:px-2"
-        >
-          {zoomLabel} ▾
-        </button>
+    <div className={clsx('flex flex-col gap-3', edge)}>
+      <div className="flex items-center gap-1">
+        <Arrow dir="older" onClick={() => older && go.current(older.key)} disabled={!older} />
+        {/* The heading. No sentence around it: the timeframe is the title. */}
+        <h1 className="min-w-[13ch] px-1 text-center text-2xl font-semibold tracking-tight text-paper">
+          {describePeriod(current)}
+        </h1>
+        <Arrow dir="newer" onClick={() => newer && go.current(newer.key)} disabled={!newer} />
       </div>
 
-      {open === 'zoom' && (
-        <Popover align={align}>
-          <div className="flex flex-col gap-0.5">
-            {ZOOMS.map((z) => (
-              <Row key={z.scope} on={z.scope === current.scope} onClick={() => zoomTo(z.scope)}>
-                {z.label}
-              </Row>
+      <div className={clsx('flex flex-col gap-1.5', edge)}>
+        <div className="flex flex-wrap items-center gap-1">
+          <Pill on={current.key === 'all'} onClick={() => go.current('all')}>
+            All time
+          </Pill>
+          {years.length > 0 && (
+            <span className="px-0.5 text-xs text-ink-500" aria-hidden>›</span>
+          )}
+          {years.map((o) => (
+            <Pill
+              key={o.key}
+              on={o.key === current.key}
+              dim={!onTrail.has(o.key)}
+              onClick={() => go.current(o.key)}
+            >
+              {o.label}
+            </Pill>
+          ))}
+        </div>
+
+        {deeperRows.map((row) => (
+          <div key={row.scope} className="flex flex-wrap items-center gap-1">
+            {row.items.map((o) => (
+              <Pill
+                key={o.key}
+                on={o.key === current.key}
+                dim={!onTrail.has(o.key)}
+                onClick={() => go.current(o.key)}
+              >
+                {row.scope === 'month' ? o.label.replace(/\s+\d{2}$/, '') : o.label}
+              </Pill>
             ))}
           </div>
-        </Popover>
-      )}
-
-      {open === 'jump' && (
-        <Popover align={align} wide>
-          <JumpTree options={options} current={current} onPick={go} />
-        </Popover>
-      )}
-    </div>
-  );
-}
-
-/** Years beside the months of whichever year you are in. */
-function JumpTree({
-  options,
-  current,
-  onPick,
-}: {
-  options: PeriodOption[];
-  current: PeriodOption;
-  onPick: (key: string) => void;
-}) {
-  const inYear = /^\d{4}/.test(current.key) ? current.key.slice(0, 4) : undefined;
-  const years = options.filter((o) => o.scope === 'year');
-  const [shownYear, setShownYear] = useState(inYear ?? years[0]?.key);
-  const months = options.filter(
-    (o) => o.scope === 'month' && o.key.startsWith(`${shownYear}-`),
-  );
-
-  return (
-    <div className="flex gap-3">
-      <div className="flex min-w-[76px] flex-col gap-0.5">
-        <div className="eyebrow px-2 pb-1">Jump to</div>
-        <Row on={current.key === 'all'} onClick={() => onPick('all')}>All time</Row>
-        {years.map((y) => (
-          <Row
-            key={y.key}
-            on={y.key === current.key}
-            dim={y.key !== shownYear}
-            // Selecting a year both navigates AND reveals its months, so the
-            // next click is one away rather than reopening the popover.
-            onClick={() => { setShownYear(y.key); onPick(y.key); }}
-          >
-            {y.label}
-          </Row>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-3 gap-0.5 border-l border-ink-700 pl-3">
-        <div className="eyebrow col-span-3 px-2 pb-1">{shownYear}</div>
-        {months.map((m) => (
-          <Row key={m.key} on={m.key === current.key} onClick={() => onPick(m.key)}>
-            {m.label.replace(/\s+\d{2}$/, '')}
-          </Row>
         ))}
       </div>
     </div>
   );
 }
 
-function Popover({
-  align,
-  wide,
-  children,
-}: {
-  align: 'start' | 'end';
-  wide?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      className={clsx(
-        'absolute top-full z-30 mt-1 rounded-sm border border-ink-600 bg-ink-800 p-2 shadow-2xl shadow-black/50',
-        wide ? 'min-w-[250px]' : 'min-w-[128px]',
-        align === 'end' ? 'right-0' : 'left-0',
-      )}
-    >
-      {children}
-    </div>
-  );
-}
-
-function Row({
+function Pill({
   on,
   dim,
   onClick,
@@ -247,10 +164,12 @@ function Row({
       onClick={onClick}
       aria-pressed={on}
       className={clsx(
-        'figure rounded-sm px-2 py-1 text-left text-xs transition-colors',
-        on ? 'bg-ink-700 text-paper'
-          : dim ? 'text-paper-faint hover:bg-ink-700 hover:text-paper-dim'
-            : 'text-paper-dim hover:bg-ink-700 hover:text-paper',
+        'figure rounded-sm border px-2 py-0.5 text-xs transition-colors',
+        on
+          ? 'border-ink-500 bg-ink-700 text-paper'
+          : dim
+            ? 'border-transparent text-paper-faint hover:border-ink-600 hover:text-paper-dim'
+            : 'border-ink-700 text-paper-dim hover:border-ink-500 hover:text-paper',
       )}
     >
       {children}
@@ -258,7 +177,7 @@ function Row({
   );
 }
 
-function Step({
+function Arrow({
   dir,
   onClick,
   disabled,
@@ -272,29 +191,15 @@ function Step({
       onClick={onClick}
       disabled={disabled}
       aria-label={dir === 'older' ? 'Previous period' : 'Next period'}
+      title={dir === 'older' ? 'Previous period (←)' : 'Next period (→)'}
       className={clsx(
-        'rounded-sm px-1.5 py-1 text-sm transition-colors',
+        'rounded-sm px-2 py-1 text-xl leading-none transition-colors',
         disabled
-          ? 'cursor-default text-ink-600'
+          ? 'cursor-default text-ink-700'
           : 'text-paper-faint hover:bg-ink-800 hover:text-paper',
       )}
     >
       {dir === 'older' ? '‹' : '›'}
     </button>
   );
-}
-
-/**
- * The label on the control. Full enough to stand alone: it is the only thing
- * naming the period once the trail is gone.
- */
-function label(p: PeriodOption): string {
-  if (p.scope === 'all') return 'All time';
-  if (p.scope === 'year') return p.key;
-  if (p.scope === 'month') return p.label;
-  // A half needs its month for context: "1st – 15th" alone says nothing.
-  const [y, m] = p.key.split('-');
-  const month = new Date(`${y}-${m}-01T00:00:00`)
-    .toLocaleDateString('en-US', { month: 'short' });
-  return `${month} ${p.label}`;
 }

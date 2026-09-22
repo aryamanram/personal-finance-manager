@@ -15,7 +15,10 @@
  * directly against real period lists.
  */
 import { describe, it, expect } from 'vitest';
-import { buildPeriods, type PeriodOption, type PeriodScope } from '@/lib/periods';
+import {
+  buildPeriods, stepPeriod, periodTrack,
+  type PeriodOption, type PeriodScope,
+} from '@/lib/periods';
 
 const bounds = { first: '2024-09-16', last: '2026-09-16' };
 const months = [
@@ -25,20 +28,8 @@ const months = [
 const periods = buildPeriods(months, bounds);
 const byKey = (ps: PeriodOption[], k: string) => ps.find((p) => p.key === k)!;
 
-/** Siblings at this zoom, newest first — what ‹ and › walk along. */
-function siblings(ps: PeriodOption[], current: PeriodOption): PeriodOption[] {
-  return ps
-    .filter((o) => o.scope === current.scope
-      && (current.scope === 'year' || o.parent === current.parent))
-    .sort((a, b) => b.from.localeCompare(a.from));
-}
-
 function step(ps: PeriodOption[], key: string, dir: 'older' | 'newer') {
-  const current = byKey(ps, key);
-  const sibs = siblings(ps, current);
-  const at = sibs.findIndex((o) => o.key === key);
-  const next = dir === 'older' ? sibs[at + 1] : sibs[at - 1];
-  return next?.key;
+  return stepPeriod(ps, byKey(ps, key), dir === 'older' ? -1 : 1)?.key;
 }
 
 /** Where the zoom control lands, mirroring PeriodPicker.zoomTo. */
@@ -67,17 +58,42 @@ describe('stepping', () => {
     expect(step(periods, '2026-07', 'newer')).toBe('2026-08');
   });
 
-  it('stops at the edges rather than wrapping or leaving the year', () => {
-    // 2026-07 is the oldest month of 2026 in this ledger. Stepping older must
-    // not silently land in 2025 — the arrow means "the month before this one
-    // that I can see", and the year is the unit on screen.
-    expect(step(periods, '2026-07', 'older')).toBeUndefined();
-    expect(step(periods, '2026-09', 'newer')).toBeUndefined();
+  it('crosses the year boundary rather than stopping', () => {
+    // 2026-07 is the oldest month of 2026 here; the next one back is in 2025.
+    // The arrow means "the month before this one", not "the month before this
+    // one, if it happens to share a parent".
+    expect(step(periods, '2026-07', 'older')).toBe('2025-11');
+    expect(step(periods, '2025-11', 'newer')).toBe('2026-07');
   });
 
-  it('walks halves within their month only', () => {
-    expect(step(periods, '2026-08-H2', 'older')).toBe('2026-08-H1');
-    expect(step(periods, '2026-08-H1', 'older')).toBeUndefined();
+  it('crosses the MONTH boundary at pay-period zoom', () => {
+    // The case that prompted this: in September, at pay-period zoom, two
+    // steps back from the first half must reach the second half of August —
+    // not stick at Sep 1–15 because it is the first child of its month.
+    const first = step(periods, '2026-09-H2', 'older');
+    expect(first).toBe('2026-09-H1');
+    expect(step(periods, first!, 'older')).toBe('2026-08-H2');
+    // ...and forward again, symmetrically.
+    expect(step(periods, '2026-08-H2', 'newer')).toBe('2026-09-H1');
+  });
+
+  it('stops only at the true ends of the ledger', () => {
+    const monthTrack = periodTrack(periods, 'month');
+    const oldest = monthTrack[monthTrack.length - 1]!;
+    const newest = monthTrack[0]!;
+    expect(step(periods, oldest.key, 'older')).toBeUndefined();
+    expect(step(periods, newest.key, 'newer')).toBeUndefined();
+  });
+
+  it('walks every period at a zoom without gaps, in date order', () => {
+    for (const scope of ['year', 'month', 'half'] as const) {
+      const track = periodTrack(periods, scope);
+      for (let i = 0; i < track.length - 1; i++) {
+        // Each step lands on the next one along, and time runs backwards.
+        expect(step(periods, track[i]!.key, 'older')).toBe(track[i + 1]!.key);
+        expect(track[i]!.from > track[i + 1]!.from).toBe(true);
+      }
+    }
   });
 
   it('walks years at the year level', () => {
