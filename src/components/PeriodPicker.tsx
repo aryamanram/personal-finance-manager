@@ -171,9 +171,15 @@ export function PeriodPicker({
               {open === seg.scope && (
                 <div
                   className={clsx(
-                    'absolute top-full z-30 mt-1 max-h-[280px] overflow-y-auto rounded-sm',
+                    'absolute top-full z-30 mt-1 max-h-[280px] w-max overflow-y-auto rounded-sm',
                     'border border-ink-600 bg-ink-800 p-1 shadow-2xl shadow-black/50',
-                    seg.scope === 'month' ? 'grid grid-cols-3 gap-0.5' : 'flex flex-col gap-0.5',
+                    // A 1fr grid track has no content floor, and an absolutely
+                    // positioned box has no width to distribute, so grid-cols-3
+                    // collapsed every month to 12px against 29px of text.
+                    // Fixed columns wide enough for "Sep", laid out by w-max.
+                    seg.scope === 'month'
+                      ? 'grid grid-cols-[repeat(3,3.5rem)] gap-0.5'
+                      : 'flex flex-col gap-0.5',
                     align === 'end' ? 'right-0' : 'left-0',
                   )}
                 >
@@ -183,7 +189,8 @@ export function PeriodPicker({
                       onClick={() => go.current(o.key)}
                       aria-pressed={o.key === current.key}
                       className={clsx(
-                        'figure whitespace-nowrap rounded-sm px-2 py-1 text-left text-xs transition-colors',
+                        'figure whitespace-nowrap rounded-sm px-2 py-1 text-xs transition-colors',
+                        seg.scope === 'month' ? 'text-center' : 'text-left',
                         o.key === current.key
                           ? 'bg-ink-700 text-paper'
                           : 'text-paper-dim hover:bg-ink-700 hover:text-paper',
