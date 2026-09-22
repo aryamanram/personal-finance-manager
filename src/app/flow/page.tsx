@@ -8,7 +8,6 @@ import { buildPeriods } from '@/lib/periods';
 import { resolvePeriod } from '@/lib/resolve-period';
 import { Sankey } from '@/components/Sankey';
 import { FlowDrilldown } from '@/components/FlowDrilldown';
-import { formatMonthLong } from '@/lib/format-date';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,21 +40,11 @@ export default async function FlowPage({
     getCategoryBreakdownRange(period.from, period.to),
   ]);
 
-  const isMonth = /^\d{4}-\d{2}$/.test(period.key);
-  const title =
-    period.key === 'all'
-      ? 'Where it all went'
-      : isMonth
-        ? `Where ${formatMonthLong(period.from).replace(/\s+\d{4}$/, '')} went`
-        : `Where ${period.label} went`;
-
   return (
     <div className="space-y-10">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <div className="eyebrow">Flow</div>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">{title}</h1>
-        </div>
+      {/* The picker carries the heading: the timeframe IS the title. */}
+      <header>
+        <div className="eyebrow mb-1">Flow</div>
         <PeriodPicker options={periods} active={period.key} />
       </header>
 

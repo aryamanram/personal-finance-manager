@@ -17,8 +17,12 @@ export function resolvePeriod(
   // Default to the most recent month that actually had money moving, rather
   // than the current calendar month — which, part-way through, or in a month
   // with no income, has nothing worth charting.
+  // Months only. The list now also holds years and half-months, and a year
+  // key prefix-matches its own months ('2026-09-01'.startsWith('2026')), so
+  // an unfiltered scan would default to the whole year instead of the latest
+  // month with activity.
   const fallback =
-    periods.find((p) => {
+    periods.filter((p) => p.scope === 'month').find((p) => {
       const row = cashflow.find((m) => m.month.startsWith(p.key));
       // Any movement counts. Testing income and discretionary only meant a
       // month of nothing but rent opened an older period instead.
@@ -26,7 +30,7 @@ export function resolvePeriod(
         row.income_cents, row.required_cents,
         row.discretionary_cents, row.invested_cents,
       ].some((cents) => (cents ?? 0) > 0);
-    }) ?? periods[0]!;
+    }) ?? periods.find((p) => p.scope === 'month') ?? periods[0]!;
 
   return periods.find((p) => p.key === requested) ?? fallback;
 }
