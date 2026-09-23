@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { Figure } from './Figure';
 import { RowEditor } from './RowEditor';
@@ -39,6 +39,40 @@ export function TransactionRow({
 }) {
   const [editing, setEditing] = useState<null | 'amount'>(null);
   const [expanded, setExpanded] = useState(false);
+  const editorRef = useRef<HTMLTableRowElement>(null);
+
+  // Opening a row near the bottom of the viewport put the editor below the
+  // fold, so setting a category meant scrolling to find the panel you had
+  // just opened.
+  //
+  // scrollIntoView's block options are not enough here. 'nearest' stops as
+  // soon as the top edge shows, leaving the category button off screen, and
+  // 'end' aligns to the viewport bottom without accounting for the sticky
+  // header above. So compute the target directly: scroll only as far as it
+  // takes to fit the panel, and leave it alone when it already fits.
+  useEffect(() => {
+    if (!expanded) return;
+    const el = editorRef.current;
+    if (!el) return;
+
+    // Measure after paint. On the tick the effect first runs, the editor row
+    // has not been laid out yet, so its height reads as 0 and nothing scrolls.
+    const id = requestAnimationFrame(() => {
+      const r = el.getBoundingClientRect();
+      const HEADER = 64;   // the sticky nav, which overlays the top of the page
+      const MARGIN = 12;
+      const overflowBelow = r.bottom - (window.innerHeight - MARGIN);
+      const overflowAbove = HEADER + MARGIN - r.top;
+
+      // Never scroll so far that the panel's own top slips under the header.
+      const delta = overflowBelow > 0
+        ? Math.min(overflowBelow, r.top - HEADER - MARGIN)
+        : overflowAbove > 0 ? -overflowAbove : 0;
+
+      if (delta !== 0) window.scrollBy({ top: delta, behavior: 'smooth' });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [expanded]);
   const voided = txn.voided_at !== null;
 
   // Renamed: a display override exists, so the bank's string is worth showing.
@@ -209,7 +243,7 @@ export function TransactionRow({
     </tr>
 
     {expanded && (
-      <tr className="rule-b">
+      <tr ref={editorRef} className="rule-b">
         <td colSpan={5} className="p-0">
           <RowEditor
             txn={txn}

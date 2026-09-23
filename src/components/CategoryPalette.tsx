@@ -26,6 +26,10 @@ interface PaletteSection {
   key: string;
   label: string;
   items: Ranked[];
+  /** A group list rather than categories — one step down, not a choice yet. */
+  groups?: { name: string; count: number }[];
+  /** Shown as a back affordance when this section is a drilled-into group. */
+  backTo?: string;
 }
 
 export function CategoryPalette({
@@ -51,6 +55,7 @@ export function CategoryPalette({
   onClose: () => void;
 }) {
   const [query, setQuery] = useState('');
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [cursor, setCursor] = useState(0);
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -126,18 +131,36 @@ export function CategoryPalette({
         });
       }
 
+      // Everything else, BY GROUP. 35 categories in one scroll is a list you
+      // read rather than navigate; eight groups of three to seven is a choice
+      // you make twice. Opening a group shows only its own categories, so the
+      // panel never grows past one screen.
       const rest = categories.filter((c) => take(c));
-      if (rest.length > 0) {
+      if (openGroup) {
+        const inGroup = rest.filter((c) => c.group_name === openGroup);
+        if (inGroup.length > 0) {
+          out.push({
+            key: `group:${openGroup}`,
+            label: openGroup,
+            items: inGroup.map((c) => ({ category: c })),
+            backTo: 'groups',
+          });
+        }
+      } else if (rest.length > 0) {
+        const groups = new Map<string, number>();
+        for (const c of rest) groups.set(c.group_name, (groups.get(c.group_name) ?? 0) + 1);
         out.push({
-          key: 'rest',
+          key: 'groups',
           label: 'Everything else',
-          items: rest.map((c) => ({ category: c, note: c.group_name })),
+          groups: [...groups.entries()].map(([name, n]) => ({ name, count: n })),
+          items: [],
         });
       }
     }
 
     return out;
-  }, [categories, query, usage, suggestedId, unconfirmedId, merchantDefaultId, merchantUses, byId]);
+  }, [categories, query, usage, suggestedId, unconfirmedId, merchantDefaultId,
+      merchantUses, byId, openGroup]);
 
   // One flat list, so ↑/↓ crosses section boundaries.
   const flat = useMemo(() => sections.flatMap((s) => s.items), [sections]);
@@ -156,6 +179,9 @@ export function CategoryPalette({
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Escape') {
       e.preventDefault();
+      // Back out of a group first — closing outright would discard the
+      // navigation rather than the panel.
+      if (openGroup) { setOpenGroup(null); setCursor(0); return; }
       onClose();
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -182,6 +208,9 @@ export function CategoryPalette({
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
+          // A search spans every group: filtering inside one would hide the
+          // match you were typing toward.
+          setOpenGroup(null);
           setCursor(0);
         }}
         placeholder="Type to filter…"
@@ -192,7 +221,31 @@ export function CategoryPalette({
       <ul ref={listRef} className="max-h-[280px] overflow-y-auto">
         {sections.map((section) => (
           <li key={section.key}>
-            <div className="eyebrow bg-ink-850 px-3 py-1.5">{section.label}</div>
+            {section.backTo ? (
+              <button
+                onClick={() => { setOpenGroup(null); setCursor(0); }}
+                className="eyebrow flex w-full items-center gap-1.5 bg-ink-850 px-3 py-1.5 text-left transition-colors hover:text-paper-dim"
+              >
+                <span aria-hidden>‹</span> {section.label}
+              </button>
+            ) : (
+              <div className="eyebrow bg-ink-850 px-3 py-1.5">{section.label}</div>
+            )}
+
+            {/* Group rows: one step down rather than a choice. */}
+            {section.groups?.map((g) => (
+              <button
+                key={g.name}
+                onClick={() => { setOpenGroup(g.name); setCursor(0); }}
+                className="flex w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left text-sm text-paper-dim transition-colors hover:bg-ink-700 hover:text-paper"
+              >
+                <span className="truncate">{g.name}</span>
+                <span className="shrink-0 text-xs text-paper-faint">
+                  {g.count} <span aria-hidden>›</span>
+                </span>
+              </button>
+            ))}
+
             <ul>
               {section.items.map(({ category, note }) => {
                 index += 1;
