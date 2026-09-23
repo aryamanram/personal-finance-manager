@@ -72,8 +72,30 @@ const RULES: RuleSpec[] = [
     category: 'Cash Withdrawn' },
 
   // --- Discretionary -------------------------------------------------------
-  { name: 'Subscriptions', priority: 60,
-    regex: 'NETFLIX|SPOTIFY|YouTubePremi', category: 'Subscriptions' },
+  // SUBCATEGORIES: a subcategory is an ordinary category with a parent, so a
+  // rule targets it by name exactly like any other. Prefer the specific one —
+  // totals roll up to the parent automatically (v_transactions.rollup_*), so
+  // naming 'Streaming & Video' still counts toward Subscriptions, while
+  // naming 'Subscriptions' throws away detail you cannot recover later.
+  //
+  // Order matters: first match wins, so put the specific patterns above the
+  // catch-all. A bare 'Subscriptions' rule at the same priority would swallow
+  // everything below it.
+  { name: 'Streaming', priority: 60,
+    regex: 'NETFLIX|HULU|DISNEYPLUS|YouTubePremi|HELP\\.MAX\\.COM',
+    category: 'Streaming & Video' },
+  { name: 'Music', priority: 60, regex: 'SPOTIFY|APPLE MUSIC|TIDAL',
+    category: 'Music & Audio' },
+  { name: 'AI tools', priority: 60, regex: 'OPENAI|ANTHROPIC|CURSOR|CODEIUM',
+    category: 'AI Tools' },
+  { name: 'Hosting', priority: 60, regex: 'HOSTINGER|NAMECHEAP|CLOUDFLARE|DIGITALOCEAN',
+    category: 'Hosting & Domains' },
+  { name: 'Creator support', priority: 60, regex: 'PATREON|KO-FI|SUBSTACK',
+    category: 'Creator Support' },
+  // The catch-all, LAST: anything recurring that no rule above claimed. It
+  // lands on the parent and shows up in the register as needing a human.
+  { name: 'Subscriptions (other)', priority: 69,
+    regex: 'SUBSCRIPTION|RECURRING', category: 'Subscriptions' },
   { name: 'Restaurants', priority: 70, regex: 'TST\\*|SQ \\*|DOORDASH', category: 'Restaurants' },
 ];
 
