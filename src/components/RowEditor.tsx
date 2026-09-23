@@ -126,13 +126,16 @@ export function RowEditor({
             placeholder={txn.raw_description}
             className="mt-2 w-full rounded-sm border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-paper outline-none transition-colors focus:border-ink-500"
           />
-          <p className="mt-2 text-xs leading-relaxed text-paper-faint">
-            The bank said{' '}
-            <span className="figure text-paper-dim">{txn.raw_description}</span>.
-            {renamed
-              ? ' That original is never overwritten — it is what reconciliation reads.'
-              : ' Renaming keeps it underneath, so reconciliation still matches.'}
-          </p>
+          {/* Only once the name differs from the bank's. Before that the
+              input already shows the raw description, so repeating it below
+              was the same string twice — and the sentence explaining that I2
+              keeps the original said the same thing under every row forever.
+              "Restore the bank's name" carries that affordance instead. */}
+          {renamed && (
+            <p className="mt-2 text-xs text-paper-faint">
+              <span className="figure">{txn.raw_description}</span>
+            </p>
+          )}
         </div>
 
         <div>
@@ -199,11 +202,16 @@ export function RowEditor({
                 </span>
               </label>
             )}
-            <p className="mt-2 text-xs leading-relaxed text-paper-faint">
-              {setDefault || applySiblings
-                ? 'Applied when you pick a category above. Rows you already decided by hand are never touched.'
-                : 'Tick either, then pick a category above.'}
-            </p>
+            {/* Only once something is ticked, and only the half that is not
+                already obvious from the checkbox: that picking the category
+                is what applies this, and that I4 protects your own decisions.
+                The unticked version was an instruction to read every time. */}
+            {(setDefault || applySiblings) && (
+              <p className="mt-2 text-xs leading-relaxed text-paper-faint">
+                Applied when you pick a category above. Rows you decided by
+                hand are never touched.
+              </p>
+            )}
           </div>
         )}
 
