@@ -394,16 +394,121 @@ export async function getLastSync() {
  * Reads raw amount_cents deliberately — reconciliation is one of the two places
  * allowed to (I3).
  */
+/**
+ * Accounts whose ledger sum does not match the balance the bank reports.
+ *
+ * Reconciled against BOTH bases, and only reported when neither matches.
+ * Institutions disagree about whether a reported balance includes pending
+ * authorisations: this ledger's checking balance does, and its cards' do not.
+ * Testing one basis therefore invents drift on every account that uses the
+ * other — a card with a large pending payment looked thousands of dollars out
+ * when it was reconciling exactly.
+ *
+ * Real drift means a transaction the ledger has not seen, which is what this
+ * banner is for. A timing difference in pending rows is not that.
+ */
 export async function getReconciliation() {
   return sql<{ name: string; ledger_cents: number; reported_cents: number; drift_cents: number }[]>`
-    SELECT a.name,
-           COALESCE(SUM(t.amount_cents), 0)::bigint        AS ledger_cents,
-           a.balance_cents                                 AS reported_cents,
-           (a.balance_cents - COALESCE(SUM(t.amount_cents), 0))::bigint AS drift_cents
-    FROM accounts a
-    LEFT JOIN transactions t
-      ON t.account_id = a.id AND t.voided_at IS NULL AND t.superseded_by_id IS NULL
-    WHERE a.is_active AND a.balance_cents IS NOT NULL AND a.type <> 'investment'
-    GROUP BY a.id, a.name, a.balance_cents
-    HAVING a.balance_cents <> COALESCE(SUM(t.amount_cents), 0)`;
+    WITH sums AS (
+      SELECT a.id, a.name, a.balance_cents,
+             COALESCE(SUM(t.amount_cents), 0)::bigint AS all_rows,
+             COALESCE(SUM(t.amount_cents) FILTER (WHERE t.status = 'posted'), 0)::bigint
+               AS posted_only
+      FROM accounts a
+      LEFT JOIN transactions t
+        ON t.account_id = a.id AND t.voided_at IS NULL AND t.superseded_by_id IS NULL
+      WHERE a.is_active AND a.balance_cents IS NOT NULL AND a.type <> 'investment'
+      GROUP BY a.id, a.name, a.balance_cents
+    )
+    SELECT name,
+           all_rows                          AS ledger_cents,
+           balance_cents                     AS reported_cents,
+           -- Report the smaller discrepancy: it names how far off the ledger
+           -- is under the basis that fits this account best.
+           CASE WHEN abs(balance_cents - all_rows) <= abs(balance_cents - posted_only)
+                THEN balance_cents - all_rows
+                ELSE balance_cents - posted_only END AS drift_cents
+    FROM sums
+    WHERE balance_cents <> all_rows AND balance_cents <> posted_only`;
 }
+
+export interface CardSettlement {
+  name: string;
+  /** Everything bought on the card, as positive cents. */
+  purchases_cents: number;
+  /** Payments the issuer has applied, as positive cents. */
+  paid_cents: number;
+  /** Payments sent but not yet applied — in flight, not missing. */
+  clearing_cents: number;
+  /** purchases − paid: what the ledger says is still on the card. */
+  owed_cents: number;
+  /** What the issuer says is still on the card. */
+  bank_owed_cents: number;
+  /** bank − ledger, after pending payments are set aside. Zero means it holds. */
+  gap_cents: number;
+}
+
+/**
+ * Proof that a credit card's purchases are a complete, non-duplicated record
+ * of spending.
+ *
+ * A card is a pass-through: money is spent at a merchant, and later the same
+ * money leaves checking to settle the balance. Only one of those two is
+ * spending. This ledger counts the purchase (that is where the money actually
+ * went) and marks the payment `transfer`, so `counts_as_spending` is false on
+ * it and nothing is double-counted.
+ *
+ * That choice is only safe while the card is actually being paid off. If a
+ * balance were being carried, purchases would overstate what left the bank.
+ * The identity that rules this out is:
+ *
+ *     purchases − paid_off = still_owed = what the issuer reports
+ *
+ * When it holds, every dollar charged is accounted for as either settled or
+ * currently outstanding — no unrecorded interest, no missing payment, no
+ * purchase the feed never delivered. The payments need no category; they exist
+ * as evidence of exactly this, and the purchases carry the detail.
+ *
+ * Only POSTED payments count toward `paid`. A payment the issuer has received
+ * but not yet applied is still in the ledger and still reduces what will be
+ * owed, but the reported balance does not know about it yet — counting it
+ * would make a card look overpaid by the amount currently in flight, which is
+ * exactly how a card here read before the split: purchases and payments were
+ * equal, so the ledger claimed a zero balance while the issuer still wanted
+ * the whole outstanding amount. Pending payments are reported separately as `clearing_cents`.
+ *
+ * Balances are stored negative on a credit account (money owed), so they are
+ * negated here to read as a positive amount outstanding.
+ */
+export async function getCardSettlement(): Promise<CardSettlement[]> {
+  return sql<CardSettlement[]>`
+    WITH per_card AS (
+      SELECT
+        a.name,
+        a.balance_cents,
+        COALESCE(-SUM(v.eff_amount_cents) FILTER (
+          WHERE v.counts_as_spending), 0)::bigint            AS purchases,
+        COALESCE(SUM(v.eff_amount_cents) FILTER (
+          WHERE v.eff_necessity = 'transfer' AND v.eff_amount_cents > 0
+            AND v.status = 'posted'), 0)::bigint             AS paid,
+        COALESCE(SUM(v.eff_amount_cents) FILTER (
+          WHERE v.eff_necessity = 'transfer' AND v.eff_amount_cents > 0
+            AND v.status <> 'posted'), 0)::bigint            AS clearing
+      FROM accounts a
+      LEFT JOIN v_transactions v
+        ON v.account_id = a.id AND v.voided_at IS NULL AND v.superseded_by_id IS NULL
+      WHERE a.is_active AND a.type = 'credit' AND a.balance_cents IS NOT NULL
+      GROUP BY a.id, a.name, a.balance_cents
+    )
+    SELECT
+      name,
+      purchases                        AS purchases_cents,
+      paid                             AS paid_cents,
+      clearing                         AS clearing_cents,
+      (purchases - paid)               AS owed_cents,
+      (-balance_cents)                 AS bank_owed_cents,
+      (-balance_cents - (purchases - paid)) AS gap_cents
+    FROM per_card
+    ORDER BY name`;
+}
+

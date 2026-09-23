@@ -1,6 +1,6 @@
 # Schema companion notes
 
-Two algorithms the schema assumes but can't enforce on its own.
+The algorithms the schema assumes but can't enforce on its own.
 
 ## 1. Re-import-safe dedup
 
@@ -115,3 +115,42 @@ Your investable number comes off the necessity axis (`income − required`).
 Your forecasting confidence comes off the cost axis (fixed costs are the part
 of next month you already know). Collapsing them into one toggle loses one of
 those questions, which is why the schema carries both.
+
+## 6. Credit cards: why purchases are the spending record
+
+A card is a pass-through. Money is spent at a merchant, and later the same
+money leaves checking to settle the balance. Only one of those is spending.
+
+This ledger counts the **purchase** — that is where the money actually went,
+and it carries the merchant, the date and the detail that categorisation needs.
+The settling payment is matched as a transfer (§3), so `counts_as_spending` is
+false on both legs and a $60 dinner is not also $60 of "Credit Card Payment".
+The payments need no category; they exist as evidence, not as spending.
+
+That choice is only sound while the cards are actually being paid off. A
+carried balance would mean purchases claim money that never left the bank. The
+identity that rules it out, per card:
+
+    purchases − payments_applied = still_owed = what the issuer reports
+
+`getCardSettlement()` computes it and the dashboard states it outright, because
+"no warning" and "not checked" look identical.
+
+**Only posted payments count as applied.** A payment the issuer has received
+but not yet applied still sits in the ledger, but the reported balance does not
+know about it — counting it makes a card look overpaid by the amount in flight.
+This is not hypothetical: a card paid off in full and still pending two days
+later made the ledger claim a zero balance while the issuer still wanted the
+full amount, which surfaced as a phantom reconciliation gap of exactly the
+payment's size on a card that was reconciling to the cent. Pending payments
+are reported separately as `clearing_cents`.
+
+The same timing problem breaks naive reconciliation, and differently per
+institution: **this ledger's checking balance includes its pending rows and its
+cards' balances do not.** `getReconciliation()` therefore tests both bases and
+reports an account only when neither matches. Picking one invents drift on
+every account that uses the other.
+
+`tests/card-settlement.test.ts` asserts the arithmetic, in both directions: a
+settled card, a card paid down in steps, a payment still clearing, a card
+carrying more than the ledger explains, and a payment the issuer never saw.
