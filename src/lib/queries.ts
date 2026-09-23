@@ -226,10 +226,16 @@ export async function getLedgerBounds(): Promise<{ first: string; last: string }
 
 export async function getCategories(): Promise<CategoryWithGroup[]> {
   return sql<CategoryWithGroup[]>`
-    SELECT c.*, g.name AS group_name, g.sort_order AS group_sort_order
-    FROM categories c JOIN category_groups g ON g.id = c.group_id
+    SELECT c.*, g.name AS group_name, g.sort_order AS group_sort_order,
+           p.name AS parent_name
+    FROM categories c
+    JOIN category_groups g ON g.id = c.group_id
+    LEFT JOIN categories p ON p.id = c.parent_id
     WHERE NOT c.is_archived
-    ORDER BY g.sort_order, c.sort_order, c.name`;
+    -- Parents before their own children, so a consumer that walks this list
+    -- in order meets a parent before anything that rolls up into it.
+    ORDER BY g.sort_order, COALESCE(p.sort_order, c.sort_order), c.parent_id NULLS FIRST,
+             c.sort_order, c.name`;
 }
 
 export async function getAccounts(): Promise<Account[]> {

@@ -7,9 +7,15 @@ import type { CategoryWithGroup } from '@/lib/types';
 /**
  * Picking a category.
  *
- * The taxonomy is 35 categories across 8 groups. Presented flat it is a list
- * you read; presented as groups it is a choice you make twice, and the panel
- * never grows past one screen.
+ * The taxonomy is three levels: group > category > subcategory. The palette
+ * walks them one at a time, so each screen is a short list rather than
+ * something to scroll, and the panel never grows past one screen.
+ *
+ *   All categories  ->  Lifestyle  ->  Subscriptions  ->  Streaming & Video
+ *
+ * A category only drills if it HAS children; otherwise it is a pick. And a
+ * parent stays pickable from inside its own screen ("general"), because
+ * drilling in must never remove the option you started from.
  *
  * Structure first, and the SAME structure every time. Two shortcuts sit above
  * it — what this merchant was last filed as, and the machine's standing guess
@@ -23,20 +29,20 @@ import type { CategoryWithGroup } from '@/lib/types';
  * database.
  */
 
-interface Ranked {
+export interface Ranked {
   category: CategoryWithGroup;
   /** The right-hand annotation: why this row is where it is. */
   note?: string;
 }
 
-interface PaletteSection {
+export interface PaletteSection {
   key: string;
   label: string;
   items: Ranked[];
-  /** A group list rather than categories — one step down, not a choice yet. */
-  groups?: { name: string; count: number }[];
-  /** Shown as a back affordance when this section is a drilled-into group. */
-  backTo?: string;
+  /** Rows that go one level DOWN rather than picking anything. */
+  drill?: { name: string; count: number }[];
+  /** Renders the header as a back affordance, returning one level up. */
+  back?: () => void;
 }
 
 export function CategoryPalette({
@@ -63,6 +69,8 @@ export function CategoryPalette({
 }) {
   const [query, setQuery] = useState('');
   const [openGroup, setOpenGroup] = useState<string | null>(null);
+  /** The parent category being drilled into, inside openGroup. */
+  const [openParent, setOpenParent] = useState<string | null>(null);
   const [cursor, setCursor] = useState(0);
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -136,33 +144,15 @@ export function CategoryPalette({
       // structure you navigate changed under you as you worked. This is an
       // organisation tool: one category, one place, always the same place.
       const rest = categories.filter((c) => take(c));
-      if (openGroup) {
-        const inGroup = rest.filter((c) => c.group_name === openGroup);
-        if (inGroup.length > 0) {
-          out.push({
-            key: `group:${openGroup}`,
-            label: openGroup,
-            items: inGroup.map((c) => ({ category: c })),
-            backTo: 'groups',
-          });
-        }
-      } else if (rest.length > 0) {
-        const groups = new Map<string, number>();
-        // Insertion order = the order getCategories() returns, which is the
-        // taxonomy's own sort_order. Stable, and the same on every row.
-        for (const c of rest) groups.set(c.group_name, (groups.get(c.group_name) ?? 0) + 1);
-        out.push({
-          key: 'groups',
-          label: 'All categories',
-          groups: [...groups.entries()].map(([name, n]) => ({ name, count: n })),
-          items: [],
-        });
-      }
+      out.push(...browseSections(rest, openGroup, openParent, {
+        onGroup: () => { setOpenGroup(null); setCursor(0); },
+        onParent: () => { setOpenParent(null); setCursor(0); },
+      }));
     }
 
     return out;
   }, [categories, query, usage, suggestedId, unconfirmedId, merchantDefaultId,
-      merchantUses, byId, openGroup]);
+      merchantUses, byId, openGroup, openParent]);
 
   // One flat list, so ↑/↓ crosses section boundaries.
   const flat = useMemo(() => sections.flatMap((s) => s.items), [sections]);
@@ -181,8 +171,9 @@ export function CategoryPalette({
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Escape') {
       e.preventDefault();
-      // Back out of a group first — closing outright would discard the
+      // Unwind ONE level at a time — closing outright would discard the
       // navigation rather than the panel.
+      if (openParent) { setOpenParent(null); setCursor(0); return; }
       if (openGroup) { setOpenGroup(null); setCursor(0); return; }
       onClose();
     } else if (e.key === 'ArrowDown') {
@@ -210,9 +201,10 @@ export function CategoryPalette({
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
-          // A search spans every group: filtering inside one would hide the
-          // match you were typing toward.
+          // A search spans every group and every depth: filtering inside one
+          // would hide the match you were typing toward.
           setOpenGroup(null);
+          setOpenParent(null);
           setCursor(0);
         }}
         placeholder="Type to filter…"
@@ -223,9 +215,9 @@ export function CategoryPalette({
       <ul ref={listRef} className="max-h-[280px] overflow-y-auto">
         {sections.map((section) => (
           <li key={section.key}>
-            {section.backTo ? (
+            {section.back ? (
               <button
-                onClick={() => { setOpenGroup(null); setCursor(0); }}
+                onClick={section.back}
                 className="eyebrow flex w-full items-center gap-1.5 bg-ink-850 px-3 py-1.5 text-left transition-colors hover:text-paper-dim"
               >
                 <span aria-hidden>‹</span> {section.label}
@@ -234,11 +226,16 @@ export function CategoryPalette({
               <div className="eyebrow bg-ink-850 px-3 py-1.5">{section.label}</div>
             )}
 
-            {/* Group rows: one step down rather than a choice. */}
-            {section.groups?.map((g) => (
+            {/* Drill rows: one step down rather than a choice. Which level
+                they descend to depends on where we already are. */}
+            {section.drill?.map((g) => (
               <button
                 key={g.name}
-                onClick={() => { setOpenGroup(g.name); setCursor(0); }}
+                onClick={() => {
+                  if (openGroup) setOpenParent(g.name);
+                  else setOpenGroup(g.name);
+                  setCursor(0);
+                }}
                 className="flex w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left text-sm text-paper-dim transition-colors hover:bg-ink-700 hover:text-paper"
               >
                 <span className="truncate">{g.name}</span>
@@ -308,6 +305,77 @@ export function CategoryPalette({
       </div>
     </div>
   );
+}
+
+
+/**
+ * The browse levels: groups, then one group's categories, then one category's
+ * subcategories.
+ *
+ * Exported and called by the component rather than mirrored in a test — a test
+ * that rebuilt these rules would pass with the real ones inverted (CLAUDE.md).
+ *
+ * `rest` is already filtered to what the query allows, so this only decides
+ * SHAPE: what drills, what is pickable, and what each screen is called.
+ */
+export function browseSections(
+  rest: CategoryWithGroup[],
+  openGroup: string | null,
+  openParent: string | null,
+  back: { onGroup: () => void; onParent: () => void },
+): PaletteSection[] {
+  const childrenOf = (name: string) => rest.filter((c) => c.parent_name === name);
+
+  if (openParent) {
+    // Level 3: one parent's subcategories. The parent itself leads the list,
+    // because it is still a legitimate answer when none of its children fit —
+    // without it, drilling in would REMOVE the option you started from.
+    const parent = rest.find((c) => c.name === openParent && !c.parent_id);
+    const kids = childrenOf(openParent);
+    return [{
+      key: `parent:${openParent}`,
+      label: openParent,
+      back: back.onParent,
+      items: [
+        ...(parent ? [{ category: parent, note: 'general' }] : []),
+        ...kids.map((c) => ({ category: c })),
+      ],
+    }];
+  }
+
+  if (openGroup) {
+    // Level 2: the group's own TOP-LEVEL categories. Subcategories are
+    // deliberately not flattened in here — listing Lifestyle's categories
+    // alongside Subscriptions' ten children put parents and their own children
+    // side by side as if they were peers.
+    const tops = rest.filter((c) => c.group_name === openGroup && !c.parent_id);
+    const withKids = tops.filter((c) => childrenOf(c.name).length > 0);
+    const leaves = tops.filter((c) => childrenOf(c.name).length === 0);
+    if (tops.length === 0) return [];
+    return [{
+      key: `group:${openGroup}`,
+      label: openGroup,
+      back: back.onGroup,
+      // A category that HAS children drills; one that doesn't is a pick.
+      drill: withKids.map((c) => ({ name: c.name, count: childrenOf(c.name).length })),
+      items: leaves.map((c) => ({ category: c })),
+    }];
+  }
+
+  // Level 1: the groups. Counted by top-level categories only, so the number
+  // matches what the next screen actually shows.
+  if (rest.length === 0) return [];
+  const groups = new Map<string, number>();
+  for (const c of rest) {
+    if (c.parent_id) continue;
+    groups.set(c.group_name, (groups.get(c.group_name) ?? 0) + 1);
+  }
+  return [{
+    key: 'groups',
+    label: 'All categories',
+    drill: [...groups.entries()].map(([name, n]) => ({ name, count: n })),
+    items: [],
+  }];
 }
 
 /** Substring match on the category or its group, so "food" finds Groceries. */

@@ -26,6 +26,8 @@ export interface Category {
   id: string;
   group_id: string;
   name: string;
+  /** NULL for a top-level category; its parent for a subcategory. */
+  parent_id: string | null;
   icon: string | null;
   color: string | null;
   default_cost_type: CostType;
@@ -37,6 +39,8 @@ export interface Category {
 export interface CategoryWithGroup extends Category {
   group_name: string;
   group_sort_order: number;
+  /** The parent's name, for a subcategory. NULL at the top level. */
+  parent_name: string | null;
 }
 
 /** A row of v_transactions. Read eff_* for anything user-facing (I3). */
