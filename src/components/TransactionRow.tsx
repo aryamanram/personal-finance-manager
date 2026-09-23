@@ -33,7 +33,8 @@ export function TransactionRow({
   repeatsDate?: boolean;
   /** Dates in this year print without one; others carry a short year. */
   viewYear: number;
-  onSelect: (id: string, on: boolean) => void;
+  /** `extend` is shift-click: take every row between the last one and this. */
+  onSelect: (id: string, on: boolean, extend?: boolean) => void;
   onPatch: (id: string, patch: Record<string, unknown>) => void;
   pending?: boolean;
 }) {
@@ -104,6 +105,14 @@ export function TransactionRow({
         <input
           type="checkbox"
           checked={selected}
+          // shiftKey is readable on click but not on change, so the range
+          // gesture has to be captured here and the change left to fire.
+          onClick={(e) => {
+            if (e.shiftKey) {
+              onSelect(txn.id, !selected, true);
+              e.preventDefault();
+            }
+          }}
           onChange={(e) => onSelect(txn.id, e.target.checked)}
           aria-label={`Select ${txn.eff_description}`}
           className="accent-edited"

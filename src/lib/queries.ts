@@ -262,7 +262,17 @@ export interface ReviewCounts {
   uncategorized: number;
 }
 
-export async function getReviewCounts(): Promise<ReviewCounts> {
+/**
+ * The two review backlogs, optionally within a date range.
+ *
+ * The register scopes these to the period it is showing. A chip reading
+ * "Needs review · 338" above a filtered table promises 338 rows and then
+ * delivers whatever falls inside the period — so the count has to answer the
+ * same question the table does, or clicking it looks broken.
+ */
+export async function getReviewCounts(
+  range?: { from?: string; to?: string },
+): Promise<ReviewCounts> {
   const [row] = await sql<ReviewCounts[]>`
     SELECT
       count(*) FILTER (
@@ -274,7 +284,9 @@ export async function getReviewCounts(): Promise<ReviewCounts> {
         WHERE category_id IS NULL OR category_source IN ('unset','default')
       )::int AS uncategorized
     FROM v_transactions
-    WHERE superseded_by_id IS NULL AND voided_at IS NULL`;
+    WHERE superseded_by_id IS NULL AND voided_at IS NULL
+      ${range?.from ? sql`AND eff_posted_date >= ${range.from}::date` : sql``}
+      ${range?.to ? sql`AND eff_posted_date <= ${range.to}::date` : sql``}`;
   return row;
 }
 

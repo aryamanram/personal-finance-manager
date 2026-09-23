@@ -5,15 +5,22 @@ import clsx from 'clsx';
 import type { CategoryWithGroup } from '@/lib/types';
 
 /**
- * Picking a category, ranked rather than reorganised (wireframe 34:2).
+ * Picking a category.
  *
- * The taxonomy is 35 categories across 8 groups, but any given month is spent
- * in about four of them. An alphabetical select makes every pick a scan of the
- * whole list; this surfaces the merchant's memory, then the machine's guess,
- * then what you reach for most, and filters as you type.
+ * The taxonomy is 35 categories across 8 groups. Presented flat it is a list
+ * you read; presented as groups it is a choice you make twice, and the panel
+ * never grows past one screen.
  *
- * Ranking only — no category is hidden and nothing is reordered in the
- * database. The sections are presentation.
+ * Structure first, and the SAME structure every time. Two shortcuts sit above
+ * it — what this merchant was last filed as, and the machine's standing guess
+ * — because both answer "this exact row" rather than reorganising the
+ * taxonomy. What was dropped is a frequency section: ranking by history lifted
+ * categories out of their groups, so a category's location depended on what
+ * you had done lately and moved as you worked. Typing still searches
+ * everything, which is the fast path when you already know the name.
+ *
+ * Presentation only — no category is hidden and nothing is reordered in the
+ * database.
  */
 
 interface Ranked {
@@ -118,23 +125,16 @@ export function CategoryPalette({
         });
       }
     } else {
-      const used = categories
-        .filter((c) => take(c) && (usage[c.id] ?? 0) > 0)
-        .sort((a, b) => (usage[b.id] ?? 0) - (usage[a.id] ?? 0))
-        .slice(0, 6);
-      for (const c of used) claimed.add(c.id);
-      if (used.length > 0) {
-        out.push({
-          key: 'used',
-          label: 'You use most',
-          items: used.map((c) => ({ category: c, note: String(usage[c.id] ?? 0) })),
-        });
-      }
-
-      // Everything else, BY GROUP. 35 categories in one scroll is a list you
-      // read rather than navigate; eight groups of three to seven is a choice
-      // you make twice. Opening a group shows only its own categories, so the
-      // panel never grows past one screen.
+      // Every remaining category, BY GROUP. 35 categories in one scroll is a
+      // list you read rather than navigate; eight groups of three to seven is
+      // a choice you make twice. Opening a group shows only its own
+      // categories, so the panel never grows past one screen.
+      //
+      // Frequency deliberately does NOT get its own section here. A
+      // "you use most" shortcut lifted six categories out of their groups, so
+      // the same category sat in two places depending on history and the
+      // structure you navigate changed under you as you worked. This is an
+      // organisation tool: one category, one place, always the same place.
       const rest = categories.filter((c) => take(c));
       if (openGroup) {
         const inGroup = rest.filter((c) => c.group_name === openGroup);
@@ -148,10 +148,12 @@ export function CategoryPalette({
         }
       } else if (rest.length > 0) {
         const groups = new Map<string, number>();
+        // Insertion order = the order getCategories() returns, which is the
+        // taxonomy's own sort_order. Stable, and the same on every row.
         for (const c of rest) groups.set(c.group_name, (groups.get(c.group_name) ?? 0) + 1);
         out.push({
           key: 'groups',
-          label: 'Everything else',
+          label: 'All categories',
           groups: [...groups.entries()].map(([name, n]) => ({ name, count: n })),
           items: [],
         });

@@ -1,9 +1,11 @@
 import {
   getTransactions, countTransactions, getCategories, getAccounts,
-  getReviewCounts, getCategoryUsage,
+  getReviewCounts, getCategoryUsage, getActiveMonths, getLedgerBounds,
 } from '@/lib/queries';
 import { TransactionTable } from '@/components/TransactionTable';
 import { FilterChips } from '@/components/FilterChips';
+import { PeriodPicker } from '@/components/PeriodPicker';
+import { buildPeriods } from '@/lib/periods';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,9 +20,21 @@ export default async function TransactionsPage({
     return Array.isArray(v) ? v[0] : v;
   };
 
+  // The same ?period= the dashboard and Flow use, so moving between pages
+  // keeps the timeframe. The register defaults to ALL TIME rather than the
+  // latest month: this page is where you go to find a transaction, and a
+  // default that hides most of the ledger makes a search look like a miss.
+  const [activeMonths, bounds] = await Promise.all([getActiveMonths(), getLedgerBounds()]);
+  const periods = bounds && activeMonths.length > 0
+    ? buildPeriods(activeMonths, bounds)
+    : [];
+  const requested = one('period');
+  const period = periods.find((p) => p.key === requested) ?? periods[0];
+
   const filters = {
-    from: one('from'),
-    to: one('to'),
+    // An explicit from/to still wins, so a link with a hand-built range works.
+    from: one('from') ?? period?.from,
+    to: one('to') ?? period?.to,
     accountIds: one('account') ? [one('account')!] : undefined,
     categoryIds: one('category') ? [one('category')!] : undefined,
     search: one('q'),
@@ -35,7 +49,8 @@ export default async function TransactionsPage({
     countTransactions(filters),
     getCategories(),
     getAccounts(),
-    getReviewCounts(),
+    // Scoped to the period, so the chip counts what the table would show.
+    getReviewCounts({ from: filters.from, to: filters.to }),
     getCategoryUsage(),
   ]);
 
@@ -60,7 +75,9 @@ export default async function TransactionsPage({
           <form className="flex flex-wrap items-center gap-2 text-xs">
             {/* Preserve the chip filters while searching — dropping them made
                 the search box silently widen the result set. */}
-            {passthrough(params, ['uncategorized', 'review', 'voided', 'from', 'to', 'category'])}
+            {passthrough(params, [
+              'uncategorized', 'review', 'voided', 'from', 'to', 'category', 'period',
+            ])}
             <input
               name="q"
               defaultValue={one('q') ?? ''}
@@ -85,6 +102,10 @@ export default async function TransactionsPage({
             </button>
           </form>
         </div>
+
+        {period && (
+          <PeriodPicker options={periods} active={period.key} />
+        )}
 
         <FilterChips
           needsReview={review.needs_review}
