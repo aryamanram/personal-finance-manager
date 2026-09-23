@@ -265,6 +265,58 @@ describe('bulk edits are manual edits', () => {
       SELECT count(*)::int AS c FROM transaction_edits WHERE transaction_id = ANY(${ids}::uuid[])`;
     expect(c).toBe(2);
   });
+
+  /**
+   * Confirming a guess is the commonest bulk action: a screen of machine
+   * categorisations that are already right, selected and confirmed in one go.
+   * The category does not change — the LOCK does, which is what protects the
+   * rows from the next machine pass (I4) and what clears the GUESS badge.
+   *
+   * This shipped broken because the only bulk test changed the category.
+   */
+  it('confirms rows that are ALREADY in the picked category', async () => {
+    const { upsertTransactions } = await import('@/ingest/upsert');
+    await upsertTransactions(sql, [
+      { accountId: acct.appleId, amountCents: -1400, postedDate: '2026-08-03', status: 'posted', rawDescription: 'GUESSED A', source: 'csv', externalId: null },
+      { accountId: acct.appleId, amountCents: -1500, postedDate: '2026-08-04', status: 'posted', rawDescription: 'GUESSED B', source: 'csv', externalId: null },
+    ]);
+    const ids = (await sql<{ id: string }[]>`
+      SELECT id FROM transactions WHERE raw_description LIKE 'GUESSED%'`).map((r) => r.id);
+
+    // The state the LLM leaves behind: right category, unconfirmed, unlocked.
+    const travel = await categoryByName(sql, 'Travel');
+    await sql`
+      UPDATE transactions SET category_id = ${travel}, category_source = 'llm'
+      WHERE id = ANY(${ids}::uuid[])`;
+    const before = await sql<{ category_locked: boolean }[]>`
+      SELECT category_locked FROM transactions WHERE id = ANY(${ids}::uuid[])`;
+    expect(before.every((r) => !r.category_locked)).toBe(true);
+
+    // Pick the category they already have.
+    const n = await edit.bulkSetCategory(ids, travel);
+    expect(n).toBe(2);   // was 0: the rows were skipped as "unchanged"
+
+    const rows = await sql<{ category_locked: boolean; category_source: string }[]>`
+      SELECT category_locked, category_source FROM transactions WHERE id = ANY(${ids}::uuid[])`;
+    expect(rows.every((r) => r.category_locked && r.category_source === 'manual')).toBe(true);
+
+    // Logged as what it was — a source change, not a category change to the
+    // value the row already held.
+    const edits = await sql<{ field: string; old_value: string; new_value: string }[]>`
+      SELECT field, old_value, new_value FROM transaction_edits
+      WHERE transaction_id = ANY(${ids}::uuid[])`;
+    expect(edits).toHaveLength(2);
+    expect(edits.every((e) => e.field === 'category_source')).toBe(true);
+    expect(edits.every((e) => e.old_value === 'llm' && e.new_value === 'manual')).toBe(true);
+  });
+
+  it('is a no-op once the rows are manually set to that category', async () => {
+    // Nothing left to decide, so no row and no edit-log noise.
+    const ids = (await sql<{ id: string }[]>`
+      SELECT id FROM transactions WHERE raw_description LIKE 'GUESSED%'`).map((r) => r.id);
+    const travel = await categoryByName(sql, 'Travel');
+    expect(await edit.bulkSetCategory(ids, travel)).toBe(0);
+  });
 });
 
 async function monthTotal(): Promise<number> {
