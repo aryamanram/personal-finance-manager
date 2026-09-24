@@ -96,7 +96,21 @@ const RULES: RuleSpec[] = [
   // lands on the parent and shows up in the register as needing a human.
   { name: 'Subscriptions (other)', priority: 69,
     regex: 'SUBSCRIPTION|RECURRING', category: 'Subscriptions' },
-  { name: 'Restaurants', priority: 70, regex: 'TST\\*|SQ \\*|DOORDASH', category: 'Restaurants' },
+  // Entertainment splits by WHAT it is, not by whether it repeats: a monthly
+  // game subscription is a Subscriptions row, a one-off game purchase is here.
+  { name: 'Games & hobbies', priority: 65,
+    regex: 'GAME STORE|HOBBY|COLLECTIBLES|COMICS', category: 'Games & Hobbies' },
+  { name: 'Video games', priority: 65, regex: 'STEAM|NINTENDO|PLAYSTATION|XBOX',
+    category: 'Video Games' },
+  { name: 'Live events', priority: 65, regex: 'TICKETMASTER|STUBHUB|SEATGEEK|AXS ',
+    category: 'Live Events' },
+  { name: 'Museums', priority: 65, regex: 'MUSEUM|AQUARIUM|ZOO ',
+    category: 'Museums & Attractions' },
+
+  // SQ * is Square, a PAYMENT RAIL — it prefixes every merchant that takes
+  // card through Square, from a restaurant to a game store. Matching it alone
+  // sweeps all of them into one category. Name the merchant after the prefix.
+  { name: 'Restaurants', priority: 70, regex: 'TST\\*|DOORDASH', category: 'Restaurants' },
 ];
 
 /** Creates or updates the example categorization rules in the database. */

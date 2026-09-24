@@ -42,11 +42,15 @@ const TAXONOMY: CategoryWithGroup[] = [
   cat('Rent', 'Housing'),
   cat('Utilities', 'Housing'),
   cat('Shopping', 'Lifestyle'),
-  cat('Entertainment', 'Lifestyle'),
   cat('Subscriptions', 'Lifestyle'),
   cat('Streaming & Video', 'Lifestyle', 'Subscriptions'),
   cat('AI Tools', 'Lifestyle', 'Subscriptions'),
   cat('Adult', 'Lifestyle', 'Subscriptions'),
+  // A SECOND split parent in the same group: the levels must stay independent,
+  // so opening one never shows the other's children.
+  cat('Entertainment', 'Lifestyle'),
+  cat('Games & Hobbies', 'Lifestyle', 'Entertainment'),
+  cat('Video Games', 'Lifestyle', 'Entertainment'),
 ];
 
 const drillNames = (s: ReturnType<typeof browseSections>) =>
@@ -76,12 +80,13 @@ describe('level 2: one group', () => {
     const shown = [...drillNames(sections), ...itemNames(sections)];
     expect(shown).not.toContain('Streaming & Video');
     expect(shown).not.toContain('AI Tools');
+    expect(shown).not.toContain('Games & Hobbies');
     expect(shown.sort()).toEqual(['Entertainment', 'Shopping', 'Subscriptions']);
   });
 
   it('drills a category that has children, and offers one that does not', () => {
-    expect(drillNames(sections)).toEqual(['Subscriptions']);
-    expect(itemNames(sections).sort()).toEqual(['Entertainment', 'Shopping']);
+    expect(drillNames(sections).sort()).toEqual(['Entertainment', 'Subscriptions']);
+    expect(itemNames(sections)).toEqual(['Shopping']);
   });
 
   it('labels the screen with the group and offers a way back', () => {
@@ -140,7 +145,15 @@ describe('a drill row names the level it opens', () => {
     const sections = browseSections(TAXONOMY, 'Lifestyle', null, back);
     expect(sections[0]!.drill!).toEqual([
       { name: 'Subscriptions', count: 3, into: 'parent' },
+      { name: 'Entertainment', count: 2, into: 'parent' },
     ]);
+  });
+
+  it('opening one split parent never shows another\u2019s children', () => {
+    const subs = browseSections(TAXONOMY, 'Lifestyle', 'Subscriptions', back);
+    expect(itemNames(subs)).not.toContain('Games & Hobbies');
+    const ent = browseSections(TAXONOMY, 'Lifestyle', 'Entertainment', back);
+    expect(itemNames(ent)).toEqual(['Entertainment', 'Games & Hobbies', 'Video Games']);
   });
 });
 
@@ -160,8 +173,8 @@ describe('nothing is pinned above the tree', () => {
     // The CCBill case: the row sits in Adult, a SUBCATEGORY of Subscriptions.
     // A pinned "best guess" for it used to remove Adult from the tree.
     const sections = browseSections(TAXONOMY, 'Lifestyle', null, back);
-    expect(drillNames(sections)).toEqual(['Subscriptions']);
-    expect(itemNames(sections).sort()).toEqual(['Entertainment', 'Shopping']);
+    expect(drillNames(sections).sort()).toEqual(['Entertainment', 'Subscriptions']);
+    expect(itemNames(sections)).toEqual(['Shopping']);
   });
 
   it('opening a group never lands inside one of its parents', () => {
