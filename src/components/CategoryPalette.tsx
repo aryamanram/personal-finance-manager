@@ -59,18 +59,11 @@ export interface PaletteSection {
 
 export function CategoryPalette({
   categories,
-  usage,
-  suggestedId,
-  unconfirmedId,
   currentId,
   onPick,
   onClose,
 }: {
   categories: CategoryWithGroup[];
-  usage: Record<string, number>;
-  suggestedId?: string | null;
-  /** The row's current category, when no human has confirmed it. */
-  unconfirmedId?: string | null;
   currentId?: string | null;
   onPick: (categoryId: string | null) => void;
   onClose: () => void;
@@ -82,70 +75,37 @@ export function CategoryPalette({
   const [cursor, setCursor] = useState(0);
   const listRef = useRef<HTMLUListElement>(null);
 
-  const byId = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
-
   const sections = useMemo((): PaletteSection[] => {
     const q = query.trim().toLowerCase();
-    const out: PaletteSection[] = [];
-    // A category may qualify for several sections; it appears in the first
-    // only, or the keyboard cursor lands on the same category twice.
-    const claimed = new Set<string>();
+    // 'Uncategorized' is a real row in the taxonomy — it is where the fallback
+    // pass puts things — but as a CHOICE it duplicates the clear row below,
+    // which already sets category_id to NULL. Listing both showed the same
+    // word twice on one screen.
+    const visible = categories.filter((c) => c.name !== 'Uncategorized' && matches(c, q));
 
-    const take = (c: CategoryWithGroup | undefined): c is CategoryWithGroup =>
-      !!c && !claimed.has(c.id) && matches(c, q);
-
-    if (!q) {
-      // `suggested_category_id` is the model's parallel opinion and is often
-      // NULL — rules and the LLM write straight to category_id. So the standing
-      // guess is whatever is on the row now, as long as no human confirmed it.
-      const guess = suggestedId
-        ? byId.get(suggestedId)
-        : unconfirmedId
-          ? byId.get(unconfirmedId)
-          : undefined;
-      if (take(guess)) {
-        claimed.add(guess.id);
-        out.push({
-          key: 'guess',
-          label: 'Best guess',
-          items: [{ category: guess, note: guess.group_name }],
-        });
-      }
-    }
-
+    // Typing searches every category at every depth; otherwise walk the tree.
+    // There is deliberately NOTHING pinned above it. Every shortcut tried here
+    // — the merchant's remembered category, "you use most", the model's best
+    // guess — lifted a category out of its place in the tree, so the same
+    // category sat in two places and the structure moved as you worked. A
+    // pinned section also anchored the panel, which is what made clicking a
+    // group jump two levels instead of one.
     if (q) {
-      const hits = categories.filter((c) => take(c));
-      for (const c of hits) claimed.add(c.id);
-      if (hits.length > 0) {
-        out.push({
-          key: 'matches',
-          label: `Matches “${query.trim()}”`,
-          items: hits
-            .sort((a, b) => (usage[b.id] ?? 0) - (usage[a.id] ?? 0))
-            .map((c) => ({ category: c, note: c.group_name })),
-        });
-      }
-    } else {
-      // Every remaining category, BY GROUP. 35 categories in one scroll is a
-      // list you read rather than navigate; eight groups of three to seven is
-      // a choice you make twice. Opening a group shows only its own
-      // categories, so the panel never grows past one screen.
-      //
-      // Frequency deliberately does NOT get its own section here. A
-      // "you use most" shortcut lifted six categories out of their groups, so
-      // the same category sat in two places depending on history and the
-      // structure you navigate changed under you as you worked. This is an
-      // organisation tool: one category, one place, always the same place.
-      const rest = categories.filter((c) => take(c));
-      out.push(...browseSections(rest, openGroup, openParent, {
-        onGroup: () => { setOpenGroup(null); setCursor(0); },
-        onParent: () => { setOpenParent(null); setCursor(0); },
-      }));
+      return visible.length === 0 ? [] : [{
+        key: 'matches',
+        label: `Matches “${query.trim()}”`,
+        items: visible.map((c) => ({
+          category: c,
+          note: c.parent_name ?? c.group_name,
+        })),
+      }];
     }
 
-    return out;
-  }, [categories, query, usage, suggestedId, unconfirmedId, byId,
-      openGroup, openParent]);
+    return browseSections(visible, openGroup, openParent, {
+      onGroup: () => { setOpenGroup(null); setCursor(0); },
+      onParent: () => { setOpenParent(null); setCursor(0); },
+    });
+  }, [categories, query, openGroup, openParent]);
 
   // One flat list, so ↑/↓ crosses section boundaries.
   const flat = useMemo(() => sections.flatMap((s) => s.items), [sections]);

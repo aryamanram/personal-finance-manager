@@ -144,6 +144,44 @@ describe('a drill row names the level it opens', () => {
   });
 });
 
+describe('nothing is pinned above the tree', () => {
+  /**
+   * Every shortcut tried above the tree caused the same bug, twice reported:
+   * clicking a GROUP landed inside one of its parents instead of on the
+   * group's own categories.
+   *
+   * The mechanism was that a pinned section claimed its category out of the
+   * list the tree was then built from, AND kept the panel from returning to
+   * level 1 between clicks. So the tree is now built from the whole visible
+   * list, with no section above it, and the levels are a pure function of
+   * (categories, openGroup, openParent) — which is what these assert.
+   */
+  it('shows the same group list whatever the row is currently filed as', () => {
+    // The CCBill case: the row sits in Adult, a SUBCATEGORY of Subscriptions.
+    // A pinned "best guess" for it used to remove Adult from the tree.
+    const sections = browseSections(TAXONOMY, 'Lifestyle', null, back);
+    expect(drillNames(sections)).toEqual(['Subscriptions']);
+    expect(itemNames(sections).sort()).toEqual(['Entertainment', 'Shopping']);
+  });
+
+  it('opening a group never lands inside one of its parents', () => {
+    // Level 2 must list the group's own categories, not a parent's children.
+    const sections = browseSections(TAXONOMY, 'Lifestyle', null, back);
+    expect(sections[0]!.label).toBe('Lifestyle');
+    expect(itemNames(sections)).not.toContain('Adult');
+    expect(itemNames(sections)).not.toContain('Streaming & Video');
+  });
+
+  it('depends only on the taxonomy and where you are', () => {
+    // Called twice with the same arguments, it returns the same shape — there
+    // is no per-row state that could move a category out of the tree.
+    const a = browseSections(TAXONOMY, 'Lifestyle', null, back);
+    const b = browseSections(TAXONOMY, 'Lifestyle', null, back);
+    expect(drillNames(a)).toEqual(drillNames(b));
+    expect(itemNames(a)).toEqual(itemNames(b));
+  });
+});
+
 describe('a taxonomy with no subcategories still works', () => {
   it('treats every category as a pick', () => {
     const flat = [cat('Rent', 'Housing'), cat('Utilities', 'Housing')];

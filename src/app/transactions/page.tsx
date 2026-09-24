@@ -1,6 +1,6 @@
 import {
   getTransactions, countTransactions, getCategories, getAccounts,
-  getReviewCounts, getCategoryUsage, getActiveMonths, getLedgerBounds,
+  getReviewCounts, getActiveMonths, getLedgerBounds,
 } from '@/lib/queries';
 import { TransactionTable } from '@/components/TransactionTable';
 import { FilterChips } from '@/components/FilterChips';
@@ -44,14 +44,13 @@ export default async function TransactionsPage({
     limit: 300,
   };
 
-  const [transactions, total, categories, accounts, review, usage] = await Promise.all([
+  const [transactions, total, categories, accounts, review] = await Promise.all([
     getTransactions(filters),
     countTransactions(filters),
     getCategories(),
     getAccounts(),
     // Scoped to the period, so the chip counts what the table would show.
     getReviewCounts({ from: filters.from, to: filters.to }),
-    getCategoryUsage(),
   ]);
 
   return (
@@ -122,7 +121,6 @@ export default async function TransactionsPage({
       <TransactionTable
         initial={transactions}
         categories={categories}
-        usage={Object.fromEntries(usage)}
         accounts={accounts}
         total={total}
       />

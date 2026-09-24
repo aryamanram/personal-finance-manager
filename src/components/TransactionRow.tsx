@@ -17,7 +17,6 @@ import type { VTransaction, CategoryWithGroup } from '@/lib/types';
 export function TransactionRow({
   txn,
   categories,
-  usage,
   selected,
   onSelect,
   onPatch,
@@ -27,7 +26,6 @@ export function TransactionRow({
 }: {
   txn: VTransaction;
   categories: CategoryWithGroup[];
-  usage: Record<string, number>;
   selected: boolean;
   /** The row above shares this date, so printing it again says nothing. */
   repeatsDate?: boolean;
@@ -257,7 +255,6 @@ export function TransactionRow({
           <RowEditor
             txn={txn}
             categories={categories}
-            usage={usage}
             onPatch={onPatch}
             onClose={() => setExpanded(false)}
           />

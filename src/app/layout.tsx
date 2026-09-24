@@ -27,7 +27,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-screen bg-ink-900">
+      {/* suppressHydrationWarning covers THIS element's attributes only, not
+          its subtree, so a real mismatch anywhere inside still reports.
+          Browser extensions inject attributes on <body> before React
+          hydrates — cz-shortcut-listen, grammarly-*, data-lt-* — and each one
+          logs a hydration error that no change to this app can prevent. */}
+      <body className="min-h-screen bg-ink-900" suppressHydrationWarning>
         <Providers>
           <header className="rule-b sticky top-0 z-30 bg-ink-900/95 backdrop-blur">
             <div className="mx-auto flex max-w-[1400px] items-baseline gap-8 px-6 py-4">

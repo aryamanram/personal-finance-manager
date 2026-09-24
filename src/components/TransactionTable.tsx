@@ -16,14 +16,11 @@ import type { VTransaction, CategoryWithGroup, Account } from '@/lib/types';
 export function TransactionTable({
   initial,
   categories,
-  usage,
   accounts,
   total,
 }: {
   initial: VTransaction[];
   categories: CategoryWithGroup[];
-  /** Hand-pick counts per category, for ranking the palette. */
-  usage: Record<string, number>;
   accounts: Account[];
   total: number;
 }) {
@@ -203,7 +200,6 @@ export function TransactionTable({
                 <div className="absolute right-0 top-full z-40 mt-1">
                   <CategoryPalette
                     categories={categories}
-                    usage={usage}
                     onPick={(id) => {
                       // Bulk-clearing to Uncategorized is not offered: the
                       // palette's clear row only appears for a single row's
@@ -265,7 +261,6 @@ export function TransactionTable({
               key={txn.id}
               txn={txn}
               categories={categories}
-              usage={usage}
               // Rows are sorted by date descending, so a repeat is always the
               // row immediately above.
               repeatsDate={i > 0 && rows[i - 1]!.eff_posted_date === txn.eff_posted_date}

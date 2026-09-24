@@ -17,13 +17,11 @@ import type { MerchantContext } from '@/lib/queries';
 export function RowEditor({
   txn,
   categories,
-  usage,
   onPatch,
   onClose,
 }: {
   txn: VTransaction;
   categories: CategoryWithGroup[];
-  usage: Record<string, number>;
   onPatch: (id: string, patch: Record<string, unknown>) => void;
   onClose: () => void;
 }) {
@@ -139,9 +137,6 @@ export function RowEditor({
             <div className="mt-2">
               <CategoryPalette
                 categories={categories}
-                usage={usage}
-                suggestedId={txn.suggested_category_id}
-                unconfirmedId={isGuess ? txn.category_id : null}
                 currentId={txn.category_id}
                 onPick={pick}
                 onClose={() => setPicking(false)}

@@ -296,23 +296,7 @@ export async function getReviewCounts(
   return row;
 }
 
-/**
- * How often you have *chosen* each category by hand, most-used first.
- *
- * Counts only locked rows — machine assignments are what the ranking exists to
- * correct, so letting them vote would rank the model's habits rather than
- * yours. This turns a 35-item alphabetical list into the few categories
- * actually in play (wireframe 34:2).
- */
-export async function getCategoryUsage(): Promise<Map<string, number>> {
-  const rows = await sql<{ category_id: string; uses: number }[]>`
-    SELECT category_id, count(*)::int AS uses
-    FROM v_transactions
-    WHERE superseded_by_id IS NULL AND voided_at IS NULL
-      AND category_locked AND category_id IS NOT NULL
-    GROUP BY category_id`;
-  return new Map(rows.map((r) => [r.category_id, r.uses]));
-}
+
 
 /**
  * What the register knows about one row's merchant, for the edit panel.
