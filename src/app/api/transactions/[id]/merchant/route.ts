@@ -1,11 +1,14 @@
 /**
  * GET  — what the register knows about this row's merchant, for the edit panel.
- * POST — "remember this": set merchants.default_category_id, and optionally
- *        apply the category to this merchant's other unreviewed rows.
+ * POST — set this row's category, and optionally apply it to the merchant's
+ *        other unreviewed rows.
  *
- * The POST is the wireframe's two checkboxes (35:2). Both are writes a human
- * asked for, so both respect I4 by only ever touching rows that are NOT
- * locked — a row you previously decided by hand is never re-decided here.
+ * Applying to siblings is a ONE-TIME action on rows that exist now. There is
+ * deliberately no standing "always file this merchant here" any more: a stored
+ * default re-asserted itself on every sync and silently reverted later, more
+ * specific decisions. A repeat charge is categorised by a rule or the model,
+ * both of which are visible and editable; a hidden per-merchant default was
+ * neither. It respects I4 by only ever touching rows that are NOT locked.
  */
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -20,15 +23,13 @@ export async function GET(
   const { id } = await params;
   const merchant = await getMerchantContext(id);
   // A row with no merchant is normal, not an error — the panel omits the
-  // "remember" block.
+  // "apply to others" block.
   return NextResponse.json({ merchant });
 }
 
 const RememberSchema = z.object({
   category_id: z.string().uuid(),
-  /** Write merchants.default_category_id, so future imports land here. */
-  set_default: z.boolean().default(false),
-  /** Apply to this merchant's other unreviewed rows. */
+  /** Apply to this merchant's other unreviewed rows, once. */
   apply_to_siblings: z.boolean().default(false),
 }).strict();
 
@@ -52,28 +53,22 @@ export async function POST(
       { status: 400 },
     );
   }
-  const { category_id, set_default, apply_to_siblings } = parsed.data;
+  const { category_id, apply_to_siblings } = parsed.data;
 
-  // A merchant is required only to REMEMBER something against it. This route
-  // is also the confirm path — picking the category a row already has, which
-  // applyPatch would no-op — and a row with no merchant must still be
+  // A merchant is required only to reach this merchant's OTHER rows. This
+  // route is also the confirm path — picking the category a row already has,
+  // which applyPatch would no-op — and a row with no merchant must still be
   // confirmable, or the "needs review" backlog cannot be cleared for it.
   const context = await getMerchantContext(id);
-  if (!context && (set_default || apply_to_siblings)) {
+  if (!context && apply_to_siblings) {
     return NextResponse.json(
-      { error: 'This transaction has no merchant to remember against.' },
+      { error: 'This transaction has no merchant to apply across.' },
       { status: 400 },
     );
   }
 
   try {
     const transaction = await setOrConfirm(id, category_id);
-
-    if (set_default && context) {
-      await sql`
-        UPDATE merchants SET default_category_id = ${category_id}
-        WHERE id = ${context.merchant_id}`;
-    }
 
     let applied = 0;
     if (apply_to_siblings && context) {
@@ -91,7 +86,7 @@ export async function POST(
       }
     }
 
-    return NextResponse.json({ transaction, applied, set_default });
+    return NextResponse.json({ transaction, applied });
   } catch (err) {
     if (err instanceof EditError) {
       return NextResponse.json({ error: err.message }, { status: err.status });

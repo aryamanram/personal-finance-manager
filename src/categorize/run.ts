@@ -8,7 +8,7 @@
  * Idempotent: safe to run any number of times over any date range.
  */
 import type { Sql } from 'postgres';
-import { linkMerchants, applyMerchantDefaults, applyRules, applyDefaultCategory } from './rules';
+import { linkMerchants, applyRules, applyDefaultCategory } from './rules';
 import { categorizeWithLlm } from './llm';
 
 export interface CategorizeOptions {
@@ -22,7 +22,6 @@ export interface CategorizeOptions {
 export interface CategorizeReport {
   merchantsLinked: number;
   merchantsCreated: number;
-  byMerchantDefault: number;
   byRule: number;
   byLlm: number;
   toUncategorized: number;
@@ -43,9 +42,6 @@ export async function runCategorization(
 
   log('· linking merchants');
   const merchants = await linkMerchants(sql, range);
-
-  log('· merchant defaults');
-  const defaults = await applyMerchantDefaults(sql, range);
 
   log('· rules');
   const rules = await applyRules(sql, range);
@@ -85,7 +81,6 @@ export async function runCategorization(
   return {
     merchantsLinked: merchants.linked,
     merchantsCreated: merchants.created,
-    byMerchantDefault: defaults.updated,
     byRule: rules.updated,
     byLlm: llmUpdated,
     toUncategorized: fallback.updated,
@@ -95,21 +90,4 @@ export async function runCategorization(
   };
 }
 
-/**
- * Always populate suggested_category_id, even where a lock prevents applying it
- * (DESIGN.md §8). This is the signal for "which rules are worth writing?" —
- * a locked row whose suggestion disagrees with the human is exactly the case
- * where a rule would have saved the manual edit.
- */
-export async function refreshSuggestions(sql: Sql): Promise<number> {
-  const rows = await sql<{ id: string }[]>`
-    UPDATE transactions t
-    SET suggested_category_id = m.default_category_id
-    FROM merchants m
-    WHERE t.merchant_id = m.id
-      AND m.default_category_id IS NOT NULL
-      AND t.superseded_by_id IS NULL
-      AND t.suggested_category_id IS DISTINCT FROM m.default_category_id
-    RETURNING t.id`;
-  return rows.length;
-}
+

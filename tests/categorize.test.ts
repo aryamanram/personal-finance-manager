@@ -258,18 +258,51 @@ describe('a rule written with padded spaces still matches', () => {
   });
 });
 
-describe('merchant defaults', () => {
-  it('propagates a merchant default to future transactions of that merchant', async () => {
+describe('no merchant carries a standing default', () => {
+  /**
+   * There used to be merchants.default_category_id, re-applied on every run.
+   * It was removed because it silently REVERTED later, more specific
+   * decisions: every transaction of a merchant was forced back to one
+   * category, so splitting Subscriptions into subcategories would have been
+   * undone by the next sync — 87 rows, no error, no warning.
+   *
+   * Categorisation now comes only from rules and the model, both of which are
+   * visible and editable. This asserts the property that replaced it.
+   */
+  it('leaves a categorised row alone on a re-run', async () => {
     const travel = await categoryByName(sql, 'Travel');
+    const dining = await categoryByName(sql, 'Restaurants');
+
+    const [row] = await sql<{ id: string; merchant_id: string | null }[]>`
+      SELECT id, merchant_id FROM transactions
+      WHERE raw_description = 'MYSTERY VENDOR XJ7'`;
+
+    // Two rows, same merchant, filed differently — the shape a subcategory
+    // split produces, and exactly what a merchant default used to flatten.
     await sql`
-      UPDATE merchants SET default_category_id = ${travel}
-      WHERE normalized_name LIKE '%mystery vendor%'`;
+      UPDATE transactions SET category_id = ${travel}, category_source = 'rule'
+      WHERE id = ${row.id}`;
+    const [sibling] = await sql<{ id: string }[]>`
+      SELECT id FROM transactions
+      WHERE merchant_id = ${row.merchant_id} AND id <> ${row.id} LIMIT 1`;
+    if (sibling) {
+      await sql`
+        UPDATE transactions SET category_id = ${dining}, category_source = 'rule'
+        WHERE id = ${sibling.id}`;
+    }
 
     await runCategorization(sql, { noLlm: true });
 
-    const [row] = await sql<{ category_name: string; category_source: string }[]>`
-      SELECT category_name, category_source FROM v_transactions
-      WHERE raw_description = 'MYSTERY VENDOR XJ7'`;
-    expect(row.category_name).toBe('Travel');
+    const [after] = await sql<{ category_name: string }[]>`
+      SELECT category_name FROM v_transactions WHERE id = ${row.id}`;
+    expect(after.category_name).toBe('Travel');
+
+    if (sibling) {
+      // The one that matters: a sibling of the SAME merchant keeps its own
+      // category rather than being pulled to whatever the merchant "is".
+      const [sibAfter] = await sql<{ category_name: string }[]>`
+        SELECT category_name FROM v_transactions WHERE id = ${sibling.id}`;
+      expect(sibAfter.category_name).toBe('Restaurants');
+    }
   });
 });

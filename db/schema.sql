@@ -180,8 +180,6 @@ CREATE TABLE merchants (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   normalized_name     TEXT NOT NULL UNIQUE,   -- "starbucks"
   display_name        TEXT NOT NULL,          -- "Starbucks"
-  -- Once you set this, every future txn from this merchant lands here.
-  default_category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
   logo_url            TEXT,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );

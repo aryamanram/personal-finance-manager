@@ -17,6 +17,11 @@ import type { CategoryWithGroup } from '@/lib/types';
  * parent stays pickable from inside its own screen ("general"), because
  * drilling in must never remove the option you started from.
  *
+ * One shortcut sits above the tree: the machine's standing guess for THIS row.
+ * A second one, the merchant's remembered default, was removed with the
+ * feature behind it — it also anchored the panel, which made a group row
+ * rendered beside it jump two levels down instead of one.
+ *
  * Structure first, and the SAME structure every time. Two shortcuts sit above
  * it — what this merchant was last filed as, and the machine's standing guess
  * — because both answer "this exact row" rather than reorganising the
@@ -39,8 +44,15 @@ export interface PaletteSection {
   key: string;
   label: string;
   items: Ranked[];
-  /** Rows that go one level DOWN rather than picking anything. */
-  drill?: { name: string; count: number }[];
+  /**
+   * Rows that go one level DOWN rather than picking anything.
+   *
+   * `into` names the level this row opens. Inferring it from current state
+   * instead ("if a group is open, this must be a parent") breaks the moment
+   * two sections are on screen at once: a group row rendered beside an open
+   * group jumped straight to level 3.
+   */
+  drill?: { name: string; count: number; into: 'group' | 'parent' }[];
   /** Renders the header as a back affordance, returning one level up. */
   back?: () => void;
 }
@@ -50,8 +62,6 @@ export function CategoryPalette({
   usage,
   suggestedId,
   unconfirmedId,
-  merchantDefaultId,
-  merchantUses,
   currentId,
   onPick,
   onClose,
@@ -61,8 +71,6 @@ export function CategoryPalette({
   suggestedId?: string | null;
   /** The row's current category, when no human has confirmed it. */
   unconfirmedId?: string | null;
-  merchantDefaultId?: string | null;
-  merchantUses?: number;
   currentId?: string | null;
   onPick: (categoryId: string | null) => void;
   onClose: () => void;
@@ -87,21 +95,6 @@ export function CategoryPalette({
       !!c && !claimed.has(c.id) && matches(c, q);
 
     if (!q) {
-      // The merchant's own memory outranks the model: it records what you
-      // decided, the suggestion only guesses at it.
-      const remembered = merchantDefaultId ? byId.get(merchantDefaultId) : undefined;
-      if (take(remembered)) {
-        claimed.add(remembered.id);
-        out.push({
-          key: 'merchant',
-          label: 'This merchant',
-          items: [{
-            category: remembered,
-            note: merchantUses && merchantUses > 1 ? `${merchantUses} times` : 'remembered',
-          }],
-        });
-      }
-
       // `suggested_category_id` is the model's parallel opinion and is often
       // NULL — rules and the LLM write straight to category_id. So the standing
       // guess is whatever is on the row now, as long as no human confirmed it.
@@ -151,8 +144,8 @@ export function CategoryPalette({
     }
 
     return out;
-  }, [categories, query, usage, suggestedId, unconfirmedId, merchantDefaultId,
-      merchantUses, byId, openGroup, openParent]);
+  }, [categories, query, usage, suggestedId, unconfirmedId, byId,
+      openGroup, openParent]);
 
   // One flat list, so ↑/↓ crosses section boundaries.
   const flat = useMemo(() => sections.flatMap((s) => s.items), [sections]);
@@ -226,14 +219,14 @@ export function CategoryPalette({
               <div className="eyebrow bg-ink-850 px-3 py-1.5">{section.label}</div>
             )}
 
-            {/* Drill rows: one step down rather than a choice. Which level
-                they descend to depends on where we already are. */}
+            {/* Drill rows: one step down rather than a choice. The ROW says
+                which level it opens — see PaletteSection.drill. */}
             {section.drill?.map((g) => (
               <button
                 key={g.name}
                 onClick={() => {
-                  if (openGroup) setOpenParent(g.name);
-                  else setOpenGroup(g.name);
+                  if (g.into === 'parent') setOpenParent(g.name);
+                  else { setOpenGroup(g.name); setOpenParent(null); }
                   setCursor(0);
                 }}
                 className="flex w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left text-sm text-paper-dim transition-colors hover:bg-ink-700 hover:text-paper"
@@ -357,7 +350,9 @@ export function browseSections(
       label: openGroup,
       back: back.onGroup,
       // A category that HAS children drills; one that doesn't is a pick.
-      drill: withKids.map((c) => ({ name: c.name, count: childrenOf(c.name).length })),
+      drill: withKids.map((c) => ({
+        name: c.name, count: childrenOf(c.name).length, into: 'parent' as const,
+      })),
       items: leaves.map((c) => ({ category: c })),
     }];
   }
@@ -373,7 +368,9 @@ export function browseSections(
   return [{
     key: 'groups',
     label: 'All categories',
-    drill: [...groups.entries()].map(([name, n]) => ({ name, count: n })),
+    drill: [...groups.entries()].map(([name, n]) => ({
+      name, count: n, into: 'group' as const,
+    })),
     items: [],
   }];
 }

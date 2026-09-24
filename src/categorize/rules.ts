@@ -44,31 +44,7 @@ export interface PassResult {
   skippedLocked: number;
 }
 
-/**
- * Step 1 — merchant defaults. Highest precedence among machine passes because
- * a merchant default encodes a past human decision.
- */
-export async function applyMerchantDefaults(
-  sql: Sql,
-  opts: { from?: string; to?: string } = {},
-): Promise<PassResult> {
-  const rows = await sql<{ id: string }[]>`
-    UPDATE transactions t
-    SET category_id = m.default_category_id,
-        category_source = 'rule'
-    FROM merchants m
-    WHERE t.merchant_id = m.id
-      AND m.default_category_id IS NOT NULL
-      AND NOT t.category_locked
-      AND t.superseded_by_id IS NULL
-      AND t.voided_at IS NULL
-      AND (t.category_id IS DISTINCT FROM m.default_category_id)
-      ${opts.from ? sql`AND t.posted_date >= ${opts.from}::date` : sql``}
-      ${opts.to ? sql`AND t.posted_date <= ${opts.to}::date` : sql``}
-    RETURNING t.id`;
 
-  return { examined: rows.length, updated: rows.length, skippedLocked: 0 };
-}
 
 /**
  * Step 2 — rules, in priority order, first match wins.

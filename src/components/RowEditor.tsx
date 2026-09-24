@@ -30,7 +30,6 @@ export function RowEditor({
   const [name, setName] = useState(txn.eff_description ?? '');
   const [picking, setPicking] = useState(false);
   const [merchant, setMerchant] = useState<MerchantContext | null>(null);
-  const [setDefault, setSetDefault] = useState(false);
   const [applySiblings, setApplySiblings] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,10 +65,10 @@ export function RowEditor({
       return;
     }
 
-    // A plain pick is just a patch. Only the checkboxes need the merchant
-    // endpoint — and it is also what CONFIRMS a guess, since patching a
-    // category to the value it already has is a no-op that never locks.
-    if (!merchant || (!setDefault && !applySiblings)) {
+    // A plain pick is just a patch. Only "apply to the others" needs the
+    // merchant endpoint — and it is also what CONFIRMS a guess, since patching
+    // a category to the value it already has is a no-op that never locks.
+    if (!merchant || !applySiblings) {
       if (categoryId === txn.category_id && isGuess) {
         await confirmOnly(categoryId);
         return;
@@ -78,16 +77,12 @@ export function RowEditor({
       return;
     }
 
-    await post({
-      category_id: categoryId,
-      set_default: setDefault,
-      apply_to_siblings: applySiblings,
-    });
+    await post({ category_id: categoryId, apply_to_siblings: applySiblings });
   }
 
   /** Agreeing with the machine: same category, but now a human decision. */
   async function confirmOnly(categoryId: string) {
-    await post({ category_id: categoryId, set_default: false, apply_to_siblings: false });
+    await post({ category_id: categoryId, apply_to_siblings: false });
   }
 
   async function post(body: Record<string, unknown>) {
@@ -147,8 +142,6 @@ export function RowEditor({
                 usage={usage}
                 suggestedId={txn.suggested_category_id}
                 unconfirmedId={isGuess ? txn.category_id : null}
-                merchantDefaultId={merchant?.default_category_id}
-                merchantUses={merchant?.default_uses}
                 currentId={txn.category_id}
                 onPick={pick}
                 onClose={() => setPicking(false)}
@@ -170,43 +163,29 @@ export function RowEditor({
           )}
         </div>
 
-        {merchant && (
+        {/* A one-time action on rows that exist NOW. The standing "categorise
+            every future X this way" checkbox is gone: a stored per-merchant
+            default re-asserted itself on every sync and silently reverted
+            later, more specific decisions — it would have undone every
+            subcategory assignment. A repeat charge is handled by a rule or the
+            model, both of which are visible and editable. */}
+        {merchant && merchant.siblings > 0 && (
           <div className="border-l-2 border-edited/40 pl-4">
-            <div className="text-sm text-edited">Remember this</div>
-            <label className="mt-2 flex items-start gap-2 text-xs text-paper-dim">
+            <label className="flex items-start gap-2 text-xs text-paper-dim">
               <input
                 type="checkbox"
-                checked={setDefault}
-                onChange={(e) => setSetDefault(e.target.checked)}
+                checked={applySiblings}
+                onChange={(e) => setApplySiblings(e.target.checked)}
                 className="mt-0.5 accent-edited"
               />
               <span>
-                Categorise every future{' '}
-                <span className="text-paper">{merchant.merchant_name}</span>{' '}
-                transaction this way
+                Also apply to the{' '}
+                <span className="figure text-paper">{merchant.siblings}</span>{' '}
+                other unreviewed {merchant.merchant_name}{' '}
+                {merchant.siblings === 1 ? 'row' : 'rows'}
               </span>
             </label>
-            {merchant.siblings > 0 && (
-              <label className="mt-1.5 flex items-start gap-2 text-xs text-paper-dim">
-                <input
-                  type="checkbox"
-                  checked={applySiblings}
-                  onChange={(e) => setApplySiblings(e.target.checked)}
-                  className="mt-0.5 accent-edited"
-                />
-                <span>
-                  Apply to the{' '}
-                  <span className="figure text-paper">{merchant.siblings}</span>{' '}
-                  other unreviewed {merchant.merchant_name}{' '}
-                  {merchant.siblings === 1 ? 'row' : 'rows'}
-                </span>
-              </label>
-            )}
-            {/* Only once something is ticked, and only the half that is not
-                already obvious from the checkbox: that picking the category
-                is what applies this, and that I4 protects your own decisions.
-                The unticked version was an instruction to read every time. */}
-            {(setDefault || applySiblings) && (
+            {applySiblings && (
               <p className="mt-2 text-xs leading-relaxed text-paper-faint">
                 Applied when you pick a category above. Rows you decided by
                 hand are never touched.

@@ -119,6 +119,31 @@ describe('level 3: one category', () => {
   });
 });
 
+describe('a drill row names the level it opens', () => {
+  /**
+   * The bug: the click handler inferred the target level from current state
+   * ("if a group is open, this row must be a parent"). With a shortcut section
+   * pinned above the tree the panel does not return to level 1 between
+   * clicks, so a GROUP row clicked while a group was already open jumped
+   * straight to level 3 — opening a row's category went directly to
+   * Subscriptions' children, skipping the rest of Lifestyle.
+   *
+   * The row itself now says where it goes, so the same row behaves the same
+   * way whatever else is on screen.
+   */
+  it('tags group rows as opening a group', () => {
+    const sections = browseSections(TAXONOMY, null, null, back);
+    expect(sections[0]!.drill!.every((d) => d.into === 'group')).toBe(true);
+  });
+
+  it('tags parent rows as opening a parent', () => {
+    const sections = browseSections(TAXONOMY, 'Lifestyle', null, back);
+    expect(sections[0]!.drill!).toEqual([
+      { name: 'Subscriptions', count: 3, into: 'parent' },
+    ]);
+  });
+});
+
 describe('a taxonomy with no subcategories still works', () => {
   it('treats every category as a pick', () => {
     const flat = [cat('Rent', 'Housing'), cat('Utilities', 'Housing')];

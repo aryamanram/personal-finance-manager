@@ -327,8 +327,7 @@ export async function getCategoryUsage(): Promise<Map<string, number>> {
 export interface MerchantContext {
   merchant_id: string;
   merchant_name: string;
-  default_category_id: string | null;
-  default_uses: number;
+  /** This merchant's other rows that no human has decided yet. */
   siblings: number;
 }
 
@@ -342,13 +341,6 @@ export async function getMerchantContext(
     SELECT
       m.id           AS merchant_id,
       m.display_name AS merchant_name,
-      m.default_category_id,
-      (SELECT count(*)::int FROM v_transactions v
-        WHERE v.merchant_id = m.id
-          AND v.category_locked
-          AND v.category_id IS NOT DISTINCT FROM m.default_category_id
-          AND v.voided_at IS NULL AND v.superseded_by_id IS NULL
-      )              AS default_uses,
       (SELECT count(*)::int FROM v_transactions v
         WHERE v.merchant_id = m.id
           AND v.id <> ${transactionId}

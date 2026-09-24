@@ -4,7 +4,7 @@
  * Two things make this cheap and idempotent:
  *   - It batches distinct MERCHANTS, never transactions. A thousand Starbucks
  *     rows cost one merchant slot, not a thousand calls.
- *   - The answer is written to merchants.default_category_id, so the same
+ *   - The answer is written to the merchant's transactions, so the same
  *     merchant is never sent to the model twice.
  *
  * Model choice is Claude Haiku per DESIGN.md §4 — categorization is a cheap
@@ -74,13 +74,17 @@ export async function categorizeWithLlm(
     WHERE NOT c.is_archived AND c.name <> 'Uncategorized'
     ORDER BY g.sort_order, c.sort_order, c.name`;
 
-  // Merchants with no default, that actually have uncategorized transactions.
+  // Merchants that actually have uncategorized transactions.
+  //
+  // The old guard was `m.default_category_id IS NULL`, which is gone with the
+  // feature. It was redundant anyway: a merchant the model has already
+  // answered for leaves its rows at category_source='llm', and the predicate
+  // below only admits 'unset'/'default'. So a merchant is still sent once.
   const merchants = await sql<{ id: string; display_name: string; normalized_name: string; n: number }[]>`
     SELECT m.id, m.display_name, m.normalized_name, count(t.id)::int AS n
     FROM merchants m
     JOIN transactions t ON t.merchant_id = m.id
-    WHERE m.default_category_id IS NULL
-      AND NOT t.category_locked
+    WHERE NOT t.category_locked
       AND t.superseded_by_id IS NULL
       AND t.voided_at IS NULL
       AND (t.category_id IS NULL OR t.category_source IN ('unset', 'default'))
@@ -112,10 +116,6 @@ export async function categorizeWithLlm(
         if (!merchant || !category) continue;
 
         const confidence = Math.min(1, Math.max(0, a.confidence));
-
-        // Cache the decision on the merchant so this is a one-time cost.
-        await sql`
-          UPDATE merchants SET default_category_id = ${category.id} WHERE id = ${merchant.id}`;
 
         // I4: never overwrite a human decision.
         const updated = await sql<{ id: string }[]>`
