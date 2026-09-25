@@ -27,6 +27,10 @@ beforeAll(async () => {
   drop = db.drop;
   acct = await seedAccounts(sql);
 
+  // queries.ts builds its pool from DATABASE_URL at import time, so the env
+  // has to point at the scratch database before it is imported.
+  process.env.DATABASE_URL = db.url;
+
   [{ id: subsId }] = await sql<{ id: string }[]>`
     SELECT id FROM categories WHERE name = 'Subscriptions' AND parent_id IS NULL`;
 
@@ -130,5 +134,28 @@ describe('rollup arithmetic', () => {
       SELECT category_group_name FROM v_transactions
       WHERE raw_description = 'STREAMING SERVICE'`;
     expect(row.category_group_name).toBe('Lifestyle');
+  });
+});
+
+describe('filtering by a category includes its subcategories', () => {
+  /**
+   * Filtering to "Subscriptions" and seeing none of its ten children's rows
+   * would be a filter that lies about the category it names — and it would
+   * silently under-report, which about money is the failure that matters.
+   */
+  it('returns the parent\u2019s own rows AND its children\u2019s', async () => {
+    const { getTransactions } = await import('@/lib/queries');
+    const rows = await getTransactions({ categoryIds: [subsId] });
+    const names = rows.map((r) => r.raw_description);
+    expect(names).toContain('STREAMING SERVICE');     // a child's row
+    expect(names).toContain('UNSPLIT SUBSCRIPTION');  // the parent's own
+  });
+
+  it('filtering to a CHILD returns only that child', async () => {
+    const { getTransactions } = await import('@/lib/queries');
+    const rows = await getTransactions({ categoryIds: [streamingId] });
+    const names = rows.map((r) => r.raw_description);
+    expect(names).toContain('STREAMING SERVICE');
+    expect(names).not.toContain('UNSPLIT SUBSCRIPTION');
   });
 });

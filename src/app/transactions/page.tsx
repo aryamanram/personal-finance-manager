@@ -5,6 +5,7 @@ import {
 import { TransactionTable } from '@/components/TransactionTable';
 import { FilterChips } from '@/components/FilterChips';
 import { PeriodPicker } from '@/components/PeriodPicker';
+import type { CategoryWithGroup } from '@/lib/types';
 import { buildPeriods } from '@/lib/periods';
 
 export const dynamic = 'force-dynamic';
@@ -74,8 +75,12 @@ export default async function TransactionsPage({
           <form className="flex flex-wrap items-center gap-2 text-xs">
             {/* Preserve the chip filters while searching — dropping them made
                 the search box silently widen the result set. */}
+            {/* 'category' is NOT passed through: it is a real field in this
+                form now, and a hidden input of the same name would be
+                submitted alongside the select and win, pinning the filter to
+                whatever it was before. */}
             {passthrough(params, [
-              'uncategorized', 'review', 'voided', 'from', 'to', 'category', 'period',
+              'uncategorized', 'review', 'voided', 'from', 'to', 'period',
             ])}
             <input
               name="q"
@@ -92,6 +97,17 @@ export default async function TransactionsPage({
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>{a.name}</option>
               ))}
+            </select>
+            {/* Grouped by category group, with subcategories indented under
+                their parent. Picking a parent includes its children — see
+                TransactionFilters.categoryIds. */}
+            <select
+              name="category"
+              defaultValue={one('category') ?? ''}
+              className="max-w-[12rem] rounded-sm border border-ink-600 bg-ink-800 px-2 py-1.5"
+            >
+              <option value="">All categories</option>
+              {categoryOptions(categories)}
             </select>
             <button
               type="submit"
@@ -126,6 +142,40 @@ export default async function TransactionsPage({
       />
     </div>
   );
+}
+
+/**
+ * The category dropdown's options: groups as optgroups, subcategories
+ * indented under the parent they roll up into.
+ *
+ * Indentation rather than "Parent · Child" because the list is already inside
+ * an optgroup naming the group — a third name on every row would make the
+ * common case (a top-level category) harder to scan to save the rare one.
+ */
+function categoryOptions(categories: CategoryWithGroup[]) {
+  const byGroup = new Map<string, CategoryWithGroup[]>();
+  for (const c of categories) {
+    if (!byGroup.has(c.group_name)) byGroup.set(c.group_name, []);
+    byGroup.get(c.group_name)!.push(c);
+  }
+
+  return [...byGroup.entries()].map(([group, cats]) => {
+    const tops = cats.filter((c) => !c.parent_id);
+    return (
+      <optgroup key={group} label={group}>
+        {tops.flatMap((parent) => [
+          <option key={parent.id} value={parent.id}>{parent.name}</option>,
+          ...cats
+            .filter((c) => c.parent_id === parent.id)
+            .map((kid) => (
+              // Non-breaking spaces: a <select> collapses ordinary leading
+              // whitespace, so plain indentation would not survive.
+              <option key={kid.id} value={kid.id}>{'\u00a0\u00a0'}{kid.name}</option>
+            )),
+        ])}
+      </optgroup>
+    );
+  });
 }
 
 /** Re-emits the chip filters as hidden inputs so the search form keeps them. */

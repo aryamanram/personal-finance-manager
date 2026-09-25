@@ -38,6 +38,14 @@ export interface Ranked {
   category: CategoryWithGroup;
   /** The right-hand annotation: why this row is where it is. */
   note?: string;
+  /**
+   * What to show instead of the category's own name.
+   *
+   * Only the parent row inside its own screen uses this: under a header
+   * already reading "SUBSCRIPTIONS", a row also called "Subscriptions" said
+   * the word twice and looked like a duplicate rather than the catch-all.
+   */
+  label?: string;
 }
 
 export interface PaletteSection {
@@ -207,7 +215,7 @@ export function CategoryPalette({
             ))}
 
             <ul>
-              {section.items.map(({ category, note }) => {
+              {section.items.map(({ category, note, label }) => {
                 index += 1;
                 const i = index;
                 const active = i === cursor;
@@ -223,7 +231,7 @@ export function CategoryPalette({
                       )}
                     >
                       <span className="truncate">
-                        {category.name}
+                        {label ?? category.name}
                         {category.id === currentId && (
                           <span className="ml-2 text-xs text-paper-faint">current</span>
                         )}
@@ -298,7 +306,9 @@ export function browseSections(
       label: openParent,
       back: back.onParent,
       items: [
-        ...(parent ? [{ category: parent, note: 'general' }] : []),
+        // The catch-all: this parent, none of its children. Named for what
+        // it MEANS rather than repeating the header above it.
+        ...(parent ? [{ category: parent, label: 'Unspecified' }] : []),
         ...kids.map((c) => ({ category: c })),
       ],
     }];

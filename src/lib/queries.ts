@@ -10,6 +10,12 @@ export interface TransactionFilters {
   from?: string;
   to?: string;
   accountIds?: string[];
+  /**
+   * Categories to show. A PARENT includes its subcategories: filtering to
+   * Subscriptions and getting none of its ten children's rows would be a
+   * filter that lies about the category it names. rollup_category_id is the
+   * view's own answer for that (I3), so the union is resolved in SQL.
+   */
   categoryIds?: string[];
   necessity?: string[];
   costType?: string[];
@@ -32,7 +38,10 @@ export async function getTransactions(f: TransactionFilters = {}) {
       ${f.from ? sql`AND eff_posted_date >= ${f.from}::date` : sql``}
       ${f.to ? sql`AND eff_posted_date <= ${f.to}::date` : sql``}
       ${f.accountIds?.length ? sql`AND account_id = ANY(${f.accountIds}::uuid[])` : sql``}
-      ${f.categoryIds?.length ? sql`AND category_id = ANY(${f.categoryIds}::uuid[])` : sql``}
+      ${f.categoryIds?.length
+        ? sql`AND (category_id = ANY(${f.categoryIds}::uuid[])
+                   OR rollup_category_id = ANY(${f.categoryIds}::uuid[]))`
+        : sql``}
       ${f.necessity?.length ? sql`AND eff_necessity::text = ANY(${f.necessity})` : sql``}
       ${f.costType?.length ? sql`AND eff_cost_type::text = ANY(${f.costType})` : sql``}
       ${f.uncategorizedOnly
@@ -59,7 +68,10 @@ export async function countTransactions(f: TransactionFilters = {}): Promise<num
       ${f.from ? sql`AND eff_posted_date >= ${f.from}::date` : sql``}
       ${f.to ? sql`AND eff_posted_date <= ${f.to}::date` : sql``}
       ${f.accountIds?.length ? sql`AND account_id = ANY(${f.accountIds}::uuid[])` : sql``}
-      ${f.categoryIds?.length ? sql`AND category_id = ANY(${f.categoryIds}::uuid[])` : sql``}
+      ${f.categoryIds?.length
+        ? sql`AND (category_id = ANY(${f.categoryIds}::uuid[])
+                   OR rollup_category_id = ANY(${f.categoryIds}::uuid[]))`
+        : sql``}
       ${f.uncategorizedOnly
         ? sql`AND (category_id IS NULL OR category_source IN ('unset','default'))`
         : sql``}

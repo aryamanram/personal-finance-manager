@@ -102,11 +102,14 @@ describe('level 2: one group', () => {
 describe('level 3: one category', () => {
   const sections = browseSections(TAXONOMY, 'Lifestyle', 'Subscriptions', back);
 
-  it('keeps the parent pickable, first', () => {
+  it('keeps the parent pickable, first, under a name of its own', () => {
     // Drilling in must never REMOVE the option you started from: "some
     // subscription that is none of these" is a real answer.
-    expect(itemNames(sections)[0]).toBe('Subscriptions');
-    expect(sections[0]!.items[0]!.note).toBe('general');
+    expect(sections[0]!.items[0]!.category.name).toBe('Subscriptions');
+    // But it is not LABELLED with the parent's name: under a header already
+    // reading SUBSCRIPTIONS, a row also called "Subscriptions" said the word
+    // twice and read as a duplicate rather than the catch-all.
+    expect(sections[0]!.items[0]!.label).toBe('Unspecified');
   });
 
   it('then lists exactly its own children', () => {
