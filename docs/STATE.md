@@ -24,8 +24,12 @@ Describe the *shape* of a decision here and keep the specifics there.
 
 ## Right now · last updated 2026-09-25
 
-Nothing blocking. **PR #11** (`category-palette-groups` → `main`) is open and
-awaiting review — the register rebuild. Everything before it is on `main`.
+**PR #11** (`category-palette-groups` → `main`) is open — the register rebuild,
+24 commits. CodeRabbit's review was still running when this was written, and
+the owner merges once it is clean. `main` has not moved since the branch
+started, so no rebase is needed and GitHub reports the merge clean.
+
+Nothing else is blocking.
 
 The categorisation backlog is **cleared**: every transaction is hand-decided or
 confirmed. That is the steady state the register was rebuilt for, and it means
@@ -40,6 +44,9 @@ Two things are half-done and will be obvious to the next person:
 - **The subcategory assignments were applied as one-off SQL**, not as rules.
   They hold, but a merchant that reappears under a new description will land on
   the parent until a rule covers it.
+
+If CodeRabbit's findings need addressing, they go on this branch before the
+merge — nothing downstream depends on it landing first.
 
 Two standing tasks the owner tracks — details in `private/STATE.local.md`:
 
@@ -175,8 +182,11 @@ Flagged rather than guessed at, per `docs/DESIGN.md` §12:
   and a data migration later.
 - **LLM proposing new categories.** Currently it may only pick from the existing
   list. Allowing proposals means deciding who curates the taxonomy.
-- **Reconciliation surfacing.** A passive banner today. Fine while drift is
-  explainable; revisit if it starts firing for reasons nobody chases.
+- **Reconciliation surfacing.** A passive banner today, and now quiet: it
+  tests both bases (balances that include pending rows and balances that do
+  not) and reports an account only when neither matches, so the cards no longer
+  show phantom drift. One genuine checking difference remains, unexplained.
+  Revisit if it starts firing for reasons nobody chases.
 - **Payment rails inside Shopping.** A large share of Shopping is PayPal and
   Affirm rows, which name how something was paid rather than what was bought.
   Instalment plans are deliberately *not* their own category — the destination
