@@ -72,9 +72,6 @@ export default async function TransactionsPage({
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-          <CategoryFilter categories={categories} activeId={one('category')} />
-
           <form className="flex flex-wrap items-center gap-2 text-xs">
             {/* Preserve the chip filters while searching — dropping them made
                 the search box silently widen the result set. */}
@@ -101,10 +98,12 @@ export default async function TransactionsPage({
                 <option key={a.id} value={a.id}>{a.name}</option>
               ))}
             </select>
-            {/* The same palette that assigns a category to a row: groups,
-                then categories, then subcategories, and typing searches every
-                level. It navigates on pick rather than submitting this form,
-                so it sits OUTSIDE the search/account controls below. */}
+            {/* Sits with the other filters, but is not a FIELD of this form:
+                it navigates on pick, so there is nothing to Apply. Its trigger
+                is type="button" so it never submits, and 'category' rides
+                along in the passthrough above. */}
+            <CategoryFilter categories={categories} activeId={one('category')} />
+
             <button
               type="submit"
               className="rounded-sm border border-ink-500 px-3 py-1.5 text-paper transition-colors hover:border-paper-faint"
@@ -112,7 +111,6 @@ export default async function TransactionsPage({
               Apply
             </button>
           </form>
-          </div>
         </div>
 
         {period && (
