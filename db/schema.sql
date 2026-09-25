@@ -481,7 +481,20 @@ SELECT
    AND t.voided_at IS NULL
    AND t.status = 'posted'
    AND COALESCE(t.necessity_override, c.default_necessity)
-       NOT IN ('transfer','income','investment'))                      AS counts_as_spending
+       NOT IN ('transfer','income','investment'))                      AS counts_as_spending,
+  -- The card's own side of a card payment: money arriving at a LIABILITY
+  -- account, which means the balance owed went down. It is the mirror of the
+  -- debit that left checking, so showing both in one register lists the same
+  -- event twice — and the card leg is the useless half, because the debit is
+  -- the one that proves a bill got paid.
+  --
+  -- Structural, not categorical: it holds whatever the row is filed as, which
+  -- matters because two of these were sitting in 'Account Transfer'. A REFUND
+  -- is also positive on a card and is NOT this — real money coming back, which
+  -- must stay visible — so the description has to look like a payment.
+  (a.type = 'credit'
+   AND COALESCE(t.amount_cents_override, t.amount_cents) > 0
+   AND t.raw_description ~* '(payment|autopay|ach deposit|thank you)')  AS is_card_payment_credit
 FROM transactions t
 JOIN accounts a          ON a.id = t.account_id
 LEFT JOIN categories c   ON c.id = t.category_id

@@ -17,6 +17,14 @@ export interface TransactionFilters {
    * view's own answer for that (I3), so the union is resolved in SQL.
    */
   categoryIds?: string[];
+  /**
+   * Categories to hide. The register's filter is subtractive — it starts with
+   * everything except Credit Card Payment — so it needs the complement of
+   * categoryIds rather than a very long include list.
+   *
+   * Hiding a PARENT hides its subcategories with it, via rollup_category_id.
+   */
+  excludeCategoryIds?: string[];
   necessity?: string[];
   costType?: string[];
   search?: string;
@@ -24,6 +32,12 @@ export interface TransactionFilters {
   /** Only rows a machine categorised that no human has confirmed. */
   needsReviewOnly?: boolean;
   includeVoided?: boolean;
+  /**
+   * Show the card's own leg of card payments. Off by default: it is the
+   * mirror of the debit that left checking, so the register listed the same
+   * payment twice and the card half is the uninformative one.
+   */
+  includeCardPaymentCredits?: boolean;
   includeTransfers?: boolean;
   limit?: number;
   offset?: number;
@@ -34,6 +48,7 @@ export async function getTransactions(f: TransactionFilters = {}) {
     SELECT * FROM v_transactions
     WHERE superseded_by_id IS NULL
       ${f.includeVoided ? sql`` : sql`AND voided_at IS NULL`}
+      ${f.includeCardPaymentCredits ? sql`` : sql`AND NOT is_card_payment_credit`}
       ${f.includeTransfers === false ? sql`AND transfer_id IS NULL` : sql``}
       ${f.from ? sql`AND eff_posted_date >= ${f.from}::date` : sql``}
       ${f.to ? sql`AND eff_posted_date <= ${f.to}::date` : sql``}
@@ -41,6 +56,11 @@ export async function getTransactions(f: TransactionFilters = {}) {
       ${f.categoryIds?.length
         ? sql`AND (category_id = ANY(${f.categoryIds}::uuid[])
                    OR rollup_category_id = ANY(${f.categoryIds}::uuid[]))`
+        : sql``}
+      ${f.excludeCategoryIds?.length
+        ? sql`AND (category_id IS NULL
+                   OR (NOT category_id = ANY(${f.excludeCategoryIds}::uuid[])
+                       AND NOT rollup_category_id = ANY(${f.excludeCategoryIds}::uuid[])))`
         : sql``}
       ${f.necessity?.length ? sql`AND eff_necessity::text = ANY(${f.necessity})` : sql``}
       ${f.costType?.length ? sql`AND eff_cost_type::text = ANY(${f.costType})` : sql``}
@@ -65,12 +85,18 @@ export async function countTransactions(f: TransactionFilters = {}): Promise<num
     SELECT count(*)::int AS c FROM v_transactions
     WHERE superseded_by_id IS NULL
       ${f.includeVoided ? sql`` : sql`AND voided_at IS NULL`}
+      ${f.includeCardPaymentCredits ? sql`` : sql`AND NOT is_card_payment_credit`}
       ${f.from ? sql`AND eff_posted_date >= ${f.from}::date` : sql``}
       ${f.to ? sql`AND eff_posted_date <= ${f.to}::date` : sql``}
       ${f.accountIds?.length ? sql`AND account_id = ANY(${f.accountIds}::uuid[])` : sql``}
       ${f.categoryIds?.length
         ? sql`AND (category_id = ANY(${f.categoryIds}::uuid[])
                    OR rollup_category_id = ANY(${f.categoryIds}::uuid[]))`
+        : sql``}
+      ${f.excludeCategoryIds?.length
+        ? sql`AND (category_id IS NULL
+                   OR (NOT category_id = ANY(${f.excludeCategoryIds}::uuid[])
+                       AND NOT rollup_category_id = ANY(${f.excludeCategoryIds}::uuid[])))`
         : sql``}
       ${f.uncategorizedOnly
         ? sql`AND (category_id IS NULL OR category_source IN ('unset','default'))`

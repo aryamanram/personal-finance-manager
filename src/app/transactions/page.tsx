@@ -32,12 +32,32 @@ export default async function TransactionsPage({
   const requested = one('period');
   const period = periods.find((p) => p.key === requested) ?? periods[0];
 
+  const allCategories = await getCategories();
+
+  /**
+   * Categories hidden from the register.
+   *
+   * The URL carries what is HIDDEN, not what is shown, because the default is
+   * not "everything" — Credit Card Payment starts off. An absent param has to
+   * mean the default, so encoding the shown set would make a fresh load and a
+   * deliberately-empty selection look identical. `hide=none` is the explicit
+   * "show everything", which an absent param cannot express.
+   */
+  const defaultHiddenIds = allCategories
+    .filter((c) => c.name === 'Credit Card Payment')
+    .map((c) => c.id);
+  const hideParam = one('hide');
+  const hiddenCategoryIds =
+    hideParam === 'none' ? []
+    : hideParam ? hideParam.split(',').filter(Boolean)
+    : defaultHiddenIds;
+
   const filters = {
     // An explicit from/to still wins, so a link with a hand-built range works.
     from: one('from') ?? period?.from,
     to: one('to') ?? period?.to,
     accountIds: one('account') ? [one('account')!] : undefined,
-    categoryIds: one('category') ? [one('category')!] : undefined,
+    excludeCategoryIds: hiddenCategoryIds,
     search: one('q'),
     uncategorizedOnly: one('uncategorized') === '1',
     needsReviewOnly: one('review') === '1',
@@ -45,10 +65,10 @@ export default async function TransactionsPage({
     limit: 300,
   };
 
-  const [transactions, total, categories, accounts, review] = await Promise.all([
+  const categories = allCategories;
+  const [transactions, total, accounts, review] = await Promise.all([
     getTransactions(filters),
     countTransactions(filters),
-    getCategories(),
     getAccounts(),
     // Scoped to the period, so the chip counts what the table would show.
     getReviewCounts({ from: filters.from, to: filters.to }),
@@ -75,12 +95,11 @@ export default async function TransactionsPage({
           <form className="flex flex-wrap items-center gap-2 text-xs">
             {/* Preserve the chip filters while searching — dropping them made
                 the search box silently widen the result set. */}
-            {/* 'category' is back: the filter navigates on its own now, so
-                it is NOT a field in this form, and without carrying it here
-                applying a search would silently drop the category filter and
-                widen the result set. */}
+            {/* 'hide' rides along: the filter navigates on its own and is
+                not a field of this form, so without carrying it here applying
+                a search would silently un-hide everything. */}
             {passthrough(params, [
-              'uncategorized', 'review', 'voided', 'from', 'to', 'period', 'category',
+              'uncategorized', 'review', 'voided', 'from', 'to', 'period', 'hide',
             ])}
             <input
               name="q"
@@ -102,7 +121,11 @@ export default async function TransactionsPage({
                 it navigates on pick, so there is nothing to Apply. Its trigger
                 is type="button" so it never submits, and 'category' rides
                 along in the passthrough above. */}
-            <CategoryFilter categories={categories} activeId={one('category')} />
+            <CategoryFilter
+              categories={categories}
+              hiddenIds={hiddenCategoryIds}
+              defaultHiddenIds={defaultHiddenIds}
+            />
 
             <button
               type="submit"

@@ -159,3 +159,80 @@ describe('filtering by a category includes its subcategories', () => {
     expect(names).not.toContain('UNSPLIT SUBSCRIPTION');
   });
 });
+
+describe('the card side of a card payment is not in the register', () => {
+  /**
+   * A card payment produces two rows: -1000 on checking and +1000 on the
+   * CARD, because positive on a liability account means the debt went down.
+   * They are one event, and the card leg is the useless half — the debit is
+   * what proves a bill got paid.
+   *
+   * The rule is STRUCTURAL, not categorical: positive, on a credit account,
+   * with payment-shaped text. Two of these rows were filed as "Account
+   * Transfer" rather than "Credit Card Payment", so a category-name rule
+   * would have missed them.
+   */
+  let cardId: string;
+
+  beforeAll(async () => {
+    [{ id: cardId }] = await sql<{ id: string }[]>`SELECT ${acct.explorerId}::uuid AS id`;
+    const rows: [string, number, string][] = [
+      ['PAYMENT THANK YOU', 100000, '2026-08-16'],     // the card leg
+      ['STATEMENT CREDIT REFUND', 2500, '2026-08-18'], // a refund: NOT a payment
+      ['MERCHANT PURCHASE', -4200, '2026-08-19'],      // an ordinary charge
+    ];
+    for (const [descr, cents, date] of rows) {
+      await sql`
+        INSERT INTO transactions
+          (account_id, raw_description, amount_cents, posted_date, status, source, fingerprint)
+        VALUES (${cardId}, ${descr}, ${cents}, ${date}, 'posted', 'csv',
+                ${fingerprint({ accountId: cardId, postedDate: date, amountCents: cents, rawDescription: descr })})`;
+    }
+  });
+
+  it('flags the payment leg', async () => {
+    const [row] = await sql<{ is_card_payment_credit: boolean }[]>`
+      SELECT is_card_payment_credit FROM v_transactions
+      WHERE raw_description = 'PAYMENT THANK YOU'`;
+    expect(row.is_card_payment_credit).toBe(true);
+  });
+
+  it('does NOT flag a refund, which is real money coming back', async () => {
+    // Positive on a card too, but it must stay visible: a refund is money
+    // returning, not a duplicate of a debit somewhere else.
+    const [row] = await sql<{ is_card_payment_credit: boolean }[]>`
+      SELECT is_card_payment_credit FROM v_transactions
+      WHERE raw_description = 'STATEMENT CREDIT REFUND'`;
+    expect(row.is_card_payment_credit).toBe(false);
+  });
+
+  it('does NOT flag an ordinary charge', async () => {
+    const [row] = await sql<{ is_card_payment_credit: boolean }[]>`
+      SELECT is_card_payment_credit FROM v_transactions
+      WHERE raw_description = 'MERCHANT PURCHASE'`;
+    expect(row.is_card_payment_credit).toBe(false);
+  });
+
+  it('keeps the payment leg out of the register by default', async () => {
+    const { getTransactions } = await import('@/lib/queries');
+    const shown = (await getTransactions({})).map((r) => r.raw_description);
+    expect(shown).not.toContain('PAYMENT THANK YOU');
+    expect(shown).toContain('STATEMENT CREDIT REFUND');
+    expect(shown).toContain('MERCHANT PURCHASE');
+  });
+
+  it('can still be reached deliberately, so nothing is unreachable', async () => {
+    const { getTransactions } = await import('@/lib/queries');
+    const shown = (await getTransactions({ includeCardPaymentCredits: true }))
+      .map((r) => r.raw_description);
+    expect(shown).toContain('PAYMENT THANK YOU');
+  });
+
+  it('counts what it shows', async () => {
+    // getTransactions and countTransactions must apply the same predicate,
+    // or the header promises rows the table does not have.
+    const { getTransactions, countTransactions } = await import('@/lib/queries');
+    const rows = await getTransactions({ limit: 1000 });
+    expect(await countTransactions({})).toBe(rows.length);
+  });
+});

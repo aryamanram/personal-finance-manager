@@ -92,6 +92,8 @@ export interface VTransaction {
   account_name: string;
   account_type: AccountType;
   counts_as_spending: boolean;
+  /** The card's own leg of a card payment — the duplicate half. */
+  is_card_payment_credit: boolean;
 }
 
 export interface MonthlyCashflow {
