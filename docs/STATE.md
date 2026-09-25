@@ -27,6 +27,13 @@ Describe the *shape* of a decision here and keep the specifics there.
 Nothing blocking. The register rebuild is merged (PR #11); everything is on
 `main` and the full gate is green there.
 
+**One branch is open and unmerged: `categorization-design`.** It is a spec —
+`docs/CATEGORIZATION.md`, the layer under DESIGN.md §8 — and no code depends on
+it. Its finding worth acting on: the SimpleFIN bridge populates `payee` on
+every transaction and this ledger drops it on every sync, along with three
+other signals. No feed carries product detail, so that is the ceiling on
+automatic granularity. Merge it or act on it; do not let it rot unread.
+
 CodeRabbit had not finished its review when the PR was merged, so that branch
 went in unreviewed by it. Nothing was dismissed — it simply never reported.
 Worth a glance over `src/components/CategoryFilter.tsx` and the ingest changes
