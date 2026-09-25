@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { Figure } from './Figure';
 import { RowEditor } from './RowEditor';
@@ -17,28 +17,62 @@ import type { VTransaction, CategoryWithGroup } from '@/lib/types';
 export function TransactionRow({
   txn,
   categories,
-  usage,
   selected,
   onSelect,
   onPatch,
+  onConfirm,
   pending,
   repeatsDate,
-  viewYear,
 }: {
   txn: VTransaction;
   categories: CategoryWithGroup[];
-  usage: Record<string, number>;
   selected: boolean;
   /** The row above shares this date, so printing it again says nothing. */
   repeatsDate?: boolean;
   /** Dates in this year print without one; others carry a short year. */
-  viewYear: number;
-  onSelect: (id: string, on: boolean) => void;
+  /** `extend` is shift-click: take every row between the last one and this. */
+  onSelect: (id: string, on: boolean, extend?: boolean) => void;
   onPatch: (id: string, patch: Record<string, unknown>) => void;
+  /** Lock the category the row already has — agreeing with the machine. */
+  onConfirm: (id: string) => void;
   pending?: boolean;
 }) {
   const [editing, setEditing] = useState<null | 'amount'>(null);
   const [expanded, setExpanded] = useState(false);
+  const editorRef = useRef<HTMLTableRowElement>(null);
+
+  // Opening a row near the bottom of the viewport put the editor below the
+  // fold, so setting a category meant scrolling to find the panel you had
+  // just opened.
+  //
+  // scrollIntoView's block options are not enough here. 'nearest' stops as
+  // soon as the top edge shows, leaving the category button off screen, and
+  // 'end' aligns to the viewport bottom without accounting for the sticky
+  // header above. So compute the target directly: scroll only as far as it
+  // takes to fit the panel, and leave it alone when it already fits.
+  useEffect(() => {
+    if (!expanded) return;
+    const el = editorRef.current;
+    if (!el) return;
+
+    // Measure after paint. On the tick the effect first runs, the editor row
+    // has not been laid out yet, so its height reads as 0 and nothing scrolls.
+    const id = requestAnimationFrame(() => {
+      const r = el.getBoundingClientRect();
+      const HEADER = 64;   // the sticky nav, which overlays the top of the page
+      const MARGIN = 12;
+      const overflowBelow = r.bottom - (window.innerHeight - MARGIN);
+      const overflowAbove = HEADER + MARGIN - r.top;
+
+      // Never scroll so far that the panel's own top slips under the header.
+      const delta = overflowBelow > 0
+        ? Math.min(overflowBelow, r.top - HEADER - MARGIN)
+        : overflowAbove > 0 ? -overflowAbove : 0;
+
+      if (delta !== 0) window.scrollBy({ top: delta, behavior: 'smooth' });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [expanded]);
   const voided = txn.voided_at !== null;
 
   // Renamed: a display override exists, so the bank's string is worth showing.
@@ -70,6 +104,14 @@ export function TransactionRow({
         <input
           type="checkbox"
           checked={selected}
+          // shiftKey is readable on click but not on change, so the range
+          // gesture has to be captured here and the change left to fire.
+          onClick={(e) => {
+            if (e.shiftKey) {
+              onSelect(txn.id, !selected, true);
+              e.preventDefault();
+            }
+          }}
           onChange={(e) => onSelect(txn.id, e.target.checked)}
           aria-label={`Select ${txn.eff_description}`}
           className="accent-edited"
@@ -91,7 +133,7 @@ export function TransactionRow({
               : txn.eff_posted_date
           }
         >
-          {formatRegisterDate(txn.eff_posted_date, viewYear)}
+          {formatRegisterDate(txn.eff_posted_date)}
         </span>
       </td>
 
@@ -132,23 +174,35 @@ export function TransactionRow({
             past the scrollport and gets clipped. In the editor the palette is
             in normal flow, and the row's other decisions — renaming,
             remembering the merchant — are in reach at the same time. */}
+        <div className="flex w-full items-center gap-2">
         <button
           onClick={() => setExpanded(true)}
-          className="flex w-full items-center gap-2 text-left text-sm text-paper-dim transition-colors hover:text-paper"
+          className="flex min-w-0 items-center gap-2 text-left text-sm text-paper-dim transition-colors hover:text-paper"
         >
           <span className="truncate">{txn.category_name ?? 'Uncategorized'}</span>
-          {/* A quiet mark, not a boxed chip. On a freshly synced ledger nearly
-              every row is a machine guess, and a chip on all of them marks
-              nothing. The "Needs review" filter works the backlog; this just
-              says where the category came from. */}
-          {isGuess && (
-            <span
-              className="eyebrow shrink-0 text-[9px] text-paper-faint"
-              title={`Categorised by ${txn.category_source} — open the row to confirm or change`}
-            >
-              guess
-            </span>
-          )}
+        </button>
+
+        {/* Quick-accept. The commonest review action by far is "the machine
+            got it right", and routing that through the editor is four
+            interactions — open, open the palette, find the category it
+            already has, pick it — to change nothing but the lock.
+            
+            It replaces the old "guess" label rather than sitting next to it:
+            the label said where the category came from, which this says too
+            by being present at all. */}
+        {isGuess && (
+          <button
+            onClick={() => onConfirm(txn.id)}
+            disabled={pending}
+            title={`Categorised by ${txn.category_source} — click to confirm`}
+            aria-label={`Confirm ${txn.category_name} for ${txn.eff_description}`}
+            className="eyebrow shrink-0 rounded-sm border border-ink-600 px-1.5 py-0.5 text-[9px] text-paper-faint transition-colors hover:border-edited hover:text-edited disabled:opacity-40"
+          >
+            accept
+          </button>
+        )}
+
+        <div className="flex items-center gap-2">
           {/* The fixed/variable and required/discretionary axes used to have a
               column of their own, restating what the category already implies
               on all 396 rows. They only carry information when a human has
@@ -167,7 +221,8 @@ export function TransactionRow({
               ◆
             </span>
           )}
-        </button>
+        </div>
+        </div>
       </td>
       <td className="w-32 py-2 pr-2 text-right">
         {editing === 'amount' ? (
@@ -198,9 +253,22 @@ export function TransactionRow({
                 : 'Click to correct'
             }
           >
+            {/* Green means money you EARNED, not "positive number".
+                
+                A credit-card payment is +1000 on the card — the card's own
+                books, where a positive amount means the debt went down. The
+                same payment is -1000 on checking. Colouring by sign alone
+                rendered the card leg green, which reads as income from paying
+                off a card. So did every transfer landing in an account: the
+                ledger showed $36,400 of internal movement in the same colour
+                as $14,966 of actual pay.
+                
+                Only eff_necessity = 'income' is green now. Transfers, on
+                either leg and whichever way they point, are neutral. */}
             <Figure
               cents={txn.eff_amount_cents}
               original={txn.amount_cents_override !== null ? txn.amount_cents : undefined}
+              tone={amountTone(txn.eff_necessity)}
               className="text-sm"
             />
           </button>
@@ -209,12 +277,11 @@ export function TransactionRow({
     </tr>
 
     {expanded && (
-      <tr className="rule-b">
+      <tr ref={editorRef} className="rule-b">
         <td colSpan={5} className="p-0">
           <RowEditor
             txn={txn}
             categories={categories}
-            usage={usage}
             onPatch={onPatch}
             onClose={() => setExpanded(false)}
           />
@@ -251,4 +318,19 @@ function parseInput(raw: string): number | null {
   const cents = Number(whole || '0') * 100 + Number((frac + '00').slice(0, 2));
   if (!Number.isSafeInteger(cents) || cents === 0) return null;
   return neg ? -cents : cents;
+}
+
+/**
+ * The colour an amount gets in the register.
+ *
+ * Green means money you EARNED, not "positive number". A credit-card payment
+ * is +1000 on the card — a liability account, where positive means the debt
+ * went down — and -1000 on checking. The two legs have opposite signs, so a
+ * sign-based rule is necessarily wrong about one of them, and it was wrong in
+ * the direction that reads as income from paying off a card.
+ *
+ * Exported so the tests call this rather than a copy of it.
+ */
+export function amountTone(necessity: string): 'in' | 'neutral' {
+  return necessity === 'income' ? 'in' : 'neutral';
 }

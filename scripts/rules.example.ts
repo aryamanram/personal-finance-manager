@@ -28,6 +28,18 @@ interface RuleSpec {
   category: string;       // must be an existing category name
   costType?: 'fixed' | 'variable';
   necessity?: 'required' | 'discretionary' | 'income' | 'transfer' | 'investment';
+  /**
+   * Integer CENTS, signed, inclusive. Money in is positive and money out is
+   * negative (I1), so `amountMin: 1` means "only credits" and
+   * `amountMax: -1` means "only debits".
+   *
+   * This is what makes a payment rail usable as a rule. Venmo, Zelle and
+   * PayPal all carry the same merchant string in both directions, so a
+   * description alone cannot tell "someone paid me back" from "I bought
+   * something" — the sign can.
+   */
+  amountMin?: number;
+  amountMax?: number;
 }
 
 /**
@@ -52,6 +64,13 @@ const RULES: RuleSpec[] = [
     regex: 'Payment Thank You', category: 'Credit Card Payment' },
 
   // --- Income --------------------------------------------------------------
+  // A PAYMENT RAIL, split by sign. Venmo carries the same merchant string
+  // whether someone paid you or you paid them, so the description alone is
+  // ambiguous and the amount is what disambiguates. Money coming IN over a
+  // peer-payment rail is a split bill being settled; money going OUT could be
+  // anything, so it deliberately gets no rule.
+  { name: 'Venmo received', priority: 22, regex: 'VENMO',
+    category: 'Reimbursement', amountMin: 1 },
   { name: 'Payroll', priority: 20, regex: 'YOUR EMPLOYER PAYROLL', category: 'Paycheck' },
   { name: 'Bank interest', priority: 21, regex: '^INTEREST PAYMENT',
     category: 'Interest & Dividends' },
@@ -72,9 +91,54 @@ const RULES: RuleSpec[] = [
     category: 'Cash Withdrawn' },
 
   // --- Discretionary -------------------------------------------------------
-  { name: 'Subscriptions', priority: 60,
-    regex: 'NETFLIX|SPOTIFY|YouTubePremi', category: 'Subscriptions' },
-  { name: 'Restaurants', priority: 70, regex: 'TST\\*|SQ \\*|DOORDASH', category: 'Restaurants' },
+  // SUBCATEGORIES: a subcategory is an ordinary category with a parent, so a
+  // rule targets it by name exactly like any other. Prefer the specific one —
+  // totals roll up to the parent automatically (v_transactions.rollup_*), so
+  // naming 'Streaming & Video' still counts toward Subscriptions, while
+  // naming 'Subscriptions' throws away detail you cannot recover later.
+  //
+  // Order matters: first match wins, so put the specific patterns above the
+  // catch-all. A bare 'Subscriptions' rule at the same priority would swallow
+  // everything below it.
+  { name: 'Streaming', priority: 60,
+    regex: 'NETFLIX|HULU|DISNEYPLUS|YouTubePremi|HELP\\.MAX\\.COM',
+    category: 'Streaming & Video' },
+  { name: 'Music', priority: 60, regex: 'SPOTIFY|APPLE MUSIC|TIDAL',
+    category: 'Music & Audio' },
+  { name: 'AI tools', priority: 60, regex: 'OPENAI|ANTHROPIC|CURSOR|CODEIUM',
+    category: 'AI Tools' },
+  { name: 'Hosting', priority: 60, regex: 'HOSTINGER|NAMECHEAP|CLOUDFLARE|DIGITALOCEAN',
+    category: 'Hosting & Domains' },
+  { name: 'Creator support', priority: 60, regex: 'PATREON|KO-FI|SUBSTACK',
+    category: 'Creator Support' },
+  // The catch-all, LAST: anything recurring that no rule above claimed. It
+  // lands on the parent and shows up in the register as needing a human.
+  { name: 'Subscriptions (other)', priority: 69,
+    regex: 'SUBSCRIPTION|RECURRING', category: 'Subscriptions' },
+  // Entertainment splits by WHAT it is, not by whether it repeats: a monthly
+  // game subscription is a Subscriptions row, a one-off game purchase is here.
+  //
+  // Games & Hobbies is under SHOPPING, not Entertainment: buying a physical
+  // thing is retail, and entertainment is the experience. A digital game
+  // bought once is Video Games under Entertainment; the shop that sold you
+  // cards or a board game is Shopping.
+  { name: 'Games & hobbies', priority: 65,
+    regex: 'GAME STORE|HOBBY|COLLECTIBLES|COMICS', category: 'Games & Hobbies' },
+  { name: 'Video games', priority: 65, regex: 'STEAM|NINTENDO|PLAYSTATION|XBOX',
+    category: 'Video Games' },
+  { name: 'Live events', priority: 65, regex: 'TICKETMASTER|STUBHUB|SEATGEEK|AXS ',
+    category: 'Live Events' },
+  { name: 'Museums', priority: 65, regex: 'MUSEUM|AQUARIUM|ZOO ',
+    category: 'Museums & Attractions' },
+
+  // A merchant whose name says nothing about what it is. Worth a rule
+  // precisely BECAUSE no model will guess it right twice running.
+  { name: 'Adult comics', priority: 62, regex: 'TOOMICS', category: 'Adult' },
+
+  // SQ * is Square, a PAYMENT RAIL — it prefixes every merchant that takes
+  // card through Square, from a restaurant to a game store. Matching it alone
+  // sweeps all of them into one category. Name the merchant after the prefix.
+  { name: 'Restaurants', priority: 70, regex: 'TST\\*|DOORDASH', category: 'Restaurants' },
 ];
 
 /** Creates or updates the example categorization rules in the database. */
@@ -101,15 +165,19 @@ async function main() {
           set_category_id = ${categoryId},
           set_cost_type = ${r.costType ?? null},
           set_necessity = ${r.necessity ?? null},
+          match_amount_min = ${r.amountMin ?? null},
+          match_amount_max = ${r.amountMax ?? null},
           is_active = TRUE
         WHERE id = ${existing.id}`;
       updated++;
     } else {
       await sql`
         INSERT INTO rules (name, priority, match_regex, set_category_id,
-                           set_cost_type, set_necessity)
+                           set_cost_type, set_necessity,
+                           match_amount_min, match_amount_max)
         VALUES (${r.name}, ${r.priority}, ${r.regex}, ${categoryId},
-                ${r.costType ?? null}, ${r.necessity ?? null})`;
+                ${r.costType ?? null}, ${r.necessity ?? null},
+                ${r.amountMin ?? null}, ${r.amountMax ?? null})`;
       created++;
     }
   }

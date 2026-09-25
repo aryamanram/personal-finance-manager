@@ -258,18 +258,102 @@ describe('a rule written with padded spaces still matches', () => {
   });
 });
 
-describe('merchant defaults', () => {
-  it('propagates a merchant default to future transactions of that merchant', async () => {
-    const travel = await categoryByName(sql, 'Travel');
+describe('a rule can match on sign, which is what makes a payment rail usable', () => {
+  /**
+   * Venmo, Zelle and PayPal carry the SAME merchant string in both
+   * directions. "VENMO" alone cannot tell "someone paid me back for dinner"
+   * from "I bought something at a flea market" — and getting that wrong is
+   * not a mislabel, it moves money between income and spending.
+   *
+   * The sign can tell them apart. Money in over a peer-payment rail is a
+   * split bill being settled; money out is deliberately left alone.
+   */
+  it('categorises only the credits, and leaves the debits untouched', async () => {
+    const { upsertTransactions } = await import('@/ingest/upsert');
+    await upsertTransactions(sql, [
+      { accountId: acct.checkingId, amountCents: 4500, postedDate: '2026-08-05', status: 'posted', rawDescription: 'RAIL CASHOUT IN', source: 'csv', externalId: null },
+      { accountId: acct.checkingId, amountCents: -2000, postedDate: '2026-08-06', status: 'posted', rawDescription: 'RAIL PAYMENT OUT', source: 'csv', externalId: null },
+    ]);
+
+    const reimbursement = await categoryByName(sql, 'Reimbursement');
     await sql`
-      UPDATE merchants SET default_category_id = ${travel}
-      WHERE normalized_name LIKE '%mystery vendor%'`;
+      INSERT INTO rules (name, priority, match_regex, set_category_id, match_amount_min)
+      VALUES ('Rail received', 22, 'RAIL', ${reimbursement}, 1)`;
 
     await runCategorization(sql, { noLlm: true });
 
-    const [row] = await sql<{ category_name: string; category_source: string }[]>`
-      SELECT category_name, category_source FROM v_transactions
+    const rows = await sql<{ raw_description: string; category_name: string | null }[]>`
+      SELECT raw_description, category_name FROM v_transactions
+      WHERE raw_description LIKE 'RAIL%' ORDER BY raw_description`;
+
+    // The credit is claimed...
+    expect(rows.find((r) => r.raw_description === 'RAIL CASHOUT IN')!.category_name)
+      .toBe('Reimbursement');
+    // ...and the debit is NOT. Without the amount bound the same regex would
+    // have booked a $20 purchase as income.
+    expect(rows.find((r) => r.raw_description === 'RAIL PAYMENT OUT')!.category_name)
+      .not.toBe('Reimbursement');
+  });
+
+  it('bounds by cents, not dollars (I1)', async () => {
+    // amountMin: 1 means one CENT, so a $0.01 credit still matches. A rule
+    // written in dollars would silently skip everything under a dollar.
+    const { upsertTransactions } = await import('@/ingest/upsert');
+    await upsertTransactions(sql, [
+      { accountId: acct.checkingId, amountCents: 1, postedDate: '2026-08-07', status: 'posted', rawDescription: 'RAIL TINY IN', source: 'csv', externalId: null },
+    ]);
+    await runCategorization(sql, { noLlm: true });
+    const [row] = await sql<{ category_name: string | null }[]>`
+      SELECT category_name FROM v_transactions WHERE raw_description = 'RAIL TINY IN'`;
+    expect(row.category_name).toBe('Reimbursement');
+  });
+});
+
+describe('no merchant carries a standing default', () => {
+  /**
+   * There used to be merchants.default_category_id, re-applied on every run.
+   * It was removed because it silently REVERTED later, more specific
+   * decisions: every transaction of a merchant was forced back to one
+   * category, so splitting Subscriptions into subcategories would have been
+   * undone by the next sync — 87 rows, no error, no warning.
+   *
+   * Categorisation now comes only from rules and the model, both of which are
+   * visible and editable. This asserts the property that replaced it.
+   */
+  it('leaves a categorised row alone on a re-run', async () => {
+    const travel = await categoryByName(sql, 'Travel');
+    const dining = await categoryByName(sql, 'Restaurants');
+
+    const [row] = await sql<{ id: string; merchant_id: string | null }[]>`
+      SELECT id, merchant_id FROM transactions
       WHERE raw_description = 'MYSTERY VENDOR XJ7'`;
-    expect(row.category_name).toBe('Travel');
+
+    // Two rows, same merchant, filed differently — the shape a subcategory
+    // split produces, and exactly what a merchant default used to flatten.
+    await sql`
+      UPDATE transactions SET category_id = ${travel}, category_source = 'rule'
+      WHERE id = ${row.id}`;
+    const [sibling] = await sql<{ id: string }[]>`
+      SELECT id FROM transactions
+      WHERE merchant_id = ${row.merchant_id} AND id <> ${row.id} LIMIT 1`;
+    if (sibling) {
+      await sql`
+        UPDATE transactions SET category_id = ${dining}, category_source = 'rule'
+        WHERE id = ${sibling.id}`;
+    }
+
+    await runCategorization(sql, { noLlm: true });
+
+    const [after] = await sql<{ category_name: string }[]>`
+      SELECT category_name FROM v_transactions WHERE id = ${row.id}`;
+    expect(after.category_name).toBe('Travel');
+
+    if (sibling) {
+      // The one that matters: a sibling of the SAME merchant keeps its own
+      // category rather than being pulled to whatever the merchant "is".
+      const [sibAfter] = await sql<{ category_name: string }[]>`
+        SELECT category_name FROM v_transactions WHERE id = ${sibling.id}`;
+      expect(sibAfter.category_name).toBe('Restaurants');
+    }
   });
 });

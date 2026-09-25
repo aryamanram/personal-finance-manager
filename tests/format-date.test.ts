@@ -62,19 +62,26 @@ describe('date formatting is timezone-independent', () => {
 });
 
 describe('formatRegisterDate', () => {
-  it('omits the year inside the year being viewed', () => {
-    expect(formatRegisterDate('2026-09-16', 2026)).toBe('Sep 16');
-    expect(formatRegisterDate('2026-01-02', 2026)).toBe('Jan 2');
+  it('always carries the year, whatever period is on screen', () => {
+    // It used to be omitted for "the year being viewed", which only works if
+    // you already know which year you asked for. The register defaults to all
+    // time, so a bare "Sep 16" was ambiguous on the commonest screen there is.
+    expect(formatRegisterDate('2026-09-16')).toBe("Sep 16 '26");
+    expect(formatRegisterDate('2026-01-02')).toBe("Jan 2 '26");
   });
 
-  it('shows a short year outside it, so rows a year apart cannot be confused', () => {
-    expect(formatRegisterDate('2024-09-16', 2026)).toBe("Sep 16 '24");
-    expect(formatRegisterDate('2025-12-31', 2026)).toBe("Dec 31 '25");
+  it('distinguishes the same day in different years', () => {
+    // The property that matters: two rows a year apart must never render
+    // identically, because in a ledger that reads as one transaction.
+    const days = ['2024-09-16', '2025-09-16', '2026-09-16'].map(formatRegisterDate);
+    expect(new Set(days).size).toBe(3);
+    expect(days).toEqual(["Sep 16 '24", "Sep 16 '25", "Sep 16 '26"]);
   });
 
   it('reads the date as written, with no timezone shift', () => {
     // The ledger's dates are calendar dates, not instants. Parsing through
     // Date() west of Greenwich once moved them a day.
-    expect(formatRegisterDate('2026-03-01', 2026)).toBe('Mar 1');
+    expect(formatRegisterDate('2026-03-01')).toBe("Mar 1 '26");
+    expect(formatRegisterDate('2026-01-01')).toBe("Jan 1 '26");
   });
 });

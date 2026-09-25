@@ -123,8 +123,53 @@ CREATE TABLE categories (
   is_archived BOOLEAN NOT NULL DEFAULT FALSE,
   sort_order  INT NOT NULL DEFAULT 0,
 
+  -- A subcategory: NULL for a top-level category, otherwise its parent.
+  -- One extra level, not a general tree -- see the CHECK below.
+  --
+  -- A subcategory is still an ordinary category, so transactions keep pointing
+  -- at exactly one category_id and rules, the LLM and the palette work on it
+  -- unchanged. Rolling up is a join to parent_id rather than a second schema.
+  parent_id   UUID REFERENCES categories(id) ON DELETE RESTRICT,
+
   UNIQUE (group_id, name)
 );
+
+-- A subcategory belongs to the same group as its parent. Without this a child
+-- could be filed under a different group from the parent it rolls up into, and
+-- the two would disagree about which band of the Sankey the money is in.
+CREATE OR REPLACE FUNCTION category_parent_is_sane() RETURNS TRIGGER AS $$
+DECLARE
+  parent_group  UUID;
+  parent_parent UUID;
+BEGIN
+  IF NEW.parent_id IS NULL THEN RETURN NEW; END IF;
+
+  IF NEW.parent_id = NEW.id THEN
+    RAISE EXCEPTION 'A category cannot be its own parent';
+  END IF;
+
+  SELECT group_id, parent_id INTO parent_group, parent_parent
+    FROM categories WHERE id = NEW.parent_id;
+
+  -- Depth is capped at two on purpose. Arbitrary nesting means every rollup
+  -- becomes a recursive CTE and every UI has to decide how deep to render.
+  IF parent_parent IS NOT NULL THEN
+    RAISE EXCEPTION 'Categories nest one level deep; % already has a parent', NEW.parent_id;
+  END IF;
+
+  IF parent_group <> NEW.group_id THEN
+    RAISE EXCEPTION 'A subcategory must be in the same group as its parent';
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER categories_parent_sane
+  BEFORE INSERT OR UPDATE OF parent_id, group_id ON categories
+  FOR EACH ROW EXECUTE FUNCTION category_parent_is_sane();
+
+CREATE INDEX categories_parent ON categories (parent_id) WHERE parent_id IS NOT NULL;
 
 -- ---------------------------------------------------------------------------
 -- Merchants — normalized payee names, so rules and LLM calls are cached per
@@ -135,8 +180,6 @@ CREATE TABLE merchants (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   normalized_name     TEXT NOT NULL UNIQUE,   -- "starbucks"
   display_name        TEXT NOT NULL,          -- "Starbucks"
-  -- Once you set this, every future txn from this merchant lands here.
-  default_category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
   logo_url            TEXT,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -422,6 +465,12 @@ SELECT
   COALESCE(t.necessity_override, c.default_necessity, 'discretionary') AS eff_necessity,
   c.name       AS category_name,
   cg.name      AS category_group_name,
+  -- The rollup category: a subcategory reports its parent, a top-level
+  -- category reports itself. Anything that wants totals "as if subcategories
+  -- did not exist" groups by these and is correct without knowing the depth.
+  COALESCE(cp.id,   c.id)   AS rollup_category_id,
+  COALESCE(cp.name, c.name) AS rollup_category_name,
+  (c.parent_id IS NOT NULL) AS is_subcategory,
   a.name       AS account_name,
   a.type       AS account_type,
   -- The single predicate for "does this count as spending?"
@@ -432,10 +481,24 @@ SELECT
    AND t.voided_at IS NULL
    AND t.status = 'posted'
    AND COALESCE(t.necessity_override, c.default_necessity)
-       NOT IN ('transfer','income','investment'))                      AS counts_as_spending
+       NOT IN ('transfer','income','investment'))                      AS counts_as_spending,
+  -- The card's own side of a card payment: money arriving at a LIABILITY
+  -- account, which means the balance owed went down. It is the mirror of the
+  -- debit that left checking, so showing both in one register lists the same
+  -- event twice — and the card leg is the useless half, because the debit is
+  -- the one that proves a bill got paid.
+  --
+  -- Structural, not categorical: it holds whatever the row is filed as, which
+  -- matters because two of these were sitting in 'Account Transfer'. A REFUND
+  -- is also positive on a card and is NOT this — real money coming back, which
+  -- must stay visible — so the description has to look like a payment.
+  (a.type = 'credit'
+   AND COALESCE(t.amount_cents_override, t.amount_cents) > 0
+   AND t.raw_description ~* '(payment|autopay|ach deposit|thank you)')  AS is_card_payment_credit
 FROM transactions t
 JOIN accounts a          ON a.id = t.account_id
 LEFT JOIN categories c   ON c.id = t.category_id
+LEFT JOIN categories cp  ON cp.id = c.parent_id
 LEFT JOIN category_groups cg ON cg.id = c.group_id;
 
 -- The headline number you're actually after:

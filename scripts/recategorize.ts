@@ -10,7 +10,7 @@
 import postgres from 'postgres';
 import { loadEnv } from './env.js';
 import { pgTypes } from '../src/lib/pg-types.js';
-import { runCategorization, refreshSuggestions } from '../src/categorize/run.js';
+import { runCategorization } from '../src/categorize/run.js';
 
 loadEnv();
 
@@ -39,13 +39,9 @@ async function main() {
 
   console.log('');
   console.log(`  merchants linked      ${report.merchantsLinked} (${report.merchantsCreated} new)`);
-  console.log(`  by merchant default   ${report.byMerchantDefault}`);
   console.log(`  by rule               ${report.byRule}`);
   console.log(`  by model              ${report.byLlm}${report.llmSkipped ? ` (skipped: ${report.llmSkipped})` : ''}`);
   console.log(`  to Uncategorized      ${report.toUncategorized}`);
-
-  const suggestions = await refreshSuggestions(sql);
-  if (suggestions > 0) console.log(`  suggestions refreshed ${suggestions}`);
 
   // Locked rows whose suggestion disagrees are exactly the cases where a rule
   // would have saved a manual edit (DESIGN.md §8).

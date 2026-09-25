@@ -2,6 +2,7 @@ import Link from 'next/link';
 import {
   getCashflow, getCategoryBreakdownRange, getPeriodTotals, getUncategorizedCount,
   getLastSync, getReconciliation, getLedgerBounds, getActiveMonths,
+  getCardSettlement,
 } from '@/lib/queries';
 import { PeriodPicker } from '@/components/PeriodPicker';
 import { buildPeriods } from '@/lib/periods';
@@ -11,6 +12,7 @@ import { CostMixChart } from '@/components/CostMixChart';
 import { CategoryRows } from '@/components/CategoryRows';
 import { Figure } from '@/components/Figure';
 import { formatCents } from '@/money';
+import type { CardSettlement } from '@/lib/queries';
 import { formatTimestampShort } from '@/lib/format-date';
 
 export const dynamic = 'force-dynamic';
@@ -37,12 +39,13 @@ export default async function DashboardPage({
   const periods = buildPeriods(activeMonths, bounds);
   const period = resolvePeriod(periods, cashflow, requested);
 
-  const [totals, breakdown, uncategorized, lastSync, drift] = await Promise.all([
+  const [totals, breakdown, uncategorized, lastSync, drift, cards] = await Promise.all([
     getPeriodTotals(period.from, period.to),
     getCategoryBreakdownRange(period.from, period.to),
     getUncategorizedCount(),
     getLastSync(),
     getReconciliation(),
+    getCardSettlement(),
   ]);
 
   // Month-over-month deltas only mean something for a single whole month —
@@ -90,6 +93,8 @@ export default async function DashboardPage({
       </header>
 
       {/* Reconciliation is passive, per DESIGN.md §12 — a banner, never a block. */}
+      <CardSettlementLine cards={cards} />
+
       {drift.length > 0 && (
         <div className="rule-t border-t-edited/40 pt-3 text-xs text-paper-dim">
           <span className="text-edited">Reconciliation</span>{' '}
@@ -163,6 +168,49 @@ function EmptyState() {
         </Link>
         <code className="figure text-xs text-paper-faint">npm run seed</code>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Whether the credit cards' purchases can be trusted as a spending record.
+ *
+ * Card purchases are counted as spending and the payments that settle them are
+ * not (they carry necessity 'transfer'), which is only sound while the cards
+ * are actually paid off. This line is the standing evidence: for each card,
+ * charges minus applied payments should equal what the issuer says is owed.
+ *
+ * Stated plainly when it holds rather than hidden, because "no warning" and
+ * "not checked" look identical, and this is the assumption everything
+ * downstream of a card rests on.
+ */
+function CardSettlementLine({ cards }: { cards: CardSettlement[] }) {
+  if (cards.length === 0) return null;
+  const off = cards.filter((c) => c.gap_cents !== 0);
+  const clearing = cards.filter((c) => c.clearing_cents > 0);
+
+  return (
+    <div className="rule-t pt-3 text-xs text-paper-dim">
+      <span className={off.length > 0 ? 'text-edited' : 'text-paper-faint'}>Cards</span>
+      {off.length === 0 ? (
+        <span className="ml-3">
+          every charge is settled or still owed — the ledger and the issuers agree
+          {clearing.map((c) => (
+            <span key={c.name} className="ml-2 text-paper-faint">
+              ({c.name}:{' '}
+              <span className="figure">{formatCents(c.clearing_cents)}</span> clearing)
+            </span>
+          ))}
+        </span>
+      ) : (
+        off.map((c) => (
+          <span key={c.name} className="ml-3">
+            {c.name} is{' '}
+            <span className="figure text-paper">{formatCents(c.gap_cents)}</span> away from
+            what the issuer reports
+          </span>
+        ))
+      )}
     </div>
   );
 }

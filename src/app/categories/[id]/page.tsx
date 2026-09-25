@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { sql } from '@/lib/db';
-import { getTransactions, getCategories, getAccounts, getCategoryUsage } from '@/lib/queries';
+import { getTransactions, getCategories, getAccounts } from '@/lib/queries';
 import { TransactionTable } from '@/components/TransactionTable';
 import { CategoryDefaults } from '@/components/CategoryDefaults';
 import { Figure } from '@/components/Figure';
@@ -31,7 +31,7 @@ export default async function CategoryPage({
 
   if (!category) notFound();
 
-  const [trend, transactions, categories, accounts, usage] = await Promise.all([
+  const [trend, transactions, categories, accounts] = await Promise.all([
     sql<{ month: string; total_cents: number; n: number }[]>`
       SELECT date_trunc('month', eff_posted_date)::date AS month,
              -SUM(eff_amount_cents)::bigint AS total_cents,
@@ -42,7 +42,6 @@ export default async function CategoryPage({
     getTransactions({ categoryIds: [id], limit: 200 }),
     getCategories(),
     getAccounts(),
-    getCategoryUsage(),
   ]);
 
   const months = [...trend].reverse();
@@ -115,7 +114,6 @@ export default async function CategoryPage({
         <TransactionTable
           initial={transactions}
           categories={categories}
-          usage={Object.fromEntries(usage)}
           accounts={accounts}
           total={transactions.length}
         />

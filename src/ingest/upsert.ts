@@ -11,7 +11,7 @@
  */
 import type { Sql, TransactionSql } from 'postgres';
 import type { CanonicalTxn } from '../lib/types';
-import { fingerprint } from './fingerprint';
+import { fingerprint, normalize } from './fingerprint';
 
 export interface UpsertResult {
   seen: number;
@@ -24,10 +24,21 @@ export interface UpsertResult {
 
 interface Prepared extends CanonicalTxn {
   fp: string;
+  /** normalize()d description, for the fuzzy-adoption prefix test. */
+  normalized: string;
 }
 
 /** Days a pending row may differ from its posted version. */
 const SUPERSEDE_DAY_WINDOW = 5;
+
+/**
+ * Days a CSV row may differ from the synced row describing the same charge.
+ *
+ * Two, not five: this pass matches on amount and a description prefix, so a
+ * wider window would start merging a genuinely repeated charge — the same
+ * subscription billed twice in a week — into one row.
+ */
+const ADOPT_DAY_WINDOW = 2;
 /** Fractional amount drift allowed pending→posted (tips, gas pre-auths). */
 const SUPERSEDE_AMOUNT_TOLERANCE = 0.25;
 
@@ -54,6 +65,7 @@ export async function upsertTransactions(
       amountCents: r.amountCents,
       rawDescription: r.rawDescription,
     }),
+    normalized: normalize(r.rawDescription),
   }));
 
   await sql.begin(async (tx) => {
@@ -111,6 +123,56 @@ export async function upsertTransactions(
           WHERE id = ${adoptable[0].id}`;
         result.adopted++;
         claimed.add(adoptable[0].id);
+        continue;
+      }
+
+      // Step 2b: fuzzy adoption, for when the fingerprint cannot match.
+      //
+      // The fingerprint needs the normalized description AND the date to be
+      // identical. A bank's own feed and its CSV export routinely disagree on
+      // both: one charge arrived as
+      //
+      //   CSV   POS DEBIT  <MERCHANT>  +1385... CA      on the 16th
+      //   SYNC  <MERCHANT> BR <MERCHANT-DOMAIN> CA      on the 17th
+      //
+      // — the feed repeats the merchant's domain, and posts a day later. Two
+      // rows for one $15 charge, and it had also split the categorisation:
+      // the CSV row was filed by hand, the synced one by a rule.
+      //
+      // So: same account, EXACT same amount, within two days, no external_id,
+      // and a shared merchant key. Amount is the strict part — this never
+      // merges two different amounts, which is what keeps it from inventing a
+      // reconciliation error. The merchant key is what stops two genuinely
+      // separate $15 charges in one week from collapsing into one.
+      const candidates = await tx<{ id: string; raw_description: string }[]>`
+        SELECT id, raw_description FROM transactions
+        WHERE account_id = ${row.accountId}
+          AND amount_cents = ${row.amountCents}
+          AND external_id IS NULL
+          AND voided_at IS NULL
+          AND superseded_by_id IS NULL
+          AND abs(posted_date - ${row.postedDate}::date) <= ${ADOPT_DAY_WINDOW}
+          ${claimed.size > 0 ? tx`AND id <> ALL(${Array.from(claimed)}::uuid[])` : tx``}
+        ORDER BY abs(posted_date - ${row.postedDate}::date), created_at`;
+
+      // The prefix test runs HERE, not in SQL: normalize() is TypeScript, and
+      // reimplementing it as a SQL expression would give the ingest path two
+      // definitions of "the same description" that could drift apart.
+      const fuzzy = candidates.filter((c) => {
+        const other = normalize(c.raw_description);
+        if (row.normalized.length === 0 || other.length === 0) return false;
+        return other.startsWith(row.normalized) || row.normalized.startsWith(other);
+      });
+
+      if (fuzzy.length > 0) {
+        await tx`
+          UPDATE transactions
+          SET external_id = ${row.externalId!},
+              source      = ${row.source},
+              status      = ${row.status}
+          WHERE id = ${fuzzy[0].id}`;
+        result.adopted++;
+        claimed.add(fuzzy[0].id);
         continue;
       }
 

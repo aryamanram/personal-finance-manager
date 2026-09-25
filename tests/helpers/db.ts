@@ -24,6 +24,12 @@ export async function createTestDb(name: string) {
 
   return {
     sql,
+    /**
+     * The scratch database's connection string. Modules that build their own
+     * pool from DATABASE_URL at import time (src/lib/db.ts) need this set
+     * before they are imported.
+     */
+    url,
     async drop() {
       await sql.end();
       const a = postgres(BASE, { max: 1, onnotice: () => {} });

@@ -10,7 +10,21 @@ export interface TransactionFilters {
   from?: string;
   to?: string;
   accountIds?: string[];
+  /**
+   * Categories to show. A PARENT includes its subcategories: filtering to
+   * Subscriptions and getting none of its ten children's rows would be a
+   * filter that lies about the category it names. rollup_category_id is the
+   * view's own answer for that (I3), so the union is resolved in SQL.
+   */
   categoryIds?: string[];
+  /**
+   * Categories to hide. The register's filter is subtractive — it starts with
+   * everything except Credit Card Payment — so it needs the complement of
+   * categoryIds rather than a very long include list.
+   *
+   * Hiding a PARENT hides its subcategories with it, via rollup_category_id.
+   */
+  excludeCategoryIds?: string[];
   necessity?: string[];
   costType?: string[];
   search?: string;
@@ -18,6 +32,12 @@ export interface TransactionFilters {
   /** Only rows a machine categorised that no human has confirmed. */
   needsReviewOnly?: boolean;
   includeVoided?: boolean;
+  /**
+   * Show the card's own leg of card payments. Off by default: it is the
+   * mirror of the debit that left checking, so the register listed the same
+   * payment twice and the card half is the uninformative one.
+   */
+  includeCardPaymentCredits?: boolean;
   includeTransfers?: boolean;
   limit?: number;
   offset?: number;
@@ -28,11 +48,20 @@ export async function getTransactions(f: TransactionFilters = {}) {
     SELECT * FROM v_transactions
     WHERE superseded_by_id IS NULL
       ${f.includeVoided ? sql`` : sql`AND voided_at IS NULL`}
+      ${f.includeCardPaymentCredits ? sql`` : sql`AND NOT is_card_payment_credit`}
       ${f.includeTransfers === false ? sql`AND transfer_id IS NULL` : sql``}
       ${f.from ? sql`AND eff_posted_date >= ${f.from}::date` : sql``}
       ${f.to ? sql`AND eff_posted_date <= ${f.to}::date` : sql``}
       ${f.accountIds?.length ? sql`AND account_id = ANY(${f.accountIds}::uuid[])` : sql``}
-      ${f.categoryIds?.length ? sql`AND category_id = ANY(${f.categoryIds}::uuid[])` : sql``}
+      ${f.categoryIds?.length
+        ? sql`AND (category_id = ANY(${f.categoryIds}::uuid[])
+                   OR rollup_category_id = ANY(${f.categoryIds}::uuid[]))`
+        : sql``}
+      ${f.excludeCategoryIds?.length
+        ? sql`AND (category_id IS NULL
+                   OR (NOT category_id = ANY(${f.excludeCategoryIds}::uuid[])
+                       AND NOT rollup_category_id = ANY(${f.excludeCategoryIds}::uuid[])))`
+        : sql``}
       ${f.necessity?.length ? sql`AND eff_necessity::text = ANY(${f.necessity})` : sql``}
       ${f.costType?.length ? sql`AND eff_cost_type::text = ANY(${f.costType})` : sql``}
       ${f.uncategorizedOnly
@@ -56,10 +85,19 @@ export async function countTransactions(f: TransactionFilters = {}): Promise<num
     SELECT count(*)::int AS c FROM v_transactions
     WHERE superseded_by_id IS NULL
       ${f.includeVoided ? sql`` : sql`AND voided_at IS NULL`}
+      ${f.includeCardPaymentCredits ? sql`` : sql`AND NOT is_card_payment_credit`}
       ${f.from ? sql`AND eff_posted_date >= ${f.from}::date` : sql``}
       ${f.to ? sql`AND eff_posted_date <= ${f.to}::date` : sql``}
       ${f.accountIds?.length ? sql`AND account_id = ANY(${f.accountIds}::uuid[])` : sql``}
-      ${f.categoryIds?.length ? sql`AND category_id = ANY(${f.categoryIds}::uuid[])` : sql``}
+      ${f.categoryIds?.length
+        ? sql`AND (category_id = ANY(${f.categoryIds}::uuid[])
+                   OR rollup_category_id = ANY(${f.categoryIds}::uuid[]))`
+        : sql``}
+      ${f.excludeCategoryIds?.length
+        ? sql`AND (category_id IS NULL
+                   OR (NOT category_id = ANY(${f.excludeCategoryIds}::uuid[])
+                       AND NOT rollup_category_id = ANY(${f.excludeCategoryIds}::uuid[])))`
+        : sql``}
       ${f.uncategorizedOnly
         ? sql`AND (category_id IS NULL OR category_source IN ('unset','default'))`
         : sql``}
@@ -226,10 +264,16 @@ export async function getLedgerBounds(): Promise<{ first: string; last: string }
 
 export async function getCategories(): Promise<CategoryWithGroup[]> {
   return sql<CategoryWithGroup[]>`
-    SELECT c.*, g.name AS group_name, g.sort_order AS group_sort_order
-    FROM categories c JOIN category_groups g ON g.id = c.group_id
+    SELECT c.*, g.name AS group_name, g.sort_order AS group_sort_order,
+           p.name AS parent_name
+    FROM categories c
+    JOIN category_groups g ON g.id = c.group_id
+    LEFT JOIN categories p ON p.id = c.parent_id
     WHERE NOT c.is_archived
-    ORDER BY g.sort_order, c.sort_order, c.name`;
+    -- Parents before their own children, so a consumer that walks this list
+    -- in order meets a parent before anything that rolls up into it.
+    ORDER BY g.sort_order, COALESCE(p.sort_order, c.sort_order), c.parent_id NULLS FIRST,
+             c.sort_order, c.name`;
 }
 
 export async function getAccounts(): Promise<Account[]> {
@@ -262,7 +306,22 @@ export interface ReviewCounts {
   uncategorized: number;
 }
 
-export async function getReviewCounts(): Promise<ReviewCounts> {
+/**
+ * The two review backlogs, optionally within a date range.
+ *
+ * These count what the REGISTER CAN SHOW, which means every predicate the
+ * register applies unconditionally has to appear here too. A chip promises
+ * rows; clicking it must deliver them.
+ *
+ * It has broken twice the same way. First the counts were global while the
+ * table was scoped to a period, so "Needs review · 338" sat above 34 rows.
+ * Then card-payment credit legs became permanently invisible, and the four
+ * of them that no human had confirmed became a chip reading "4" over an
+ * empty table with no way to clear it — the backlog could never reach zero.
+ */
+export async function getReviewCounts(
+  range?: { from?: string; to?: string },
+): Promise<ReviewCounts> {
   const [row] = await sql<ReviewCounts[]>`
     SELECT
       count(*) FILTER (
@@ -274,27 +333,16 @@ export async function getReviewCounts(): Promise<ReviewCounts> {
         WHERE category_id IS NULL OR category_source IN ('unset','default')
       )::int AS uncategorized
     FROM v_transactions
-    WHERE superseded_by_id IS NULL AND voided_at IS NULL`;
+    WHERE superseded_by_id IS NULL AND voided_at IS NULL
+      -- The register never shows these, so counting them offers work that
+      -- cannot be done.
+      AND NOT is_card_payment_credit
+      ${range?.from ? sql`AND eff_posted_date >= ${range.from}::date` : sql``}
+      ${range?.to ? sql`AND eff_posted_date <= ${range.to}::date` : sql``}`;
   return row;
 }
 
-/**
- * How often you have *chosen* each category by hand, most-used first.
- *
- * Counts only locked rows — machine assignments are what the ranking exists to
- * correct, so letting them vote would rank the model's habits rather than
- * yours. This turns a 35-item alphabetical list into the few categories
- * actually in play (wireframe 34:2).
- */
-export async function getCategoryUsage(): Promise<Map<string, number>> {
-  const rows = await sql<{ category_id: string; uses: number }[]>`
-    SELECT category_id, count(*)::int AS uses
-    FROM v_transactions
-    WHERE superseded_by_id IS NULL AND voided_at IS NULL
-      AND category_locked AND category_id IS NOT NULL
-    GROUP BY category_id`;
-  return new Map(rows.map((r) => [r.category_id, r.uses]));
-}
+
 
 /**
  * What the register knows about one row's merchant, for the edit panel.
@@ -309,8 +357,7 @@ export async function getCategoryUsage(): Promise<Map<string, number>> {
 export interface MerchantContext {
   merchant_id: string;
   merchant_name: string;
-  default_category_id: string | null;
-  default_uses: number;
+  /** This merchant's other rows that no human has decided yet. */
   siblings: number;
 }
 
@@ -324,13 +371,6 @@ export async function getMerchantContext(
     SELECT
       m.id           AS merchant_id,
       m.display_name AS merchant_name,
-      m.default_category_id,
-      (SELECT count(*)::int FROM v_transactions v
-        WHERE v.merchant_id = m.id
-          AND v.category_locked
-          AND v.category_id IS NOT DISTINCT FROM m.default_category_id
-          AND v.voided_at IS NULL AND v.superseded_by_id IS NULL
-      )              AS default_uses,
       (SELECT count(*)::int FROM v_transactions v
         WHERE v.merchant_id = m.id
           AND v.id <> ${transactionId}
@@ -394,16 +434,121 @@ export async function getLastSync() {
  * Reads raw amount_cents deliberately — reconciliation is one of the two places
  * allowed to (I3).
  */
+/**
+ * Accounts whose ledger sum does not match the balance the bank reports.
+ *
+ * Reconciled against BOTH bases, and only reported when neither matches.
+ * Institutions disagree about whether a reported balance includes pending
+ * authorisations: this ledger's checking balance does, and its cards' do not.
+ * Testing one basis therefore invents drift on every account that uses the
+ * other — a card with a large pending payment looked thousands of dollars out
+ * when it was reconciling exactly.
+ *
+ * Real drift means a transaction the ledger has not seen, which is what this
+ * banner is for. A timing difference in pending rows is not that.
+ */
 export async function getReconciliation() {
   return sql<{ name: string; ledger_cents: number; reported_cents: number; drift_cents: number }[]>`
-    SELECT a.name,
-           COALESCE(SUM(t.amount_cents), 0)::bigint        AS ledger_cents,
-           a.balance_cents                                 AS reported_cents,
-           (a.balance_cents - COALESCE(SUM(t.amount_cents), 0))::bigint AS drift_cents
-    FROM accounts a
-    LEFT JOIN transactions t
-      ON t.account_id = a.id AND t.voided_at IS NULL AND t.superseded_by_id IS NULL
-    WHERE a.is_active AND a.balance_cents IS NOT NULL AND a.type <> 'investment'
-    GROUP BY a.id, a.name, a.balance_cents
-    HAVING a.balance_cents <> COALESCE(SUM(t.amount_cents), 0)`;
+    WITH sums AS (
+      SELECT a.id, a.name, a.balance_cents,
+             COALESCE(SUM(t.amount_cents), 0)::bigint AS all_rows,
+             COALESCE(SUM(t.amount_cents) FILTER (WHERE t.status = 'posted'), 0)::bigint
+               AS posted_only
+      FROM accounts a
+      LEFT JOIN transactions t
+        ON t.account_id = a.id AND t.voided_at IS NULL AND t.superseded_by_id IS NULL
+      WHERE a.is_active AND a.balance_cents IS NOT NULL AND a.type <> 'investment'
+      GROUP BY a.id, a.name, a.balance_cents
+    )
+    SELECT name,
+           all_rows                          AS ledger_cents,
+           balance_cents                     AS reported_cents,
+           -- Report the smaller discrepancy: it names how far off the ledger
+           -- is under the basis that fits this account best.
+           CASE WHEN abs(balance_cents - all_rows) <= abs(balance_cents - posted_only)
+                THEN balance_cents - all_rows
+                ELSE balance_cents - posted_only END AS drift_cents
+    FROM sums
+    WHERE balance_cents <> all_rows AND balance_cents <> posted_only`;
 }
+
+export interface CardSettlement {
+  name: string;
+  /** Everything bought on the card, as positive cents. */
+  purchases_cents: number;
+  /** Payments the issuer has applied, as positive cents. */
+  paid_cents: number;
+  /** Payments sent but not yet applied — in flight, not missing. */
+  clearing_cents: number;
+  /** purchases − paid: what the ledger says is still on the card. */
+  owed_cents: number;
+  /** What the issuer says is still on the card. */
+  bank_owed_cents: number;
+  /** bank − ledger, after pending payments are set aside. Zero means it holds. */
+  gap_cents: number;
+}
+
+/**
+ * Proof that a credit card's purchases are a complete, non-duplicated record
+ * of spending.
+ *
+ * A card is a pass-through: money is spent at a merchant, and later the same
+ * money leaves checking to settle the balance. Only one of those two is
+ * spending. This ledger counts the purchase (that is where the money actually
+ * went) and marks the payment `transfer`, so `counts_as_spending` is false on
+ * it and nothing is double-counted.
+ *
+ * That choice is only safe while the card is actually being paid off. If a
+ * balance were being carried, purchases would overstate what left the bank.
+ * The identity that rules this out is:
+ *
+ *     purchases − paid_off = still_owed = what the issuer reports
+ *
+ * When it holds, every dollar charged is accounted for as either settled or
+ * currently outstanding — no unrecorded interest, no missing payment, no
+ * purchase the feed never delivered. The payments need no category; they exist
+ * as evidence of exactly this, and the purchases carry the detail.
+ *
+ * Only POSTED payments count toward `paid`. A payment the issuer has received
+ * but not yet applied is still in the ledger and still reduces what will be
+ * owed, but the reported balance does not know about it yet — counting it
+ * would make a card look overpaid by the amount currently in flight, which is
+ * exactly how a card here read before the split: purchases and payments were
+ * equal, so the ledger claimed a zero balance while the issuer still wanted
+ * the whole outstanding amount. Pending payments are reported separately as `clearing_cents`.
+ *
+ * Balances are stored negative on a credit account (money owed), so they are
+ * negated here to read as a positive amount outstanding.
+ */
+export async function getCardSettlement(): Promise<CardSettlement[]> {
+  return sql<CardSettlement[]>`
+    WITH per_card AS (
+      SELECT
+        a.name,
+        a.balance_cents,
+        COALESCE(-SUM(v.eff_amount_cents) FILTER (
+          WHERE v.counts_as_spending), 0)::bigint            AS purchases,
+        COALESCE(SUM(v.eff_amount_cents) FILTER (
+          WHERE v.eff_necessity = 'transfer' AND v.eff_amount_cents > 0
+            AND v.status = 'posted'), 0)::bigint             AS paid,
+        COALESCE(SUM(v.eff_amount_cents) FILTER (
+          WHERE v.eff_necessity = 'transfer' AND v.eff_amount_cents > 0
+            AND v.status <> 'posted'), 0)::bigint            AS clearing
+      FROM accounts a
+      LEFT JOIN v_transactions v
+        ON v.account_id = a.id AND v.voided_at IS NULL AND v.superseded_by_id IS NULL
+      WHERE a.is_active AND a.type = 'credit' AND a.balance_cents IS NOT NULL
+      GROUP BY a.id, a.name, a.balance_cents
+    )
+    SELECT
+      name,
+      purchases                        AS purchases_cents,
+      paid                             AS paid_cents,
+      clearing                         AS clearing_cents,
+      (purchases - paid)               AS owed_cents,
+      (-balance_cents)                 AS bank_owed_cents,
+      (-balance_cents - (purchases - paid)) AS gap_cents
+    FROM per_card
+    ORDER BY name`;
+}
+

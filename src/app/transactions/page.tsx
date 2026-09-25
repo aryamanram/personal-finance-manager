@@ -1,9 +1,13 @@
 import {
   getTransactions, countTransactions, getCategories, getAccounts,
-  getReviewCounts, getCategoryUsage,
+  getReviewCounts, getActiveMonths, getLedgerBounds,
 } from '@/lib/queries';
 import { TransactionTable } from '@/components/TransactionTable';
 import { FilterChips } from '@/components/FilterChips';
+import { PeriodPicker } from '@/components/PeriodPicker';
+import { buildPeriods } from '@/lib/periods';
+import { CategoryFilter } from '@/components/CategoryFilter';
+import type { CategoryWithGroup } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,11 +22,40 @@ export default async function TransactionsPage({
     return Array.isArray(v) ? v[0] : v;
   };
 
+  // The same ?period= the dashboard and Flow use, so moving between pages
+  // keeps the timeframe. The register defaults to ALL TIME rather than the
+  // latest month: this page is where you go to find a transaction, and a
+  // default that hides most of the ledger makes a search look like a miss.
+  const [activeMonths, bounds] = await Promise.all([getActiveMonths(), getLedgerBounds()]);
+  const periods = bounds && activeMonths.length > 0
+    ? buildPeriods(activeMonths, bounds)
+    : [];
+  const requested = one('period');
+  const period = periods.find((p) => p.key === requested) ?? periods[0];
+
+  const allCategories = await getCategories();
+
+  /**
+   * Categories hidden from the register.
+   *
+   * The URL carries what is HIDDEN, not what is shown, because the default is
+   * not "everything" — Credit Card Payment starts off. An absent param has to
+   * mean the default, so encoding the shown set would make a fresh load and a
+   * deliberately-empty selection look identical. `hide=none` is the explicit
+   * "show everything", which an absent param cannot express.
+   */
+  const defaultHiddenIds = allCategories
+    .filter((c) => c.name === 'Credit Card Payment')
+    .map((c) => c.id);
+  const hideParam = one('hide');
+  const hiddenCategoryIds = resolveHidden(hideParam, allCategories, defaultHiddenIds);
+
   const filters = {
-    from: one('from'),
-    to: one('to'),
+    // An explicit from/to still wins, so a link with a hand-built range works.
+    from: one('from') ?? period?.from,
+    to: one('to') ?? period?.to,
     accountIds: one('account') ? [one('account')!] : undefined,
-    categoryIds: one('category') ? [one('category')!] : undefined,
+    excludeCategoryIds: hiddenCategoryIds,
     search: one('q'),
     uncategorizedOnly: one('uncategorized') === '1',
     needsReviewOnly: one('review') === '1',
@@ -30,13 +63,13 @@ export default async function TransactionsPage({
     limit: 300,
   };
 
-  const [transactions, total, categories, accounts, review, usage] = await Promise.all([
+  const categories = allCategories;
+  const [transactions, total, accounts, review] = await Promise.all([
     getTransactions(filters),
     countTransactions(filters),
-    getCategories(),
     getAccounts(),
-    getReviewCounts(),
-    getCategoryUsage(),
+    // Scoped to the period, so the chip counts what the table would show.
+    getReviewCounts({ from: filters.from, to: filters.to }),
   ]);
 
   return (
@@ -60,7 +93,12 @@ export default async function TransactionsPage({
           <form className="flex flex-wrap items-center gap-2 text-xs">
             {/* Preserve the chip filters while searching — dropping them made
                 the search box silently widen the result set. */}
-            {passthrough(params, ['uncategorized', 'review', 'voided', 'from', 'to', 'category'])}
+            {/* 'hide' rides along: the filter navigates on its own and is
+                not a field of this form, so without carrying it here applying
+                a search would silently un-hide everything. */}
+            {passthrough(params, [
+              'uncategorized', 'review', 'voided', 'from', 'to', 'period', 'hide',
+            ])}
             <input
               name="q"
               defaultValue={one('q') ?? ''}
@@ -77,6 +115,16 @@ export default async function TransactionsPage({
                 <option key={a.id} value={a.id}>{a.name}</option>
               ))}
             </select>
+            {/* Sits with the other filters, but is not a FIELD of this form:
+                it navigates on pick, so there is nothing to Apply. Its trigger
+                is type="button" so it never submits, and 'category' rides
+                along in the passthrough above. */}
+            <CategoryFilter
+              categories={categories}
+              hiddenIds={hiddenCategoryIds}
+              defaultHiddenIds={defaultHiddenIds}
+            />
+
             <button
               type="submit"
               className="rounded-sm border border-ink-500 px-3 py-1.5 text-paper transition-colors hover:border-paper-faint"
@@ -85,6 +133,10 @@ export default async function TransactionsPage({
             </button>
           </form>
         </div>
+
+        {period && (
+          <PeriodPicker options={periods} active={period.key} />
+        )}
 
         <FilterChips
           needsReview={review.needs_review}
@@ -101,12 +153,42 @@ export default async function TransactionsPage({
       <TransactionTable
         initial={transactions}
         categories={categories}
-        usage={Object.fromEntries(usage)}
         accounts={accounts}
         total={total}
+        allCategoriesHidden={
+          allCategories.length > 0 && hiddenCategoryIds.length >= allCategories.length
+        }
       />
     </div>
   );
+}
+
+/**
+ * Which categories the register hides, from the `hide` param.
+ *
+ * Four forms, because the param has to distinguish "nothing was said" from
+ * "nothing is hidden", and because naming 55 uuids to hide is a worse URL than
+ * naming the 3 to show:
+ *
+ *   absent            the default (Credit Card Payment)
+ *   none              hide nothing
+ *   all               hide everything
+ *   only:<a>,<b>      show ONLY these
+ *   <a>,<b>           hide these
+ */
+export function resolveHidden(
+  param: string | undefined,
+  categories: CategoryWithGroup[],
+  fallback: string[],
+): string[] {
+  if (!param) return fallback;
+  if (param === 'none') return [];
+  if (param === 'all') return categories.map((c) => c.id);
+  if (param.startsWith('only:')) {
+    const shown = new Set(param.slice('only:'.length).split(',').filter(Boolean));
+    return categories.filter((c) => !shown.has(c.id)).map((c) => c.id);
+  }
+  return param.split(',').filter(Boolean);
 }
 
 /** Re-emits the chip filters as hidden inputs so the search form keeps them. */
