@@ -68,7 +68,8 @@ them as transfers — is sound rather than assumed. It holds to the cent today.
 
 ## Decisions worth not relitigating
 
-**Categories nest one level, no more.** `categories.parent_id`, with a trigger
+**Categories nest one level, no more.** (Moving one between parents is a single
+`parent_id` update — done once already, for hobby goods.) `categories.parent_id`, with a trigger
 refusing a third level and refusing a child in a different group from its
 parent. A subcategory is an ORDINARY category — transactions point at exactly
 one `category_id` — so rules, the model and the palette work on it unchanged,
@@ -80,6 +81,17 @@ Arbitrary nesting was rejected because every rollup becomes a recursive CTE and
 every screen has to choose a render depth. Promoting a category to a *group*
 instead was rejected because it moves it out of its group and does not
 generalise.
+
+**Hobby goods are Shopping, not Entertainment.** `Games & Hobbies` sits under
+Shopping. Entertainment is experiences and media — a ticket, a museum, a game
+played; buying physical goods is retail, whatever the goods are for. That is
+what Mint/MX, Yodlee and the YNAB convention all do, and it is the reading that
+survives the edge cases: a board game bought and a concert attended are not the
+same kind of spending just because both are fun.
+
+It started under Entertainment and moved once it was the largest discretionary
+line in the ledger. The move cost one `UPDATE` of `parent_id` and no data
+migration, which is the payoff of subcategories being ordinary categories.
 
 **Subscriptions are subcategorised by purpose, against the industry grain.**
 No major taxonomy does this — Plaid, MX/Mint, Monarch and Yodlee all sort by
@@ -165,11 +177,6 @@ Flagged rather than guessed at, per `docs/DESIGN.md` §12:
   list. Allowing proposals means deciding who curates the taxonomy.
 - **Reconciliation surfacing.** A passive banner today. Fine while drift is
   explainable; revisit if it starts firing for reasons nobody chases.
-- **Where hobby spending belongs.** `Games & Hobbies` is a subcategory of
-  Entertainment, and it is the largest discretionary line in the ledger. Almost
-  every taxonomy files hobby *goods* as retail instead — Entertainment being
-  experiences and media. Promoting it is one `UPDATE` of `parent_id` if burying
-  it a level deep starts to grate.
 - **Payment rails inside Shopping.** A large share of Shopping is PayPal and
   Affirm rows, which name how something was paid rather than what was bought.
   Instalment plans are deliberately *not* their own category — the destination

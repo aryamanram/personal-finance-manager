@@ -117,6 +117,11 @@ const RULES: RuleSpec[] = [
     regex: 'SUBSCRIPTION|RECURRING', category: 'Subscriptions' },
   // Entertainment splits by WHAT it is, not by whether it repeats: a monthly
   // game subscription is a Subscriptions row, a one-off game purchase is here.
+  //
+  // Games & Hobbies is under SHOPPING, not Entertainment: buying a physical
+  // thing is retail, and entertainment is the experience. A digital game
+  // bought once is Video Games under Entertainment; the shop that sold you
+  // cards or a board game is Shopping.
   { name: 'Games & hobbies', priority: 65,
     regex: 'GAME STORE|HOBBY|COLLECTIBLES|COMICS', category: 'Games & Hobbies' },
   { name: 'Video games', priority: 65, regex: 'STEAM|NINTENDO|PLAYSTATION|XBOX',
