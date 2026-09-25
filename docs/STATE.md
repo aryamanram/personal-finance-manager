@@ -24,12 +24,22 @@ Describe the *shape* of a decision here and keep the specifics there.
 
 ## Right now · last updated 2026-09-25
 
-Nothing blocking. Tests green. The register work is on a branch awaiting
-review; everything before it is on `main`.
+Nothing blocking. **PR #11** (`category-palette-groups` → `main`) is open and
+awaiting review — the register rebuild. Everything before it is on `main`.
 
-The categorisation backlog is **cleared** — every transaction is either
-hand-decided or confirmed. That is the steady state the register was rebuilt
-for, so the next machine pass has a locked baseline to respect.
+The categorisation backlog is **cleared**: every transaction is hand-decided or
+confirmed. That is the steady state the register was rebuilt for, and it means
+the next machine pass has a locked baseline to respect rather than a mixed one.
+
+Two things are half-done and will be obvious to the next person:
+
+- **Categorisation rules live only in the example file.** The Venmo-by-sign,
+  Toomics, and Entertainment patterns added this session are in
+  `scripts/rules.example.ts` as illustrations. They are not active until
+  copied into `private/my-rules.ts` and run. The `rules` table is empty.
+- **The subcategory assignments were applied as one-off SQL**, not as rules.
+  They hold, but a merchant that reappears under a new description will land on
+  the parent until a rule covers it.
 
 Two standing tasks the owner tracks — details in `private/STATE.local.md`:
 
@@ -50,6 +60,11 @@ against the banks' own balances.
 
 Connected: two card/bank feeds through SimpleFIN on a daily pull, one
 snapshot-tracked brokerage, and Claude Haiku for unknown merchants.
+
+The cards carry their own proof: `getCardSettlement()` checks, per card, that
+`purchases − payments_applied = still_owed = what the issuer reports`. While
+that holds, counting card purchases as spending — and the payments that settle
+them as transfers — is sound rather than assumed. It holds to the cent today.
 
 ## Decisions worth not relitigating
 
@@ -124,6 +139,11 @@ the second reading.
 
 ## Known and deliberate
 
+**The row editor's scroll-into-view is approximate.** Opening a row near the
+bottom of the register can leave the editor partly below the fold. Several
+offset-based fixes were tried and abandoned; shortening the panel helped more
+than any of them, and the remaining gap was not worth more tuning.
+
 - **`db:pull`** exists but Drizzle introspection is unused; `db/schema.sql` is
   hand-written and authoritative.
 - **`budgets` and `holdings` tables are empty.** Both are in the schema for
@@ -145,6 +165,19 @@ Flagged rather than guessed at, per `docs/DESIGN.md` §12:
   list. Allowing proposals means deciding who curates the taxonomy.
 - **Reconciliation surfacing.** A passive banner today. Fine while drift is
   explainable; revisit if it starts firing for reasons nobody chases.
+- **Where hobby spending belongs.** `Games & Hobbies` is a subcategory of
+  Entertainment, and it is the largest discretionary line in the ledger. Almost
+  every taxonomy files hobby *goods* as retail instead — Entertainment being
+  experiences and media. Promoting it is one `UPDATE` of `parent_id` if burying
+  it a level deep starts to grate.
+- **Payment rails inside Shopping.** A large share of Shopping is PayPal and
+  Affirm rows, which name how something was paid rather than what was bought.
+  Instalment plans are deliberately *not* their own category — the destination
+  is what matters — so they sit unspecified until a human says where the money
+  went. No automation will fix this; the descriptions do not carry it.
+- **Sankey depth.** The diagram still shows top-level categories while the list
+  under it shows subcategories. Expanding a band on click was chosen and not
+  built.
 
 ## Where things live
 
