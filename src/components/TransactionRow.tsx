@@ -20,6 +20,7 @@ export function TransactionRow({
   selected,
   onSelect,
   onPatch,
+  onConfirm,
   pending,
   repeatsDate,
   viewYear,
@@ -34,6 +35,8 @@ export function TransactionRow({
   /** `extend` is shift-click: take every row between the last one and this. */
   onSelect: (id: string, on: boolean, extend?: boolean) => void;
   onPatch: (id: string, patch: Record<string, unknown>) => void;
+  /** Lock the category the row already has — agreeing with the machine. */
+  onConfirm: (id: string) => void;
   pending?: boolean;
 }) {
   const [editing, setEditing] = useState<null | 'amount'>(null);
@@ -173,23 +176,35 @@ export function TransactionRow({
             past the scrollport and gets clipped. In the editor the palette is
             in normal flow, and the row's other decisions — renaming,
             remembering the merchant — are in reach at the same time. */}
+        <div className="flex w-full items-center gap-2">
         <button
           onClick={() => setExpanded(true)}
-          className="flex w-full items-center gap-2 text-left text-sm text-paper-dim transition-colors hover:text-paper"
+          className="flex min-w-0 items-center gap-2 text-left text-sm text-paper-dim transition-colors hover:text-paper"
         >
           <span className="truncate">{txn.category_name ?? 'Uncategorized'}</span>
-          {/* A quiet mark, not a boxed chip. On a freshly synced ledger nearly
-              every row is a machine guess, and a chip on all of them marks
-              nothing. The "Needs review" filter works the backlog; this just
-              says where the category came from. */}
-          {isGuess && (
-            <span
-              className="eyebrow shrink-0 text-[9px] text-paper-faint"
-              title={`Categorised by ${txn.category_source} — open the row to confirm or change`}
-            >
-              guess
-            </span>
-          )}
+        </button>
+
+        {/* Quick-accept. The commonest review action by far is "the machine
+            got it right", and routing that through the editor is four
+            interactions — open, open the palette, find the category it
+            already has, pick it — to change nothing but the lock.
+            
+            It replaces the old "guess" label rather than sitting next to it:
+            the label said where the category came from, which this says too
+            by being present at all. */}
+        {isGuess && (
+          <button
+            onClick={() => onConfirm(txn.id)}
+            disabled={pending}
+            title={`Categorised by ${txn.category_source} — click to confirm`}
+            aria-label={`Confirm ${txn.category_name} for ${txn.eff_description}`}
+            className="eyebrow shrink-0 rounded-sm border border-ink-600 px-1.5 py-0.5 text-[9px] text-paper-faint transition-colors hover:border-edited hover:text-edited disabled:opacity-40"
+          >
+            accept
+          </button>
+        )}
+
+        <div className="flex items-center gap-2">
           {/* The fixed/variable and required/discretionary axes used to have a
               column of their own, restating what the category already implies
               on all 396 rows. They only carry information when a human has
@@ -208,7 +223,8 @@ export function TransactionRow({
               ◆
             </span>
           )}
-        </button>
+        </div>
+        </div>
       </td>
       <td className="w-32 py-2 pr-2 text-right">
         {editing === 'amount' ? (

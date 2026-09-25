@@ -84,6 +84,33 @@ export function TransactionTable({
     },
   });
 
+  /**
+   * Confirming a guess: same category, now a human decision.
+   *
+   * It cannot go through `patch` — PATCHing category_id to the value the row
+   * already holds is a no-op that never sets the lock, which is the entire
+   * point. This route confirms instead, writing category_source='manual' and
+   * tripping the lock trigger (I4).
+   */
+  const confirm = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/transactions/${id}/merchant`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ category_id: rows.find((r) => r.id === id)!.category_id }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? 'Confirm failed');
+      }
+      return (await res.json()).transaction as VTransaction;
+    },
+    onSuccess: (fresh) => {
+      setRows((rs) => rs.map((r) => (r.id === fresh.id ? fresh : r)));
+      qc.invalidateQueries({ queryKey: ['cashflow'] });
+    },
+  });
+
   const bulk = useMutation({
     mutationFn: async (categoryId: string) => {
       const res = await fetch('/api/transactions/bulk', {
@@ -160,7 +187,7 @@ export function TransactionTable({
   };
 
   return (
-    <div>
+    <div className={selected.size > 0 ? 'pb-20' : undefined}>
       <div className="rule-b flex flex-wrap items-baseline justify-between gap-4 pb-2">
         {/* The header already carries the total, so repeating "n of N" here
             said the same number twice on one screen. What this line adds is
@@ -178,50 +205,6 @@ export function TransactionTable({
           )}
         </div>
 
-        {selected.size > 0 && (
-          <div className="flex items-center gap-3 text-xs">
-            <span className="text-paper-dim">
-              <span className="figure">{selected.size}</span> selected
-            </span>
-
-            {/* The same palette a single row opens. This was a flat <select>
-                of all 35 categories, so the one place you pick a category for
-                twelve rows at once was the one place with no grouping and no
-                search — the hardest pick got the worst control. */}
-            <div ref={bulkRef} className="relative">
-              <button
-                onClick={() => setBulkOpen((o) => !o)}
-                aria-expanded={bulkOpen}
-                className="rounded-sm border border-ink-500 px-2 py-1 text-paper transition-colors hover:border-paper-faint"
-              >
-                Set category <span aria-hidden>▾</span>
-              </button>
-              {bulkOpen && (
-                <div className="absolute right-0 top-full z-40 mt-1">
-                  <CategoryPalette
-                    categories={categories}
-                    onPick={(id) => {
-                      // Bulk-clearing to Uncategorized is not offered: the
-                      // palette's clear row only appears for a single row's
-                      // current category, and undoing it across a selection
-                      // has no single previous state to return to.
-                      if (id) bulk.mutate(id);
-                      setBulkOpen(false);
-                    }}
-                    onClose={() => setBulkOpen(false)}
-                  />
-                </div>
-              )}
-            </div>
-
-            <button
-              onClick={() => { setSelected(new Set()); anchorRef.current = null; }}
-              className="text-paper-faint transition-colors hover:text-paper"
-            >
-              Clear
-            </button>
-          </div>
-        )}
       </div>
 
       {patch.isError && (
@@ -268,7 +251,11 @@ export function TransactionTable({
               selected={selected.has(txn.id)}
               onSelect={toggle}
               onPatch={(id, p) => patch.mutate({ id, patch: p })}
-              pending={patch.isPending && patch.variables?.id === txn.id}
+              onConfirm={(id) => confirm.mutate(id)}
+              pending={
+                (patch.isPending && patch.variables?.id === txn.id)
+                || (confirm.isPending && confirm.variables === txn.id)
+              }
             />
           ))}
         </tbody>
@@ -280,6 +267,62 @@ export function TransactionTable({
           No transactions match these filters.
         </p>
       )}
+
+      {/* Fixed to the VIEWPORT, not the top of the table. Selecting rows at
+          the bottom of a 300-row register used to mean scrolling back up to
+          reach "Set category" — the controls were pinned above the table, so
+          the further you worked down the backlog the further away they got.
+          A bar that follows the viewport is in reach from any scroll
+          position, and it only exists while something is selected. */}
+      {selected.size > 0 && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-600 bg-ink-850/95 backdrop-blur">
+          <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-end gap-3 px-6 py-3 text-xs">
+            <span className="mr-auto text-paper-dim">
+              <span className="figure">{selected.size}</span> selected
+            </span>
+
+            {/* The same palette a single row opens. This was a flat <select>
+                of all 35 categories, so the one place you pick a category for
+                twelve rows at once was the one place with no grouping and no
+                search — the hardest pick got the worst control. */}
+            <div ref={bulkRef} className="relative">
+              <button
+                onClick={() => setBulkOpen((o) => !o)}
+                aria-expanded={bulkOpen}
+                className="rounded-sm border border-ink-500 px-3 py-1.5 text-paper transition-colors hover:border-paper-faint"
+              >
+                Set category <span aria-hidden>▾</span>
+              </button>
+              {bulkOpen && (
+                /* Opens UPWARD: the bar is at the bottom of the screen, so a
+                   panel below it would be off-screen. */
+                <div className="absolute bottom-full right-0 z-50 mb-1">
+                  <CategoryPalette
+                    categories={categories}
+                    onPick={(id) => {
+                      // Bulk-clearing to Uncategorized is not offered: the
+                      // palette's clear row only appears for a single row's
+                      // current category, and undoing it across a selection
+                      // has no single previous state to return to.
+                      if (id) bulk.mutate(id);
+                      setBulkOpen(false);
+                    }}
+                    onClose={() => setBulkOpen(false)}
+                  />
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => { setSelected(new Set()); anchorRef.current = null; }}
+              className="px-2 text-paper-faint transition-colors hover:text-paper"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

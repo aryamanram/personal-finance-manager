@@ -28,6 +28,18 @@ interface RuleSpec {
   category: string;       // must be an existing category name
   costType?: 'fixed' | 'variable';
   necessity?: 'required' | 'discretionary' | 'income' | 'transfer' | 'investment';
+  /**
+   * Integer CENTS, signed, inclusive. Money in is positive and money out is
+   * negative (I1), so `amountMin: 1` means "only credits" and
+   * `amountMax: -1` means "only debits".
+   *
+   * This is what makes a payment rail usable as a rule. Venmo, Zelle and
+   * PayPal all carry the same merchant string in both directions, so a
+   * description alone cannot tell "someone paid me back" from "I bought
+   * something" — the sign can.
+   */
+  amountMin?: number;
+  amountMax?: number;
 }
 
 /**
@@ -52,6 +64,13 @@ const RULES: RuleSpec[] = [
     regex: 'Payment Thank You', category: 'Credit Card Payment' },
 
   // --- Income --------------------------------------------------------------
+  // A PAYMENT RAIL, split by sign. Venmo carries the same merchant string
+  // whether someone paid you or you paid them, so the description alone is
+  // ambiguous and the amount is what disambiguates. Money coming IN over a
+  // peer-payment rail is a split bill being settled; money going OUT could be
+  // anything, so it deliberately gets no rule.
+  { name: 'Venmo received', priority: 22, regex: 'VENMO',
+    category: 'Reimbursement', amountMin: 1 },
   { name: 'Payroll', priority: 20, regex: 'YOUR EMPLOYER PAYROLL', category: 'Paycheck' },
   { name: 'Bank interest', priority: 21, regex: '^INTEREST PAYMENT',
     category: 'Interest & Dividends' },
@@ -107,6 +126,10 @@ const RULES: RuleSpec[] = [
   { name: 'Museums', priority: 65, regex: 'MUSEUM|AQUARIUM|ZOO ',
     category: 'Museums & Attractions' },
 
+  // A merchant whose name says nothing about what it is. Worth a rule
+  // precisely BECAUSE no model will guess it right twice running.
+  { name: 'Adult comics', priority: 62, regex: 'TOOMICS', category: 'Adult' },
+
   // SQ * is Square, a PAYMENT RAIL — it prefixes every merchant that takes
   // card through Square, from a restaurant to a game store. Matching it alone
   // sweeps all of them into one category. Name the merchant after the prefix.
@@ -137,15 +160,19 @@ async function main() {
           set_category_id = ${categoryId},
           set_cost_type = ${r.costType ?? null},
           set_necessity = ${r.necessity ?? null},
+          match_amount_min = ${r.amountMin ?? null},
+          match_amount_max = ${r.amountMax ?? null},
           is_active = TRUE
         WHERE id = ${existing.id}`;
       updated++;
     } else {
       await sql`
         INSERT INTO rules (name, priority, match_regex, set_category_id,
-                           set_cost_type, set_necessity)
+                           set_cost_type, set_necessity,
+                           match_amount_min, match_amount_max)
         VALUES (${r.name}, ${r.priority}, ${r.regex}, ${categoryId},
-                ${r.costType ?? null}, ${r.necessity ?? null})`;
+                ${r.costType ?? null}, ${r.necessity ?? null},
+                ${r.amountMin ?? null}, ${r.amountMax ?? null})`;
       created++;
     }
   }

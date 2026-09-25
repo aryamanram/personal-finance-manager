@@ -168,15 +168,23 @@ export function CategoryPalette({
       <ul ref={listRef} className="max-h-[280px] overflow-y-auto">
         {sections.map((section) => (
           <li key={section.key}>
+            {/* The header is where you ARE, so it is darker than the rows and
+                ruled off from them. ink-850 on ink-800 is a four-point step
+                that reads as a rendering artifact rather than a heading —
+                against the page ground it is legible, and the rule does the
+                rest of the work. Sticky so the level stays named while a long
+                group scrolls underneath it. */}
             {section.back ? (
               <button
                 onClick={section.back}
-                className="eyebrow flex w-full items-center gap-1.5 bg-ink-850 px-3 py-1.5 text-left transition-colors hover:text-paper-dim"
+                className="eyebrow rule-b sticky top-0 z-10 flex w-full items-center gap-1.5 bg-ink-900 px-3 py-2 text-left transition-colors hover:text-paper-dim"
               >
                 <span aria-hidden>‹</span> {section.label}
               </button>
             ) : (
-              <div className="eyebrow bg-ink-850 px-3 py-1.5">{section.label}</div>
+              <div className="eyebrow rule-b sticky top-0 z-10 bg-ink-900 px-3 py-2">
+                {section.label}
+              </div>
             )}
 
             {/* Drill rows: one step down rather than a choice. The ROW says
