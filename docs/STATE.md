@@ -22,9 +22,14 @@ Describe the *shape* of a decision here and keep the specifics there.
 
 ---
 
-## Right now · last updated 2026-09-17
+## Right now · last updated 2026-09-25
 
-Nothing blocking. Everything merged to `main`; tests green.
+Nothing blocking. Tests green. The register work is on a branch awaiting
+review; everything before it is on `main`.
+
+The categorisation backlog is **cleared** — every transaction is either
+hand-decided or confirmed. That is the steady state the register was rebuilt
+for, so the next machine pass has a locked baseline to respect.
 
 Two standing tasks the owner tracks — details in `private/STATE.local.md`:
 
@@ -47,6 +52,46 @@ Connected: two card/bank feeds through SimpleFIN on a daily pull, one
 snapshot-tracked brokerage, and Claude Haiku for unknown merchants.
 
 ## Decisions worth not relitigating
+
+**Categories nest one level, no more.** `categories.parent_id`, with a trigger
+refusing a third level and refusing a child in a different group from its
+parent. A subcategory is an ORDINARY category — transactions point at exactly
+one `category_id` — so rules, the model and the palette work on it unchanged,
+and rolling up is a join rather than a second schema. `v_transactions` exposes
+`rollup_category_*`, so anything wanting totals "as if the split never
+happened" groups by those and is right without knowing the depth.
+
+Arbitrary nesting was rejected because every rollup becomes a recursive CTE and
+every screen has to choose a render depth. Promoting a category to a *group*
+instead was rejected because it moves it out of its group and does not
+generalise.
+
+**Subscriptions are subcategorised by purpose, against the industry grain.**
+No major taxonomy does this — Plaid, MX/Mint, Monarch and Yodlee all sort by
+purpose and treat recurrence as a separate attribute, because a Subscriptions
+category competes with Entertainment for the same transaction. That tension is
+real and visible here (a game bought once vs. a game subscription). The parent
+is still right for a one-person cancel-audit; if it ever bites, the fix is a
+recurring-series flag, not more categories.
+
+**The card's own leg of a card payment is not in the register.** A payment is
+two rows for one event: a debit on checking and a credit on the card, where
+positive means the debt went down. The debit proves the bill was paid; the
+credit is the duplicate half. `v_transactions.is_card_payment_credit` marks it
+STRUCTURALLY — positive, on a credit account, payment-shaped text — not by
+category name, because some of those rows were filed as `Account Transfer`. A
+refund is also positive on a card and is deliberately NOT caught: money coming
+back is real, and hiding it would lose it.
+
+**Green means income, not "positive number".** The two legs of a transfer carry
+opposite signs, so a sign-based colour is necessarily wrong about one of them —
+and it was wrong in the direction that made paying off a card look like
+earning. Only `eff_necessity = 'income'` is green.
+
+**A review chip counts only what the register can show.** These have drifted
+twice — counts global while the table was period-scoped, then counting rows the
+table now hides — each time leaving a backlog that could not reach zero. The
+tests assert the *agreement* between count and filter, not either number.
 
 **Peer-payment rails.** Money going *out* through Venmo, Zelle, or PayPal is
 spending; a cash-*out* back to checking is a transfer. The direction is the
