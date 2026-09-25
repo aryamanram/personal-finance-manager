@@ -68,11 +68,18 @@ export interface PaletteSection {
 export function CategoryPalette({
   categories,
   currentId,
+  clearLabel = { name: 'Uncategorized', hint: 'clear' },
   onPick,
   onClose,
 }: {
   categories: CategoryWithGroup[];
   currentId?: string | null;
+  /**
+   * What picking nothing means here. Assigning a category, that is clearing
+   * the row back to Uncategorized; filtering, it is dropping the filter. Same
+   * null, different sentence — so the caller supplies the words.
+   */
+  clearLabel?: { name: string; hint: string };
   onPick: (categoryId: string | null) => void;
   onClose: () => void;
 }) {
@@ -256,13 +263,16 @@ export function CategoryPalette({
               onClick={() => onPick(null)}
               className="rule-t flex w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left text-sm text-paper-faint transition-colors hover:bg-ink-700 hover:text-paper-dim"
             >
-              <span className="truncate">Uncategorized</span>
-              <span className="shrink-0 text-xs">clear</span>
+              <span className="truncate">{clearLabel.name}</span>
+              <span className="shrink-0 text-xs">{clearLabel.hint}</span>
             </button>
           </li>
         )}
 
-        {flat.length === 0 && (
+        {/* Only when a SEARCH found nothing. `flat` counts pickable rows, and
+            the group list has none — every row there drills — so testing it
+            alone printed "No category matches" over a full screen of groups. */}
+        {query.trim() !== '' && flat.length === 0 && (
           <li className="px-3 py-4 text-center text-xs text-paper-faint">
             No category matches “{query.trim()}”.
           </li>

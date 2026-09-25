@@ -198,6 +198,17 @@ describe('nothing is pinned above the tree', () => {
   });
 });
 
+describe('the group list is not an empty result', () => {
+  it('has no pickable items, because every row drills', () => {
+    // The empty-state test used to be `flat.length === 0`, which is TRUE on
+    // this screen: groups are drill rows, not choices. That printed
+    // "No category matches" over a full list of groups.
+    const sections = browseSections(TAXONOMY, null, null, back);
+    expect(sections[0]!.items).toEqual([]);
+    expect(sections[0]!.drill!.length).toBeGreaterThan(0);
+  });
+});
+
 describe('a taxonomy with no subcategories still works', () => {
   it('treats every category as a pick', () => {
     const flat = [cat('Rent', 'Housing'), cat('Utilities', 'Housing')];
