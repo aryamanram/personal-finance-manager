@@ -279,3 +279,102 @@ describe('I2 — raw source values are immutable', () => {
     await sql`UPDATE transactions SET amount_cents_override = NULL WHERE id = ${row.id}`;
   });
 });
+
+describe('a CSV row and a synced row for one charge resolve to ONE row (I8)', () => {
+  /**
+   * Exact-fingerprint adoption needs the normalized description AND the date
+   * to match. A bank's feed and its own CSV export routinely disagree on
+   * both, and when they do the ledger gains a duplicate that counts the money
+   * twice — and splits its categorisation, since each copy is categorised
+   * separately.
+   *
+   * This is the real pair that got through, with the merchant changed:
+   *
+   *   CSV   "POS DEBIT   ACME* WIDGET BR   +1385... CA"   on the 16th
+   *   SYNC  "ACME* WIDGET BR ACME.COM CA 09/16"           on the 17th
+   *
+   * The feed repeats the merchant's domain and posts a day later.
+   */
+  const CSV = 'POS DEBIT                ACME* WIDGET BR    +13852825000 CA';
+  const SYNC = 'ACME* WIDGET BR ACME.COM CA 09/16';
+
+  it('adopts the CSV row instead of inserting a second one', async () => {
+    await upsertTransactions(sql, [{
+      accountId: acct.checkingId, rawDescription: CSV, amountCents: -1500,
+      postedDate: '2026-09-16', status: 'posted', source: 'csv', externalId: null,
+    }]);
+
+    const r = await upsertTransactions(sql, [{
+      accountId: acct.checkingId, rawDescription: SYNC, amountCents: -1500,
+      postedDate: '2026-09-17', status: 'posted', source: 'simplefin',
+      externalId: 'TRN-widget-1',
+    }]);
+
+    expect(r.adopted).toBe(1);
+    expect(r.inserted).toBe(0);
+
+    const rows = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM transactions
+      WHERE account_id = ${acct.checkingId} AND amount_cents = -1500
+        AND raw_description LIKE '%WIDGET%' AND voided_at IS NULL`;
+    expect(rows[0].n).toBe(1);
+  });
+
+  it('keeps the categorisation the human already did', async () => {
+    // Adoption's whole point: the CSV row you filed by hand is claimed, not
+    // replaced. Losing that would make the fix worse than the bug.
+    const [row] = await sql<{ external_id: string; source: string }[]>`
+      SELECT external_id, source FROM transactions
+      WHERE raw_description = ${CSV}`;
+    expect(row.external_id).toBe('TRN-widget-1');
+    expect(row.source).toBe('simplefin');
+  });
+
+  it('does NOT merge two genuinely separate charges of the same amount', async () => {
+    // The risk this pass introduces. Two different merchants, same amount,
+    // one day apart — these are two transactions and must stay two.
+    await upsertTransactions(sql, [{
+      accountId: acct.checkingId, rawDescription: 'COFFEE SHOP ONE', amountCents: -2250,
+      postedDate: '2026-09-20', status: 'posted', source: 'csv', externalId: null,
+    }]);
+    const r = await upsertTransactions(sql, [{
+      accountId: acct.checkingId, rawDescription: 'HARDWARE STORE TWO', amountCents: -2250,
+      postedDate: '2026-09-21', status: 'posted', source: 'simplefin',
+      externalId: 'TRN-separate-1',
+    }]);
+    expect(r.adopted).toBe(0);
+    expect(r.inserted).toBe(1);
+  });
+
+  it('does NOT merge the same merchant billed twice outside the window', async () => {
+    // Same description and amount, four days apart: a repeated charge, not a
+    // duplicate. ADOPT_DAY_WINDOW is 2 precisely to leave this alone.
+    await upsertTransactions(sql, [{
+      accountId: acct.checkingId, rawDescription: 'GYM MEMBERSHIP', amountCents: -3000,
+      postedDate: '2026-09-01', status: 'posted', source: 'csv', externalId: null,
+    }]);
+    const r = await upsertTransactions(sql, [{
+      accountId: acct.checkingId, rawDescription: 'GYM MEMBERSHIP', amountCents: -3000,
+      postedDate: '2026-09-05', status: 'posted', source: 'simplefin',
+      externalId: 'TRN-gym-1',
+    }]);
+    expect(r.adopted).toBe(0);
+    expect(r.inserted).toBe(1);
+  });
+
+  it('never merges two different amounts', async () => {
+    // Amount is the strict part: merging across amounts would invent a
+    // reconciliation error, which is the one failure that matters here.
+    await upsertTransactions(sql, [{
+      accountId: acct.checkingId, rawDescription: 'BOOKSHOP ALPHA', amountCents: -1000,
+      postedDate: '2026-09-10', status: 'posted', source: 'csv', externalId: null,
+    }]);
+    const r = await upsertTransactions(sql, [{
+      accountId: acct.checkingId, rawDescription: 'BOOKSHOP ALPHA CA', amountCents: -1001,
+      postedDate: '2026-09-10', status: 'posted', source: 'simplefin',
+      externalId: 'TRN-book-1',
+    }]);
+    expect(r.adopted).toBe(0);
+    expect(r.inserted).toBe(1);
+  });
+});
