@@ -24,12 +24,13 @@ Describe the *shape* of a decision here and keep the specifics there.
 
 ## Right now · last updated 2026-09-25
 
-**PR #11** (`category-palette-groups` → `main`) is open — the register rebuild,
-24 commits. CodeRabbit's review was still running when this was written, and
-the owner merges once it is clean. `main` has not moved since the branch
-started, so no rebase is needed and GitHub reports the merge clean.
+Nothing blocking. The register rebuild is merged (PR #11); everything is on
+`main` and the full gate is green there.
 
-Nothing else is blocking.
+CodeRabbit had not finished its review when the PR was merged, so that branch
+went in unreviewed by it. Nothing was dismissed — it simply never reported.
+Worth a glance over `src/components/CategoryFilter.tsx` and the ingest changes
+in `src/ingest/upsert.ts` if a second opinion is wanted later.
 
 The categorisation backlog is **cleared**: every transaction is hand-decided or
 confirmed. That is the steady state the register was rebuilt for, and it means
@@ -44,9 +45,6 @@ Two things are half-done and will be obvious to the next person:
 - **The subcategory assignments were applied as one-off SQL**, not as rules.
   They hold, but a merchant that reappears under a new description will land on
   the parent until a rule covers it.
-
-If CodeRabbit's findings need addressing, they go on this branch before the
-merge — nothing downstream depends on it landing first.
 
 Two standing tasks the owner tracks — details in `private/STATE.local.md`:
 
