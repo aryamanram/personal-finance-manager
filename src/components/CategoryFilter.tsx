@@ -32,9 +32,27 @@ export function CategoryFilter({
   const pathname = usePathname();
   const params = useSearchParams();
   const [open, setOpen] = useState(false);
+  /**
+   * Collapsed groups and parents, by name.
+   *
+   * Collapsing is a VIEW of the panel, not a filter — a hidden section's
+   * categories keep whatever state they had, so folding Housing away never
+   * changes which rows the register shows. The counts on a collapsed header
+   * are what make that safe to trust: they say what is inside without
+   * opening it.
+   */
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const root = useRef<HTMLDivElement>(null);
 
   const hidden = useMemo(() => new Set(hiddenIds), [hiddenIds]);
+
+  const toggleCollapse = (key: string) =>
+    setCollapsed((c) => {
+      const next = new Set(c);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   useEffect(() => {
     if (!open) return;
@@ -117,7 +135,10 @@ export function CategoryFilter({
 
       {open && (
         <div className="absolute right-0 top-full z-40 mt-1 w-[300px] overflow-hidden rounded-sm border border-ink-500 bg-ink-800 shadow-2xl shadow-black/50">
-          <div className="rule-b flex items-center justify-between px-3 py-2 text-[10px]">
+          <div className="rule-b flex items-center gap-3 px-3 py-2 text-[10px]">
+            {/* Selection, then view. These do different things and undoing
+                one must not undo the other: Show all / Reset change which
+                rows the register shows, Fold only changes this panel. */}
             <button
               type="button"
               onClick={() => commit(new Set())}
@@ -132,34 +153,79 @@ export function CategoryFilter({
             >
               Reset
             </button>
+            <button
+              type="button"
+              onClick={() =>
+                setCollapsed((c) =>
+                  c.size > 0 ? new Set() : new Set(tree.map(([g]) => g)))
+              }
+              className="ml-auto text-paper-faint transition-colors hover:text-paper"
+            >
+              {collapsed.size > 0 ? 'Expand all' : 'Collapse all'}
+            </button>
           </div>
 
           <div className="max-h-[320px] overflow-y-auto">
-            {tree.map(([group, entries]) => (
-              <div key={group}>
-                <div className="eyebrow rule-b sticky top-0 z-10 bg-ink-900 px-3 py-1.5">
-                  {group}
+            {tree.map(([group, entries]) => {
+              const groupShut = collapsed.has(group);
+              // Counted over the group's WHOLE subtree, so a collapsed header
+              // still says how much of what it contains is on.
+              const all = entries.flatMap((e) => [e.parent, ...e.kids]);
+              const showing = all.filter((c) => !hidden.has(c.id)).length;
+
+              return (
+                <div key={group}>
+                  <button
+                    type="button"
+                    onClick={() => toggleCollapse(group)}
+                    aria-expanded={!groupShut}
+                    className="eyebrow rule-b sticky top-0 z-10 flex w-full items-center gap-1.5 bg-ink-900 px-3 py-1.5 text-left transition-colors hover:text-paper-dim"
+                  >
+                    <span aria-hidden className="w-2 shrink-0 text-paper-faint">
+                      {groupShut ? '›' : '⌄'}
+                    </span>
+                    <span className="truncate">{group}</span>
+                    <span className="ml-auto shrink-0 text-paper-faint">
+                      {showing}/{all.length}
+                    </span>
+                  </button>
+
+                  {!groupShut && entries.map(({ parent, kids }) => {
+                    const parentKey = `${group}:${parent.id}`;
+                    const parentShut = collapsed.has(parentKey);
+                    const kidsShowing = kids.filter((k) => !hidden.has(k.id)).length;
+
+                    return (
+                      <div key={parent.id}>
+                        <Row
+                          label={parent.name}
+                          checked={!hidden.has(parent.id)}
+                          onChange={() => toggle(parent, kids)}
+                          // Only a parent with children gets a disclosure, so
+                          // a leaf category has nothing extra to ignore.
+                          disclosure={kids.length > 0
+                            ? {
+                                collapsed: parentShut,
+                                count: `${kidsShowing}/${kids.length}`,
+                                onToggle: () => toggleCollapse(parentKey),
+                              }
+                            : undefined}
+                        />
+                        {!parentShut && kids.map((k) => (
+                          <Row
+                            key={k.id}
+                            label={k.name}
+                            checked={!hidden.has(k.id)}
+                            onChange={() => toggleOne(k)}
+                            indent
+                          />
+                        ))}
+                      </div>
+                    );
+                  })}
                 </div>
-                {entries.map(({ parent, kids }) => (
-                  <div key={parent.id}>
-                    <Row
-                      label={parent.name}
-                      checked={!hidden.has(parent.id)}
-                      onChange={() => toggle(parent, kids)}
-                    />
-                    {kids.map((k) => (
-                      <Row
-                        key={k.id}
-                        label={k.name}
-                        checked={!hidden.has(k.id)}
-                        onChange={() => toggleOne(k)}
-                        indent
-                      />
-                    ))}
-                  </div>
-                ))}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -172,26 +238,46 @@ function Row({
   checked,
   onChange,
   indent,
+  disclosure,
 }: {
   label: string;
   checked: boolean;
   onChange: () => void;
   indent?: boolean;
+  /** Fold this row's subcategories away. Absent on a row with none. */
+  disclosure?: { collapsed: boolean; count: string; onToggle: () => void };
 }) {
   return (
-    <label
+    <div
       className={clsx(
-        'flex cursor-pointer items-center gap-2 py-1.5 pr-3 text-sm transition-colors hover:bg-ink-700',
+        'flex items-center gap-2 py-1.5 pr-3 text-sm transition-colors hover:bg-ink-700',
         indent ? 'pl-8 text-paper-dim' : 'pl-3 text-paper',
       )}
     >
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={onChange}
-        className="accent-edited"
-      />
-      <span className="truncate">{label}</span>
-    </label>
+      {/* The checkbox and the disclosure are separate controls: clicking a
+          <label> that wrapped both would toggle the checkbox while trying to
+          fold the section. */}
+      <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={onChange}
+          className="accent-edited"
+        />
+        <span className="truncate">{label}</span>
+      </label>
+
+      {disclosure && (
+        <button
+          type="button"
+          onClick={disclosure.onToggle}
+          aria-expanded={!disclosure.collapsed}
+          aria-label={`${disclosure.collapsed ? 'Expand' : 'Collapse'} ${label}`}
+          className="shrink-0 text-xs text-paper-faint transition-colors hover:text-paper"
+        >
+          {disclosure.count} <span aria-hidden>{disclosure.collapsed ? '›' : '⌄'}</span>
+        </button>
+      )}
+    </div>
   );
 }
