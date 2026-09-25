@@ -18,11 +18,14 @@ export function TransactionTable({
   categories,
   accounts,
   total,
+  allCategoriesHidden = false,
 }: {
   initial: VTransaction[];
   categories: CategoryWithGroup[];
   accounts: Account[];
   total: number;
+  /** Every category is filtered out — an empty table the user asked for. */
+  allCategoriesHidden?: boolean;
 }) {
   const qc = useQueryClient();
   const router = useRouter();
@@ -257,7 +260,12 @@ export function TransactionTable({
 
       {rows.length === 0 && (
         <p className="py-12 text-center text-sm text-paper-faint">
-          No transactions match these filters.
+          {/* "Hide all" is the first half of picking a few categories, so
+              this state is reached ON PURPOSE. Saying nothing matched would
+              blame the data for a choice the user just made. */}
+          {allCategoriesHidden
+            ? 'Every category is hidden. Tick the ones you want to see.'
+            : 'No transactions match these filters.'}
         </p>
       )}
 

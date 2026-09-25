@@ -91,7 +91,13 @@ export function CategoryFilter({
       && defaultHiddenIds.every((id) => next.has(id));
     if (isDefault) p.delete('hide');
     else if (next.size === 0) p.set('hide', 'none');
-    else p.set('hide', [...next].join(','));
+    // Past the halfway mark, name what is SHOWN instead. "Hide all, then tick
+    // three" otherwise spells out 55 uuids — a 2,000-character URL for a
+    // three-category view, which is unreadable and brittle to paste.
+    else if (next.size > categories.length / 2) {
+      const shown = categories.filter((c) => !next.has(c.id)).map((c) => c.id);
+      p.set('hide', shown.length === 0 ? 'all' : `only:${shown.join(',')}`);
+    } else p.set('hide', [...next].join(','));
     const q = p.toString();
     router.push(q ? `${pathname}?${q}` : pathname);
   }
@@ -145,6 +151,16 @@ export function CategoryFilter({
               className="text-paper-faint transition-colors hover:text-paper"
             >
               Show all
+            </button>
+            {/* The starting point for "only these": clear the board, then
+                tick the two or three you want. Without it, isolating one
+                category means unticking the other fifty-seven. */}
+            <button
+              type="button"
+              onClick={() => commit(new Set(categories.map((c) => c.id)))}
+              className="text-paper-faint transition-colors hover:text-paper"
+            >
+              Hide all
             </button>
             <button
               type="button"

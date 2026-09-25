@@ -7,6 +7,7 @@ import { FilterChips } from '@/components/FilterChips';
 import { PeriodPicker } from '@/components/PeriodPicker';
 import { buildPeriods } from '@/lib/periods';
 import { CategoryFilter } from '@/components/CategoryFilter';
+import type { CategoryWithGroup } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,10 +48,7 @@ export default async function TransactionsPage({
     .filter((c) => c.name === 'Credit Card Payment')
     .map((c) => c.id);
   const hideParam = one('hide');
-  const hiddenCategoryIds =
-    hideParam === 'none' ? []
-    : hideParam ? hideParam.split(',').filter(Boolean)
-    : defaultHiddenIds;
+  const hiddenCategoryIds = resolveHidden(hideParam, allCategories, defaultHiddenIds);
 
   const filters = {
     // An explicit from/to still wins, so a link with a hand-built range works.
@@ -157,9 +155,40 @@ export default async function TransactionsPage({
         categories={categories}
         accounts={accounts}
         total={total}
+        allCategoriesHidden={
+          allCategories.length > 0 && hiddenCategoryIds.length >= allCategories.length
+        }
       />
     </div>
   );
+}
+
+/**
+ * Which categories the register hides, from the `hide` param.
+ *
+ * Four forms, because the param has to distinguish "nothing was said" from
+ * "nothing is hidden", and because naming 55 uuids to hide is a worse URL than
+ * naming the 3 to show:
+ *
+ *   absent            the default (Credit Card Payment)
+ *   none              hide nothing
+ *   all               hide everything
+ *   only:<a>,<b>      show ONLY these
+ *   <a>,<b>           hide these
+ */
+export function resolveHidden(
+  param: string | undefined,
+  categories: CategoryWithGroup[],
+  fallback: string[],
+): string[] {
+  if (!param) return fallback;
+  if (param === 'none') return [];
+  if (param === 'all') return categories.map((c) => c.id);
+  if (param.startsWith('only:')) {
+    const shown = new Set(param.slice('only:'.length).split(',').filter(Boolean));
+    return categories.filter((c) => !shown.has(c.id)).map((c) => c.id);
+  }
+  return param.split(',').filter(Boolean);
 }
 
 /** Re-emits the chip filters as hidden inputs so the search form keeps them. */
