@@ -253,9 +253,22 @@ export function TransactionRow({
                 : 'Click to correct'
             }
           >
+            {/* Green means money you EARNED, not "positive number".
+                
+                A credit-card payment is +1000 on the card — the card's own
+                books, where a positive amount means the debt went down. The
+                same payment is -1000 on checking. Colouring by sign alone
+                rendered the card leg green, which reads as income from paying
+                off a card. So did every transfer landing in an account: the
+                ledger showed $36,400 of internal movement in the same colour
+                as $14,966 of actual pay.
+                
+                Only eff_necessity = 'income' is green now. Transfers, on
+                either leg and whichever way they point, are neutral. */}
             <Figure
               cents={txn.eff_amount_cents}
               original={txn.amount_cents_override !== null ? txn.amount_cents : undefined}
+              tone={amountTone(txn.eff_necessity)}
               className="text-sm"
             />
           </button>
@@ -305,4 +318,19 @@ function parseInput(raw: string): number | null {
   const cents = Number(whole || '0') * 100 + Number((frac + '00').slice(0, 2));
   if (!Number.isSafeInteger(cents) || cents === 0) return null;
   return neg ? -cents : cents;
+}
+
+/**
+ * The colour an amount gets in the register.
+ *
+ * Green means money you EARNED, not "positive number". A credit-card payment
+ * is +1000 on the card — a liability account, where positive means the debt
+ * went down — and -1000 on checking. The two legs have opposite signs, so a
+ * sign-based rule is necessarily wrong about one of them, and it was wrong in
+ * the direction that reads as income from paying off a card.
+ *
+ * Exported so the tests call this rather than a copy of it.
+ */
+export function amountTone(necessity: string): 'in' | 'neutral' {
+  return necessity === 'income' ? 'in' : 'neutral';
 }
