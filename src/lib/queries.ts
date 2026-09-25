@@ -309,10 +309,15 @@ export interface ReviewCounts {
 /**
  * The two review backlogs, optionally within a date range.
  *
- * The register scopes these to the period it is showing. A chip reading
- * "Needs review · 338" above a filtered table promises 338 rows and then
- * delivers whatever falls inside the period — so the count has to answer the
- * same question the table does, or clicking it looks broken.
+ * These count what the REGISTER CAN SHOW, which means every predicate the
+ * register applies unconditionally has to appear here too. A chip promises
+ * rows; clicking it must deliver them.
+ *
+ * It has broken twice the same way. First the counts were global while the
+ * table was scoped to a period, so "Needs review · 338" sat above 34 rows.
+ * Then card-payment credit legs became permanently invisible, and the four
+ * of them that no human had confirmed became a chip reading "4" over an
+ * empty table with no way to clear it — the backlog could never reach zero.
  */
 export async function getReviewCounts(
   range?: { from?: string; to?: string },
@@ -329,6 +334,9 @@ export async function getReviewCounts(
       )::int AS uncategorized
     FROM v_transactions
     WHERE superseded_by_id IS NULL AND voided_at IS NULL
+      -- The register never shows these, so counting them offers work that
+      -- cannot be done.
+      AND NOT is_card_payment_credit
       ${range?.from ? sql`AND eff_posted_date >= ${range.from}::date` : sql``}
       ${range?.to ? sql`AND eff_posted_date <= ${range.to}::date` : sql``}`;
   return row;

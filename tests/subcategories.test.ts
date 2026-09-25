@@ -12,7 +12,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { Sql } from 'postgres';
-import { createTestDb, seedAccounts } from './helpers/db';
+import { createTestDb, seedAccounts, categoryByName } from './helpers/db';
 import { fingerprint } from '@/ingest/fingerprint';
 
 let sql: Sql;
@@ -234,5 +234,62 @@ describe('the card side of a card payment is not in the register', () => {
     const { getTransactions, countTransactions } = await import('@/lib/queries');
     const rows = await getTransactions({ limit: 1000 });
     expect(await countTransactions({})).toBe(rows.length);
+  });
+});
+
+describe('a review chip never promises rows the register cannot show', () => {
+  /**
+   * The chip is a to-do. If it counts a row the table filters out, clicking
+   * it lands on an empty screen with no way to clear the number — the backlog
+   * can never reach zero.
+   *
+   * This has broken twice: once when the counts were global and the table was
+   * scoped to a period, and once when card-payment credit legs became
+   * permanently invisible while still being counted. Both times the count and
+   * the table disagreed about which rows exist, so the test asserts the
+   * AGREEMENT rather than either number.
+   */
+  it('counts exactly what the needs-review filter returns', async () => {
+    const { getReviewCounts, getTransactions } = await import('@/lib/queries');
+
+    const counts = await getReviewCounts();
+    const rows = await getTransactions({ needsReviewOnly: true, limit: 1000 });
+
+    expect(counts.needs_review).toBe(rows.length);
+  });
+
+  it('counts exactly what the uncategorized filter returns', async () => {
+    const { getReviewCounts, getTransactions } = await import('@/lib/queries');
+
+    const counts = await getReviewCounts();
+    const rows = await getTransactions({ uncategorizedOnly: true, limit: 1000 });
+
+    expect(counts.uncategorized).toBe(rows.length);
+  });
+
+  it('still agrees once a hidden row would have been counted', async () => {
+    // The exact regression: an unconfirmed card-payment credit leg. It is
+    // machine-categorised and unlocked, so the naive count includes it, and
+    // the register can never show it.
+    const transferCat = await categoryByName(sql, 'Credit Card Payment');
+    const descr = 'PAYMENT THANK YOU — HIDDEN LEG';
+    const date = '2026-09-30';
+    await sql`
+      INSERT INTO transactions
+        (account_id, raw_description, amount_cents, posted_date, status, source,
+         fingerprint, category_id, category_source)
+      VALUES (${acct.explorerId}, ${descr}, 250000, ${date}, 'posted', 'simplefin',
+              ${fingerprint({ accountId: acct.explorerId, postedDate: date, amountCents: 250000, rawDescription: descr })},
+              ${transferCat}, 'llm')`;
+
+    const [{ hidden }] = await sql<{ hidden: boolean }[]>`
+      SELECT is_card_payment_credit AS hidden FROM v_transactions
+      WHERE raw_description = ${descr}`;
+    expect(hidden).toBe(true);   // the register will not show it
+
+    const { getReviewCounts, getTransactions } = await import('@/lib/queries');
+    const counts = await getReviewCounts();
+    const rows = await getTransactions({ needsReviewOnly: true, limit: 1000 });
+    expect(counts.needs_review).toBe(rows.length);
   });
 });
