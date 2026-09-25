@@ -23,7 +23,6 @@ export function TransactionRow({
   onConfirm,
   pending,
   repeatsDate,
-  viewYear,
 }: {
   txn: VTransaction;
   categories: CategoryWithGroup[];
@@ -31,7 +30,6 @@ export function TransactionRow({
   /** The row above shares this date, so printing it again says nothing. */
   repeatsDate?: boolean;
   /** Dates in this year print without one; others carry a short year. */
-  viewYear: number;
   /** `extend` is shift-click: take every row between the last one and this. */
   onSelect: (id: string, on: boolean, extend?: boolean) => void;
   onPatch: (id: string, patch: Record<string, unknown>) => void;
@@ -135,7 +133,7 @@ export function TransactionRow({
               : txn.eff_posted_date
           }
         >
-          {formatRegisterDate(txn.eff_posted_date, viewYear)}
+          {formatRegisterDate(txn.eff_posted_date)}
         </span>
       </td>
 

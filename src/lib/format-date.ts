@@ -53,18 +53,20 @@ export function formatDayShort(isoDate: string): string {
 }
 
 /**
- * A register date: "Sep 16" within the current year, "Sep 16 '24" outside it.
+ * A register date: "Sep 16 '26", always with the year.
  *
- * The ledger spans several years, so dropping the year entirely would make two
- * rows twelve months apart look adjacent. Carrying a full ISO date on all 396
- * rows is the other extreme — four characters of "2026-" repeated down a
- * column that is already sorted by date. This shows the year only when it is
- * not the one you are presumed to be looking at.
+ * The year used to be omitted for the year you were presumed to be looking
+ * at, on the reasoning that it was four repeated characters down a column
+ * already sorted by date. But "presumed" is the problem: the register shows
+ * all time by default and the period picker can put any span on screen, so a
+ * bare "Sep 16" is only unambiguous if you already know which year you asked
+ * for. A date that has to be inferred from context is not a date, and this
+ * ledger is about money — two rows twelve months apart must never be able to
+ * look adjacent.
  */
-export function formatRegisterDate(isoDate: string, currentYear: number): string {
+export function formatRegisterDate(isoDate: string): string {
   const { y, m, d } = parts(isoDate);
-  const base = `${MONTHS[m - 1]} ${d}`;
-  return y === currentYear ? base : `${base} '${String(y).slice(2)}`;
+  return `${MONTHS[m - 1]} ${d} '${String(y).slice(2)}`;
 }
 
 /**
