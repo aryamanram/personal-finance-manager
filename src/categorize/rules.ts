@@ -172,7 +172,8 @@ export async function applyDefaultCategory(
 
 /**
  * Attach a merchant to every transaction that lacks one, creating merchant rows
- * on first sight. Runs before categorization so merchant defaults can apply.
+ * on first sight. Runs before categorization so the register can offer to
+ * apply a decision to the same merchant's other rows.
  */
 export async function linkMerchants(
   sql: Sql,

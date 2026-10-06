@@ -4,7 +4,7 @@
  *
  * The point of the design is that a subcategory is an ORDINARY category with a
  * parent. Transactions still point at exactly one category_id, so rules, the
- * LLM and the palette work on it unchanged, and anything that wants totals as
+ * guesser and the palette work on it unchanged, and anything that wants totals as
  * if the split had never happened groups by v_transactions.rollup_category_*.
  *
  * These tests assert the arithmetic of that rollup, and the two things the
@@ -280,7 +280,7 @@ describe('a review chip never promises rows the register cannot show', () => {
          fingerprint, category_id, category_source)
       VALUES (${acct.explorerId}, ${descr}, 250000, ${date}, 'posted', 'simplefin',
               ${fingerprint({ accountId: acct.explorerId, postedDate: date, amountCents: 250000, rawDescription: descr })},
-              ${transferCat}, 'llm')`;
+              ${transferCat}, 'history')`;
 
     const [{ hidden }] = await sql<{ hidden: boolean }[]>`
       SELECT is_card_payment_credit AS hidden FROM v_transactions

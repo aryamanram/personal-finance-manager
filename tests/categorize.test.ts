@@ -68,7 +68,7 @@ describe('the pipeline', () => {
     expect(byDesc['GREYSTAR RENT PAYMENT'].category_name).toBe('Rent');
     expect(byDesc['STARBUCKS #12345'].category_name).toBe('Coffee');
     expect(byDesc['NETFLIX.COM'].category_name).toBe('Subscriptions');
-    // No rule matched, no API key in tests: lands in Uncategorized, honestly.
+    // No rule, history or pattern fits: lands in Uncategorized, honestly.
     expect(byDesc['MYSTERY VENDOR XJ7'].category_name).toBe('Uncategorized');
     expect(byDesc['MYSTERY VENDOR XJ7'].category_source).toBe('default');
   });

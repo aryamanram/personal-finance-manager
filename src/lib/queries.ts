@@ -294,7 +294,7 @@ export async function getUncategorizedCount(): Promise<number> {
  * Deliberately different questions, and conflating them made the old single
  * "uncategorized" count hard to act on:
  *
- *   needs_review  — a machine (rule or LLM) chose it and no human has
+ *   needs_review  — a machine (rule or guesser) chose it and no human has
  *                   confirmed. There IS a category; it may just be wrong.
  *   uncategorized — nobody and nothing has chosen.
  *

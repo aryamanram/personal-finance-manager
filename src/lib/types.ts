@@ -3,16 +3,15 @@
 export type AccountType = 'depository' | 'credit' | 'investment' | 'loan' | 'other';
 export type TxnStatus = 'pending' | 'posted';
 export type CategorySource =
-  | 'unset' | 'default' | 'import' | 'rule' | 'history' | 'llm' | 'income_source' | 'manual';
+  | 'unset' | 'default' | 'import' | 'rule' | 'history' | 'income_source' | 'manual';
 
 /**
  * A machine chose the category and no human has confirmed it. The single
  * definition of "a guess" — the register, the row editor and the review
  * counts all read this. 'income_source' is deliberately absent: a registered
- * payer is known, not guessed. 'llm' stays for rows written before the model
- * was retired.
+ * payer is known, not guessed.
  */
-export const GUESS_SOURCES: readonly CategorySource[] = ['rule', 'history', 'llm', 'import'];
+export const GUESS_SOURCES: readonly CategorySource[] = ['rule', 'history', 'import'];
 export type CostType = 'fixed' | 'variable';
 export type Necessity = 'required' | 'discretionary' | 'income' | 'transfer' | 'investment';
 export type IngestSource = 'simplefin' | 'plaid' | 'csv' | 'ofx' | 'manual';

@@ -132,7 +132,7 @@ const RULES: RuleSpec[] = [
     category: 'Museums & Attractions' },
 
   // A merchant whose name says nothing about what it is. Worth a rule
-  // precisely BECAUSE no model will guess it right twice running.
+  // precisely BECAUSE no pattern will guess it right twice running.
   { name: 'Adult comics', priority: 62, regex: 'TOOMICS', category: 'Adult' },
 
   // SQ * is Square, a PAYMENT RAIL — it prefixes every merchant that takes

@@ -170,7 +170,7 @@ export function RowEditor({
             default re-asserted itself on every sync and silently reverted
             later, more specific decisions — it would have undone every
             subcategory assignment. A repeat charge is handled by a rule or the
-            model, both of which are visible and editable. */}
+            guesser, both of which are visible and editable. */}
         {merchant && merchant.siblings > 0 && (
           <div className="border-l-2 border-edited/40 pl-4">
             <label className="flex items-start gap-2 text-xs text-paper-dim">

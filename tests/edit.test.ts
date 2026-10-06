@@ -283,10 +283,10 @@ describe('bulk edits are manual edits', () => {
     const ids = (await sql<{ id: string }[]>`
       SELECT id FROM transactions WHERE raw_description LIKE 'GUESSED%'`).map((r) => r.id);
 
-    // The state the LLM leaves behind: right category, unconfirmed, unlocked.
+    // The state the guesser leaves behind: right category, unconfirmed, unlocked.
     const travel = await categoryByName(sql, 'Travel');
     await sql`
-      UPDATE transactions SET category_id = ${travel}, category_source = 'llm'
+      UPDATE transactions SET category_id = ${travel}, category_source = 'history'
       WHERE id = ANY(${ids}::uuid[])`;
     const before = await sql<{ category_locked: boolean }[]>`
       SELECT category_locked FROM transactions WHERE id = ANY(${ids}::uuid[])`;
@@ -307,7 +307,7 @@ describe('bulk edits are manual edits', () => {
       WHERE transaction_id = ANY(${ids}::uuid[])`;
     expect(edits).toHaveLength(2);
     expect(edits.every((e) => e.field === 'category_source')).toBe(true);
-    expect(edits.every((e) => e.old_value === 'llm' && e.new_value === 'manual')).toBe(true);
+    expect(edits.every((e) => e.old_value === 'history' && e.new_value === 'manual')).toBe(true);
   });
 
   it('is a no-op once the rows are manually set to that category', async () => {

@@ -3,11 +3,11 @@
  *
  * The register's "needs review" backlog is cleared by agreeing with the
  * machine at least as often as by overriding it — every row in a freshly
- * synced ledger arrives as a model guess. applyPatch deliberately no-ops when
- * a field is unchanged (correct for I6), which meant picking the category the
- * row already had left category_source = 'llm' and the row unlocked, so the
- * next recategorize pass was free to change it back and the backlog never
- * shrank.
+ * synced ledger arrives as a machine guess. applyPatch deliberately no-ops
+ * when a field is unchanged (correct for I6), which meant picking the category
+ * the row already had left category_source = 'history' and the row unlocked,
+ * so the next recategorize pass was free to change it back and the backlog
+ * never shrank.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { Sql } from 'postgres';
@@ -41,9 +41,9 @@ beforeAll(async () => {
 
   groceries = await categoryByName(sql, 'Groceries');
 
-  // As the LLM pass leaves it: categorised, unconfirmed, unlocked.
+  // As the guess pass leaves it: categorised, unconfirmed, unlocked.
   const [row] = await sql<{ id: string }[]>`
-    UPDATE transactions SET category_id = ${groceries}, category_source = 'llm'
+    UPDATE transactions SET category_id = ${groceries}, category_source = 'history'
     WHERE external_id = 'confirm-1' RETURNING id`;
   guessedId = row.id;
 }, 30_000);
@@ -56,10 +56,10 @@ function buildUrl(s: Sql): string {
 }
 
 describe('confirming a machine guess', () => {
-  it('starts as an unlocked model assignment', async () => {
+  it('starts as an unlocked machine assignment', async () => {
     const [row] = await sql<{ category_source: string; category_locked: boolean }[]>`
       SELECT category_source, category_locked FROM transactions WHERE id = ${guessedId}`;
-    expect(row.category_source).toBe('llm');
+    expect(row.category_source).toBe('history');
     expect(row.category_locked).toBe(false);
   });
 
@@ -70,7 +70,7 @@ describe('confirming a machine guess', () => {
       SELECT category_source, category_locked FROM transactions WHERE id = ${guessedId}`;
     // Documents WHY confirmCategory exists rather than asserting a wish: a
     // no-op patch writes nothing, so the row is still the machine's.
-    expect(row.category_source).toBe('llm');
+    expect(row.category_source).toBe('history');
     expect(row.category_locked).toBe(false);
   });
 
@@ -90,7 +90,7 @@ describe('confirming a machine guess', () => {
     // One row, not two: the no-op patch above must not have logged anything.
     expect(rows).toHaveLength(1);
     expect(rows[0].field).toBe('category_source');
-    expect(rows[0].old_value).toBe('llm');
+    expect(rows[0].old_value).toBe('history');
     expect(rows[0].new_value).toBe('manual');
   });
 

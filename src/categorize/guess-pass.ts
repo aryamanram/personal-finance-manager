@@ -10,7 +10,7 @@ import type { AccountType, CategorySource } from '@/lib/types';
 import { guess, type GuessModel } from './guess';
 
 /** Sources a pass may withdraw when it no longer has an answer. */
-const MACHINE_SOURCES: CategorySource[] = ['rule', 'history', 'llm', 'income_source'];
+const MACHINE_SOURCES: CategorySource[] = ['rule', 'history', 'income_source'];
 
 export interface GuessPassResult {
   byHistory: number;

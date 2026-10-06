@@ -29,7 +29,7 @@ flowchart LR
         direction TB
         income["income<br/>source"]
         rule["your<br/>rules"]
-        model["your history,<br/>then patterns"]
+        guess["your history,<br/>then patterns"]
         uncat["Uncategorized"]
         pair["transfer<br/>matcher"]
     end
@@ -46,7 +46,7 @@ flowchart LR
     bank --> fetch --> fp --> dedup
     dedup -->|no| insert
     dedup -->|yes| skip
-    insert --> income --> rule --> model --> uncat
+    insert --> income --> rule --> guess --> uncat
     uncat --> pair --> view --> totals --> screen
     screen -.->|"PATCH"| human
     human -.->|"locks the row"| view
@@ -57,7 +57,7 @@ flowchart LR
     classDef ext fill:#131922,stroke:#34424f,color:#a5b0b7
     classDef hum fill:#2f8a72,stroke:#6ee7c0,color:#0b0f14
     class fetch,fp,insert,skip ing
-    class income,rule,model,uncat,pair enr
+    class income,rule,guess,uncat,pair enr
     class view,totals,screen rd
     class bank ext
     class human hum

@@ -35,8 +35,6 @@ CREATE TYPE category_source AS ENUM (
   'import',    -- category supplied by the source file (Apple Card CSV has one)
   'rule',      -- a rule or built-in pattern matched
   'history',   -- learned from how you filed this merchant before
-  'llm',       -- model-assigned. Retired: nothing writes it any more, but
-               -- enum values cannot be dropped and old rows may carry it.
   'income_source', -- inflow from a registered payer. KNOWN, not a guess:
                -- you named the payer, so it never enters the review queue.
   'manual'     -- you said so. sacred.
@@ -131,8 +129,8 @@ CREATE TABLE categories (
   -- One extra level, not a general tree -- see the CHECK below.
   --
   -- A subcategory is still an ordinary category, so transactions keep pointing
-  -- at exactly one category_id and rules, the LLM and the palette work on it
-  -- unchanged. Rolling up is a join to parent_id rather than a second schema.
+  -- at exactly one category_id and rules, the guesser and the palette work on
+  -- it unchanged. Rolling up is a join to parent_id rather than a second schema.
   parent_id   UUID REFERENCES categories(id) ON DELETE RESTRICT,
 
   UNIQUE (group_id, name)
@@ -176,8 +174,8 @@ CREATE TRIGGER categories_parent_sane
 CREATE INDEX categories_parent ON categories (parent_id) WHERE parent_id IS NOT NULL;
 
 -- ---------------------------------------------------------------------------
--- Merchants — normalized payee names, so rules and LLM calls are cached per
--- merchant instead of re-run per transaction.
+-- Merchants — normalized payee names, so a payee's rows can be found and
+-- recategorised together rather than one transaction at a time.
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE merchants (
