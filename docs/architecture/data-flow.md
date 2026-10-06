@@ -100,8 +100,8 @@ flowchart TB
 row. Weeks later the API's sync window covers that same date. Without adoption
 you would get two transactions for one real purchase; with it, the synced row
 claims the hand-imported one and keeps the categorisation. Verified against real
-data: a 343-row Chase statement imported over an already-synced range inserted
-295 and recognised exactly 48 as already present.
+data: a statement imported over an already-synced range inserted only the rows
+the feed had never delivered, and recognised every overlapping one.
 
 ## When a number looks wrong
 
@@ -111,9 +111,9 @@ Work down this list. Each step rules out a whole class of cause.
 
 The dashboard shows a reconciliation banner when it does not. Non-zero drift
 means the ledger is missing or double-counting transactions, and nothing
-downstream is trustworthy until it is explained. A real example: drift of exactly
-$54.51 turned out to be one Apple Card purchase that fell outside the 89-day
-window.
+downstream is trustworthy until it is explained. A real example: a drift equal,
+to the cent, to one purchase turned out to be an Apple Card charge that fell
+outside the 89-day window.
 
 **2. Is it categorised the way you think?**
 
@@ -160,7 +160,7 @@ Account **value** lives in `balance_snapshots` and never reaches
 `v_monthly_cashflow` — a 6% month is not a paycheck.
 
 Return is Modified Dietz, which weights each contribution by the fraction of the
-period it was invested. On a real account this reported 3.44% where a naive
+period it was invested. On the seeded demo data it reports 3.44% where a naive
 `(end − start) / start` reported 18.59% by counting deposits as investment gains.
 
 The identity `opening + contributed + gain = current` is asserted in a test. If

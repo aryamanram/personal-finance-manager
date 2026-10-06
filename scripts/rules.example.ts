@@ -133,7 +133,7 @@ const RULES: RuleSpec[] = [
 
   // A merchant whose name says nothing about what it is. Worth a rule
   // precisely BECAUSE no pattern will guess it right twice running.
-  { name: 'Adult comics', priority: 62, regex: 'TOOMICS', category: 'Adult' },
+  { name: 'Opaque merchant', priority: 62, regex: 'ACME HOLDINGS', category: 'Shopping' },
 
   // SQ * is Square, a PAYMENT RAIL — it prefixes every merchant that takes
   // card through Square, from a restaurant to a game store. Matching it alone
