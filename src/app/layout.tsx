@@ -1,8 +1,15 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { Inter_Tight, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
 import { Nav } from '@/components/Nav';
+
+// Fetched once at build time and served from this app. A stylesheet link to
+// fonts.googleapis.com told Google the viewer's IP and when the ledger was
+// open, on every page view. globals.css reads these through --font-sans/mono.
+const sans = Inter_Tight({ subsets: ['latin'], display: 'swap', variable: '--font-inter-tight' });
+const mono = JetBrains_Mono({ subsets: ['latin'], display: 'swap', variable: '--font-jetbrains-mono' });
 
 export const metadata: Metadata = {
   title: 'Ledger',
@@ -18,15 +25,7 @@ const NAV = [
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
-          rel="stylesheet"
-        />
-      </head>
+    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
       {/* suppressHydrationWarning covers THIS element's attributes only, not
           its subtree, so a real mismatch anywhere inside still reports.
           Browser extensions inject attributes on <body> before React
