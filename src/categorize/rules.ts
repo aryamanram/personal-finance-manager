@@ -64,6 +64,11 @@ export async function applyRules(
   let updated = 0;
   // Rows an earlier pass (income sources) already owns start out claimed.
   const alreadyMatched = new Set<string>(opts.exclude ?? []);
+  // What later passes must leave alone: rows whose CATEGORY is decided. A rule
+  // that only sets necessity, cost type or merchant still wins against later
+  // rules, but it has said nothing about the category, so the guesser must
+  // still guess one — otherwise the row falls straight to Uncategorized.
+  const categorised = new Set<string>(opts.exclude ?? []);
 
   for (const rule of rules) {
     if (!rule.set_category_id && !rule.set_cost_type && !rule.set_necessity && !rule.set_merchant_id) {
@@ -138,12 +143,15 @@ export async function applyRules(
       RETURNING t.id`;
 
     // Claim everything this rule matched, not just what it changed.
-    for (const r of claimed) alreadyMatched.add(r.id);
+    for (const r of claimed) {
+      alreadyMatched.add(r.id);
+      if (rule.set_category_id) categorised.add(r.id);
+    }
     byRule[rule.name] = matched.length;
     updated += matched.length;
   }
 
-  return { examined: updated, updated, skippedLocked: 0, byRule, claimed: alreadyMatched };
+  return { examined: updated, updated, skippedLocked: 0, byRule, claimed: categorised };
 }
 
 /**

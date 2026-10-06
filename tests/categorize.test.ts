@@ -354,6 +354,26 @@ describe('no merchant carries a standing default', () => {
     expect(row.suggested_reason).toBe('1 of 2 past "splitty vendor qq" → Restaurants');
   });
 
+  it('still guesses a category for a row a rule claimed without naming one', async () => {
+    // A rule may set only necessity, cost type or merchant. It wins against
+    // later RULES, but it has said nothing about the category, so the guesser
+    // must still get the row — it used to inherit the rule's claim and leave
+    // the row to fall straight to Uncategorized.
+    await upsertTransactions(sql, [
+      txn({ accountId: acct.appleId, rawDescription: 'TAGGED CHIPOTLE 0042', amountCents: -1250, postedDate: '2026-08-22' }),
+    ]);
+    await sql`INSERT INTO rules (name, priority, match_regex, set_necessity)
+              VALUES ('Tagged is required', 8, 'TAGGED', 'required')`;
+
+    await runCategorization(sql);
+
+    const [row] = await sql<{ category_name: string; category_source: string; eff_necessity: string }[]>`
+      SELECT category_name, category_source, eff_necessity FROM v_transactions
+      WHERE raw_description = 'TAGGED CHIPOTLE 0042'`;
+    // The keyword table's answer, and the rule's necessity, both stand.
+    expect(row).toEqual({ category_name: 'Restaurants', category_source: 'rule', eff_necessity: 'required' });
+  });
+
   it('withdraws a machine guess that nothing supports any more', async () => {
     // A guess is only as current as the evidence for it. One left behind by a
     // deleted rule would otherwise look exactly like a live one.

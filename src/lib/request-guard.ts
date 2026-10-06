@@ -30,6 +30,11 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 export interface GuardInput {
   method: string;
+  /**
+   * The scheme the BROWSER used: 'http' or 'https'. Behind a TLS-terminating
+   * proxy that is X-Forwarded-Proto, not the scheme this server listens on.
+   */
+  protocol: string;
   host: string | null;
   /** Set by a reverse proxy in front of the app, e.g. `tailscale serve`. */
   forwardedHost?: string | null;
@@ -79,19 +84,32 @@ export function guardRequest(req: GuardInput, allowed: readonly string[]): Rejec
   }
 
   if (req.origin !== null) {
-    let originHost: string;
+    let origin: string;
     try {
-      originHost = new URL(req.origin).host.toLowerCase();
+      origin = new URL(req.origin).origin;
     } catch {
       // Includes the literal "null" a sandboxed frame or file:// page sends.
       return { status: 403, reason: 'Unreadable Origin refused.' };
     }
-    if (!hosts.some((h) => h.toLowerCase() === originHost)) {
+    // The whole origin — scheme, host AND port. Comparing hosts alone let an
+    // http:// page post to the https:// ledger on the same name.
+    const scheme = req.protocol.split(',')[0].trim().replace(/:$/, '').toLowerCase();
+    const ours = hosts.map((h) => originOf(scheme, h));
+    if (!ours.includes(origin)) {
       return { status: 403, reason: 'Cross-origin request refused.' };
     }
   }
 
   return null;
+}
+
+/** The canonical origin a page served at scheme://host would send, or null. */
+function originOf(scheme: string, host: string): string | null {
+  try {
+    return new URL(`${scheme}://${host}`).origin;
+  } catch {
+    return null;
+  }
 }
 
 /**

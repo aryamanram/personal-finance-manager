@@ -29,9 +29,15 @@ export async function POST(req: Request) {
   }
   const b = parsed.data;
 
+  // An income category, not merely a live one. A source files deposits as
+  // KNOWN and keeps them out of review, so a spending category here would
+  // silently book every paycheck as negative spending.
   const [category] = await sql<{ id: string }[]>`
-    SELECT id FROM categories WHERE id = ${b.category_id} AND NOT is_archived`;
-  if (!category) return NextResponse.json({ error: 'Category not found.' }, { status: 404 });
+    SELECT id FROM categories
+    WHERE id = ${b.category_id} AND NOT is_archived AND default_necessity = 'income'`;
+  if (!category) {
+    return NextResponse.json({ error: 'Income category not found.' }, { status: 404 });
+  }
 
   const [clash] = await sql<{ id: string }[]>`
     SELECT id FROM income_sources WHERE is_active AND lower(name) = lower(${b.name})`;

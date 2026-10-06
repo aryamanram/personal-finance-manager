@@ -13,7 +13,8 @@ import { proxy, config } from '@/proxy';
 const LOCAL = allowedHosts(undefined);
 
 const req = (over: Partial<GuardInput>): GuardInput => ({
-  method: 'GET', host: 'localhost:3000', forwardedHost: null, origin: null, secFetchSite: null,
+  method: 'GET', protocol: 'http', host: 'localhost:3000', forwardedHost: null,
+  origin: null, secFetchSite: null,
   ...over,
 });
 
@@ -37,6 +38,13 @@ describe("the app's own traffic gets through", () => {
 
   it('a script or curl on this machine, which sends no browser headers', () => {
     expect(status({ method: 'POST' })).toBe(200);
+  });
+
+  it('the scheme in either form the server reports it', () => {
+    // nextUrl.protocol carries a colon; X-Forwarded-Proto may be a list.
+    const own = { method: 'POST', origin: 'http://localhost:3000', secFetchSite: 'same-origin' };
+    expect(status({ ...own, protocol: 'http:' })).toBe(200);
+    expect(status({ ...own, protocol: 'http, https' })).toBe(200);
   });
 });
 
@@ -77,12 +85,20 @@ describe('another website cannot change the ledger', () => {
   it('refuses the opaque "null" origin of a sandboxed frame', () => {
     expect(status({ method: 'POST', origin: 'null' })).toBe(403);
   });
+
+  it('refuses the same host on another scheme', () => {
+    // Host alone matches; the origin does not. Only caught without
+    // Sec-Fetch-Site, which is exactly the browser this check exists for.
+    expect(status({ method: 'POST', origin: 'https://localhost:3000' })).toBe(403);
+  });
 });
 
 describe('a reverse proxy such as tailscale serve', () => {
   const tailnet = allowedHosts('ledger.tail1234.ts.net');
+  // TLS ends at the proxy: the app listens on http, the browser used https.
   const viaTailnet: Partial<GuardInput> = {
-    method: 'POST', host: '127.0.0.1:3000', forwardedHost: 'ledger.tail1234.ts.net',
+    method: 'POST', protocol: 'https', host: '127.0.0.1:3000',
+    forwardedHost: 'ledger.tail1234.ts.net',
     origin: 'https://ledger.tail1234.ts.net', secFetchSite: 'same-origin',
   };
 
@@ -92,6 +108,13 @@ describe('a reverse proxy such as tailscale serve', () => {
 
   it('is allowed once LEDGER_ALLOWED_HOSTS names it', () => {
     expect(status(viaTailnet, tailnet)).toBe(200);
+  });
+
+  it('still refuses a plain-http page on the same name', () => {
+    expect(status(
+      { ...viaTailnet, origin: 'http://ledger.tail1234.ts.net', secFetchSite: null },
+      tailnet,
+    )).toBe(403);
   });
 });
 

@@ -13,6 +13,9 @@ export function proxy(request: NextRequest) {
   const refused = guardRequest(
     {
       method: request.method,
+      // Next fills X-Forwarded-Proto with its own scheme when no proxy set
+      // one, so this is the scheme the browser used either way.
+      protocol: request.headers.get('x-forwarded-proto') ?? request.nextUrl.protocol,
       host: request.headers.get('host'),
       forwardedHost: request.headers.get('x-forwarded-host'),
       origin: request.headers.get('origin'),

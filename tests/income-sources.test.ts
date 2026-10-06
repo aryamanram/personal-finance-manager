@@ -65,6 +65,8 @@ describe('in the pipeline', () => {
     const db = await createTestDb('income_sources');
     sql = db.sql;
     drop = db.drop;
+    // The API route builds its pool from DATABASE_URL when first imported.
+    process.env.DATABASE_URL = db.url;
     acct = await seedAccounts(sql);
     paycheck = await categoryByName(sql, 'Paycheck');
     await sql`INSERT INTO income_sources (name, match_payer, category_id)
@@ -136,5 +138,26 @@ describe('in the pipeline', () => {
       { category_name: 'Reimbursement', category_source: 'manual' },
     ]);
     expect(r.byIncomeSource).toBe(1);
+  });
+
+  it('refuses to register a payer against a category that is not income', async () => {
+    // A source files its deposits as KNOWN and keeps them out of review. Filed
+    // under a spending category, a paycheck would count as negative spending
+    // and nobody would ever be asked about it.
+    const { POST } = await import('@/app/api/income-sources/route');
+    const post = (category_id: string) => POST(new Request('http://localhost:3000/api/income-sources', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Other Co', match_payer: 'OTHER CO', category_id }),
+    }));
+
+    const refused = await post(await categoryByName(sql, 'Groceries'));
+    expect(refused.status).toBe(404);
+    expect(await refused.json()).toEqual({ error: 'Income category not found.' });
+    const [{ n }] = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM income_sources WHERE name = 'Other Co'`;
+    expect(n).toBe(0);
+
+    expect((await post(paycheck)).status).toBe(200);
   });
 });
