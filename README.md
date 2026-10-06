@@ -53,8 +53,10 @@ chmod +x .git/hooks/pre-push
 
 There is no login, so the network boundary is the access control.
 
-- **Postgres** publishes on `127.0.0.1:5433` only. Its password is in this
-  public repo, so it must never be reachable from another machine.
+- **Postgres** publishes on `127.0.0.1:5433` only. Its starting password is in
+  this public repo, so it must never be reachable from another machine — and a
+  real ledger should leave it once: `npm run db:rotate-password` sets a random
+  one on the role and in `.env.local` together, proving it before saving.
 - **The app** binds to `127.0.0.1` — `npm run dev` and `npm run start` pass
   `-H`. Next's own default is every interface, which puts an unauthenticated
   ledger on whatever Wi-Fi you are sitting on.
@@ -72,8 +74,10 @@ LEDGER_ALLOWED_HOSTS=your-machine.your-tailnet.ts.net
 ```
 
 Nothing about a transaction leaves the machine except SimpleFIN's read-only
-pull. Categorisation is local and deterministic; `tests/no-network.test.ts`
-fails if an LLM client, an LLM API host, or any other outbound request appears.
+pull, and the browser fetches nothing from anywhere but the app — fonts are
+self-hosted. Categorisation is local and deterministic; `tests/no-network.test.ts`
+fails if an LLM client, an LLM API host, an outbound request, or a third-party
+URL in a page appears.
 
 ## Setup
 

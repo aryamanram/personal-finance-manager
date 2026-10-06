@@ -40,16 +40,22 @@ definitions hashed identically before and after. `tests/no-network.test.ts`
 fails on any LLM SDK (transitive included), LLM API host, or outbound request
 other than SimpleFIN's.
 
-**Next, once this branch merges:**
+Both are merged (PR #12, with three CodeRabbit findings fixed). Branch
+`security-followups` adds self-hosted fonts — the browser no longer contacts
+Google on every page view — a test that no page names a third-party URL,
+`npm run db:rotate-password`, and real figures scrubbed from the public docs.
 
-- `.env.example` still names `ANTHROPIC_API_KEY` (env files are blocked for
-  the agent): `sed -i '' -E '/ANTHROPIC|LLM|Haiku/d' .env.example`.
-- The compose password is a public default. A real ledger should not keep it:
-  `ALTER ROLE finance PASSWORD '…'`, then `DATABASE_URL` in `.env.local`.
+**Waiting on the owner** (each touches an env file, which the agent may not):
+
+- `.env.example` still names `ANTHROPIC_API_KEY`:
+  `sed -i '' -E '/ANTHROPIC|LLM|Haiku/d' .env.example`.
+- The compose password is a public default. `npm run db:rotate-password`
+  replaces it on the role and in `.env.local` together; tested on a scratch
+  role, including putting the role back when the file cannot be written.
 - Nothing schedules `npm run sync` yet; it has been run by hand.
 
-**Categorisation no longer uses a model.** Branch `deterministic-categorizer`,
-not yet merged. The LLM step, the Anthropic SDK and the API key are gone;
+**Categorisation no longer uses a model.** Merged in PR #12. The LLM step,
+the Anthropic SDK and the API key are gone;
 a deterministic guesser (`src/categorize/guess.ts`) learns from the ledger's
 own human decisions instead. Every guess is still a guess — the owner
 confirms each one — which is exactly why paying a model for them bought
