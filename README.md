@@ -169,7 +169,7 @@ there if you are new, or when a number looks wrong.
 ```
 db/schema.sql          authoritative DDL — edit this, not migrations
 src/ingest/            fingerprint, dedup, SimpleFIN, Apple Card CSV
-src/categorize/        merchant defaults → rules → LLM → Uncategorized
+src/categorize/        income sources → rules → guess from history → Uncategorized
 src/transfers/         pair matching
 src/money.ts           the only cents↔display path
 src/lib/edit.ts        the manual edit contract
@@ -239,5 +239,3 @@ Flagged rather than guessed at, per `docs/DESIGN.md` §12:
 
 - **Annual fee amortization.** The Explorer's fee spikes one month's fixed
   costs. Show as-is, or spread over twelve months? Currently as-is.
-- **LLM category proposals.** The model may only pick from the existing list.
-  Currently no; changing it means deciding who curates the taxonomy.

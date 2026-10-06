@@ -1,7 +1,10 @@
-import { getAccounts, getNetWorth, getInvestmentPerformance, getLastSync } from '@/lib/queries';
+import {
+  getAccounts, getNetWorth, getInvestmentPerformance, getLastSync, getIncomeSources, getCategories,
+} from '@/lib/queries';
 import { Figure } from '@/components/Figure';
 import { CsvImport } from '@/components/CsvImport';
 import { BalanceSnapshotForm } from '@/components/BalanceSnapshotForm';
+import { IncomeSources } from '@/components/IncomeSources';
 import { formatCents } from '@/money';
 import { formatTimestampLong } from '@/lib/format-date';
 
@@ -9,11 +12,13 @@ export const dynamic = 'force-dynamic';
 
 /** Renders account balances, investment performance, and import controls. */
 export default async function AccountsPage() {
-  const [accounts, netWorth, performance, lastSync] = await Promise.all([
+  const [accounts, netWorth, performance, lastSync, incomeSources, categories] = await Promise.all([
     getAccounts(),
     getNetWorth(),
     getInvestmentPerformance(),
     getLastSync(),
+    getIncomeSources(),
+    getCategories(),
   ]);
 
   const total = netWorth.reduce((a, n) => a + n.balance_cents, 0);
@@ -59,6 +64,13 @@ export default async function AccountsPage() {
             {lastSync.error && <span className="ml-2 text-edited">{lastSync.error}</span>}
           </p>
         )}
+      </section>
+
+      <section>
+        <div className="rule-b pb-2">
+          <h2 className="eyebrow">Income sources</h2>
+        </div>
+        <IncomeSources sources={incomeSources} categories={categories} />
       </section>
 
       {performance.map((p) => {

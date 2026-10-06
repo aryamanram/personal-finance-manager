@@ -27,12 +27,11 @@ flowchart TB
             importcsv["<b>import</b><br/><span style='font-size:11px'>a statement the<br/>feed cannot reach</span>"]
         end
 
-        db[("<b>PostgreSQL 16</b><br/><span style='font-size:11px'>docker compose · :5433<br/>15 tables · 4 views</span>")]
-        envfile["<b>.env.local</b><br/><span style='font-size:11px'>bridge URL · API key<br/>gitignored</span>"]
+        db[("<b>PostgreSQL 16</b><br/><span style='font-size:11px'>docker compose · :5433<br/>16 tables · 4 views</span>")]
+        envfile["<b>.env.local</b><br/><span style='font-size:11px'>bridge URL<br/>gitignored</span>"]
     end
 
     bridge["SimpleFIN Bridge"]
-    claude["Claude API"]
 
     owner -->|"browser"| web
     owner -->|"terminal · cron"| passes
@@ -40,8 +39,6 @@ flowchart TB
     web <-->|"SQL"| db
     passes -->|"SQL"| db
     sync -->|"HTTPS"| bridge
-    recat -.->|"unknown merchants"| claude
-    sync -.-> claude
 
     envfile -.->|"read at startup"| web
     envfile -.-> passes
@@ -54,7 +51,7 @@ flowchart TB
     class owner person
     class web,sync,recat,importcsv app
     class db store
-    class bridge,claude ext
+    class bridge ext
     class envfile secret
 ```
 

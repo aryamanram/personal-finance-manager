@@ -118,7 +118,7 @@ export async function POST(req: Request) {
 
     // Categorize and re-run the transfer matcher — the Apple Card syncs monthly
     // by file, so its half of a payment pair only appears now.
-    const categorized = await runCategorization(sql, { noLlm: !process.env.ANTHROPIC_API_KEY });
+    const categorized = await runCategorization(sql);
     const transfers = await matchTransfers(sql);
 
     return NextResponse.json({
@@ -126,7 +126,8 @@ export async function POST(req: Request) {
         inserted: result.inserted,
         duplicate: result.duplicate,
         adopted: result.adopted,
-        categorized: categorized.byRule + categorized.byLlm,
+        categorized: categorized.byIncomeSource + categorized.byRule +
+          categorized.byHistory + categorized.byPattern,
         transfersLinked: transfers.linked,
         warnings: parsed.warnings,
       },

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { CategoryPalette } from './CategoryPalette';
-import type { VTransaction, CategoryWithGroup } from '@/lib/types';
+import { GUESS_SOURCES, type VTransaction, type CategoryWithGroup } from '@/lib/types';
 import type { MerchantContext } from '@/lib/queries';
 
 /**
@@ -45,7 +45,7 @@ export function RowEditor({
   const isGuess =
     !txn.category_locked &&
     txn.category_id !== null &&
-    ['rule', 'llm', 'import'].includes(txn.category_source);
+    GUESS_SOURCES.includes(txn.category_source);
 
   /** Commits the name, but only when it actually changed. */
   function commitName() {
@@ -155,6 +155,13 @@ export function RowEditor({
                 {txn.eff_cost_type} · {txn.eff_necessity}
               </span>
             </button>
+          )}
+          {/* Why the machine chose it. Only while no human has: once locked,
+              the reason is history, and the choice is the owner's. */}
+          {!picking && !txn.category_locked && txn.suggested_reason && (
+            <p className="mt-2 text-xs text-paper-faint">
+              {isGuess ? 'Guessed' : 'Filed'}: {txn.suggested_reason}
+            </p>
           )}
         </div>
 

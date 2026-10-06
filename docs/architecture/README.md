@@ -43,20 +43,18 @@ flowchart TB
 
     banks[("<b>Your banks</b><br/><span style='font-size:11px'>Chase checking · credit cards<br/>Apple Card · brokerage</span>")]
     simplefin["<b>SimpleFIN Bridge</b><br/><span style='font-size:11px'>Read-only transaction feed.<br/>~24 requests/day.</span>"]
-    anthropic["<b>Claude API</b><br/><span style='font-size:11px'>Names an unknown merchant's<br/>category. Optional.</span>"]
 
     owner -->|"reads, corrects,<br/>categorises"| ledger
     ledger -->|"pulls daily"| simplefin
     simplefin -->|"read-only"| banks
     owner -->|"exports a statement<br/>when a bank has no feed"| ledger
-    ledger -.->|"only unknown merchants,<br/>never amounts"| anthropic
 
     classDef person fill:#2f8a72,stroke:#6ee7c0,color:#0b0f14
     classDef core fill:#25303e,stroke:#84919a,color:#e6eaec
     classDef ext fill:#131922,stroke:#34424f,color:#a5b0b7
     class owner person
     class ledger core
-    class banks,simplefin,anthropic ext
+    class banks,simplefin ext
 ```
 
 ### What crosses each boundary
@@ -64,12 +62,13 @@ flowchart TB
 | Boundary | What moves | What never moves |
 |---|---|---|
 | Bridge → Ledger | Dates, amounts, descriptions, balances | Bank credentials — the bridge holds those, this app never sees them |
-| Ledger → Claude | Merchant **names** only, batched | Amounts, dates, balances, account numbers |
 | Ledger → anywhere else | Nothing | There is no other outbound call |
 
-The Claude step is optional. Without `ANTHROPIC_API_KEY` the categoriser skips
-it and leaves unknown merchants in `Uncategorized`, which costs accuracy and
-nothing else.
+Categorisation is entirely local. It once sent unknown merchant names to a
+language model; that step was retired because every guess is reviewed by hand
+anyway, and the owner's own past decisions predict the next one better than a
+general model does (`npm run backtest` measures it). Nothing about a
+transaction leaves the machine except the bridge's own read-only pull.
 
 ### Two things this deliberately is not
 

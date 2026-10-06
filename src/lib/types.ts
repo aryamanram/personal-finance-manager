@@ -2,7 +2,17 @@
 
 export type AccountType = 'depository' | 'credit' | 'investment' | 'loan' | 'other';
 export type TxnStatus = 'pending' | 'posted';
-export type CategorySource = 'unset' | 'default' | 'import' | 'rule' | 'llm' | 'manual';
+export type CategorySource =
+  | 'unset' | 'default' | 'import' | 'rule' | 'history' | 'llm' | 'income_source' | 'manual';
+
+/**
+ * A machine chose the category and no human has confirmed it. The single
+ * definition of "a guess" — the register, the row editor and the review
+ * counts all read this. 'income_source' is deliberately absent: a registered
+ * payer is known, not guessed. 'llm' stays for rows written before the model
+ * was retired.
+ */
+export const GUESS_SOURCES: readonly CategorySource[] = ['rule', 'history', 'llm', 'import'];
 export type CostType = 'fixed' | 'variable';
 export type Necessity = 'required' | 'discretionary' | 'income' | 'transfer' | 'investment';
 export type IngestSource = 'simplefin' | 'plaid' | 'csv' | 'ofx' | 'manual';
@@ -64,6 +74,7 @@ export interface VTransaction {
   category_locked: boolean;
   suggested_category_id: string | null;
   suggested_confidence: string | null;
+  suggested_reason: string | null;
   cost_type_override: CostType | null;
   necessity_override: Necessity | null;
   transfer_id: string | null;

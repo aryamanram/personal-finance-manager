@@ -1,33 +1,45 @@
 /**
  * Categorization orchestrator (DESIGN.md §8).
  *
- * Runs the four steps in precedence order. Every step carries the
- * `NOT category_locked` guard — this function is the one place to check when
- * asking "can a machine pass clobber my work?" (I4). The answer must stay no.
+ * Deterministic end to end — no model, no network, no per-run cost. Every
+ * guess is reviewed by a human anyway, so a model's extra accuracy would be
+ * bought for rows that get looked at regardless.
+ *
+ * Passes, first claim wins:
+ *
+ *   1. income sources — registered payers. KNOWN, not guessed.
+ *   2. rules          — the owner's own patterns, `rules` table.
+ *   3. guesser        — past decisions, then built-in patterns (guess.ts).
+ *   4. Uncategorized  — nothing fit, and the count says so.
+ *
+ * Every step carries the `NOT category_locked` guard — this function is the
+ * one place to check when asking "can a machine pass clobber my work?" (I4).
+ * The answer must stay no.
  *
  * Idempotent: safe to run any number of times over any date range.
  */
 import type { Sql } from 'postgres';
 import { linkMerchants, applyRules, applyDefaultCategory } from './rules';
-import { categorizeWithLlm } from './llm';
+import { applyIncomeSources } from './income-sources';
+import { applyGuesses } from './guess-pass';
+import { loadModel } from './history';
 
 export interface CategorizeOptions {
   from?: string;
   to?: string;
-  /** Skip the LLM step even when an API key is present. */
-  noLlm?: boolean;
   log?: (msg: string) => void;
 }
 
 export interface CategorizeReport {
   merchantsLinked: number;
   merchantsCreated: number;
+  byIncomeSource: number;
   byRule: number;
-  byLlm: number;
+  byHistory: number;
+  byPattern: number;
+  withdrawn: number;
   toUncategorized: number;
   lockedRowsUntouched: number;
-  llmSkipped: string | null;
-  errors: string[];
 }
 
 export async function runCategorization(
@@ -43,26 +55,18 @@ export async function runCategorization(
   log('· linking merchants');
   const merchants = await linkMerchants(sql, range);
 
+  log('· income sources');
+  const income = await applyIncomeSources(sql, range);
+
   log('· rules');
-  const rules = await applyRules(sql, range);
+  const rules = await applyRules(sql, { ...range, exclude: income.claimed });
   for (const [name, n] of Object.entries(rules.byRule)) {
     if (n > 0) log(`  · ${name}: ${n}`);
   }
 
-  let llmUpdated = 0;
-  let llmSkipped: string | null = null;
-  const errors: string[] = [];
-
-  if (!opts.noLlm) {
-    log('· llm fallback');
-    const llm = await categorizeWithLlm(sql, { ...range, log });
-    llmUpdated = llm.transactionsUpdated;
-    llmSkipped = llm.skipped;
-    errors.push(...llm.errors);
-    if (llm.skipped === 'no-api-key') {
-      log('  · skipped: ANTHROPIC_API_KEY not set');
-    }
-  }
+  log('· guessing from history and patterns');
+  const model = await loadModel(sql);
+  const guessed = await applyGuesses(sql, model, { ...range, exclude: rules.claimed });
 
   log('· default bucket');
   const fallback = await applyDefaultCategory(sql, range);
@@ -81,13 +85,19 @@ export async function runCategorization(
   return {
     merchantsLinked: merchants.linked,
     merchantsCreated: merchants.created,
+    byIncomeSource: income.updated,
     byRule: rules.updated,
-    byLlm: llmUpdated,
+    byHistory: guessed.byHistory,
+    byPattern: guessed.byPattern,
+    withdrawn: guessed.withdrawn,
     toUncategorized: fallback.updated,
     lockedRowsUntouched: locked,
-    llmSkipped,
-    errors,
   };
 }
 
-
+/** One line for a log: what each pass filed this run. */
+export function summarize(r: CategorizeReport): string {
+  return `${r.byIncomeSource} by income source, ${r.byRule} by your rules, ` +
+    `${r.byHistory} from history, ${r.byPattern} by pattern, ` +
+    `${r.toUncategorized} to Uncategorized`;
+}

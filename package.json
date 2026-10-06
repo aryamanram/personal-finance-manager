@@ -20,13 +20,13 @@
     "import": "tsx scripts/import-csv.ts",
     "transfers": "tsx scripts/match-transfers.ts",
     "recategorize": "tsx scripts/recategorize.ts",
+    "backtest": "tsx scripts/backtest-guesser.ts",
     "check:privacy": "tsx scripts/check-privacy.ts",
     "prepush": "npm run check:privacy && npm run typecheck && npm test && npm run check:diagrams",
     "check:diagrams": "tsx scripts/check-diagrams.ts",
     "backup": "tsx scripts/backup.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.125.0",
     "@tanstack/react-query": "^5.102.8",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

@@ -18,7 +18,7 @@ import { pgTypes } from '../src/lib/pg-types.js';
 import { parseChaseCsv, toCanonical as chaseToCanonical } from '../src/ingest/chase-csv.js';
 import { parseAppleCardCsv, toCanonical as appleToCanonical } from '../src/ingest/applecard-csv.js';
 import { upsertTransactions } from '../src/ingest/upsert.js';
-import { runCategorization } from '../src/categorize/run.js';
+import { runCategorization, summarize } from '../src/categorize/run.js';
 import { matchTransfers } from '../src/transfers/match.js';
 import { formatCents } from '../src/money.js';
 
@@ -112,18 +112,8 @@ async function main() {
   // Enrichment. A failure here is reported, not fatal: re-run
   // `npm run recategorize` or scripts/match-transfers.ts.
   try {
-    const cat = await runCategorization(sql, { noLlm: !process.env.ANTHROPIC_API_KEY });
-    console.log(`· categorized ${cat.byRule} by rule, ${cat.toUncategorized} to Uncategorized`);
-
-    // The LLM step collects its failures into cat.errors rather than throwing:
-    // one bad batch should not abandon the merchants already categorized. That
-    // means the catch below never sees them, so a partially failed run would
-    // otherwise report success and exit 0.
-    for (const error of cat.errors) console.error(`! categorization: ${error}`);
-    if (cat.errors.length > 0) {
-      console.error('  some merchants were not categorized. Re-run: npm run recategorize');
-      process.exitCode = 1;
-    }
+    const cat = await runCategorization(sql);
+    console.log(`· categorized: ${summarize(cat)}`);
   } catch (err) {
     console.error(`! categorization failed (import is safe): ${err instanceof Error ? err.message : err}`);
     console.error('  re-run with: npm run recategorize');

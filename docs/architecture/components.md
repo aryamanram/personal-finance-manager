@@ -26,8 +26,9 @@ flowchart TB
         subgraph enrich["Enrichment · never overwrites a human"]
             direction LR
             runcat["<b>categorize/run.ts</b><br/><span style='font-size:11px'>orchestrates · enforces I4</span>"]
-            rules["<b>categorize/rules.ts</b><br/><span style='font-size:11px'>merchant defaults,<br/>then rules by priority</span>"]
-            llm["<b>categorize/llm.ts</b><br/><span style='font-size:11px'>Claude Haiku,<br/>per merchant</span>"]
+            income["<b>categorize/income-sources.ts</b><br/><span style='font-size:11px'>registered payers ·<br/>known, not guessed</span>"]
+            rules["<b>categorize/rules.ts</b><br/><span style='font-size:11px'>your rules,<br/>by priority</span>"]
+            guess["<b>categorize/guess.ts</b><br/><span style='font-size:11px'>past decisions, then<br/>patterns · no network</span>"]
             match["<b>transfers/match.ts</b><br/><span style='font-size:11px'>pairs both legs</span>"]
         end
     end
@@ -51,7 +52,7 @@ flowchart TB
     sources --> upsert
     fingerprint --> upsert
     upsert --> enrich
-    runcat --> rules & llm & match
+    runcat --> income & rules & guess & match
 
     upsert --> dbmod
     enrich --> dbmod
@@ -69,7 +70,7 @@ flowchart TB
     classDef uic fill:#25303e,stroke:#84919a,color:#e6eaec
     classDef store fill:#131922,stroke:#6ee7c0,color:#e6eaec
     class sources,fingerprint,upsert ing
-    class runcat,rules,llm,match enr
+    class runcat,income,rules,guess,match enr
     class queries,edit,dbmod dat
     class pages,api,money uic
     class pg store

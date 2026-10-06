@@ -120,7 +120,7 @@ describe('I4 — a manual category change sets the lock via the trigger', () => 
     expect(updated.category_locked).toBe(true);   // set by the DB, not by us
 
     const { runCategorization } = await import('@/categorize/run');
-    await runCategorization(sql, { noLlm: true });
+    await runCategorization(sql);
 
     const [after] = await sql<{ category_id: string }[]>`
       SELECT category_id FROM transactions WHERE id = ${txnId}`;
