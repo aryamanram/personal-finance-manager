@@ -22,44 +22,67 @@ Describe the *shape* of a decision here and keep the specifics there.
 
 ---
 
-## Right now · last updated 2026-09-25
+## Right now · last updated 2026-10-06
 
-Nothing blocking. The register rebuild is merged (PR #11); everything is on
-`main` and the full gate is green there.
+**Both listeners are loopback-only now.** Postgres was published on every
+interface, behind the password printed in `docker-compose.yml`, and `next dev`
+binds every interface by default — an unauthenticated ledger, one hop from the
+local network. Both now bind loopback, and `src/proxy.ts` refuses DNS
+rebinding and cross-site writes. Verified against a running server: the LAN
+address refuses both ports, a forged Host gets 421, a cross-site POST 403.
 
-**One branch is open and unmerged: `categorization-design`.** It is a spec —
-`docs/CATEGORIZATION.md`, the layer under DESIGN.md §8 — and no code depends on
-it. Its finding worth acting on: the SimpleFIN bridge populates `payee` on
-every transaction and this ledger drops it on every sync, along with three
-other signals. No feed carries product detail, so that is the ceiling on
-automatic granularity. Merge it or act on it; do not let it rot unread.
+**The last traces of the model are gone.** The `llm` category source is
+dropped from `schema.sql` and from the live database. The one row carrying it
+was a superseded pending row no view shows; it now reads `history`. Migrated
+by hand after `npm run backup` and a rehearsal on a restored copy: cashflow,
+net worth, every resolved transaction, raw amounts, the edit log and the view
+definitions hashed identically before and after. `tests/no-network.test.ts`
+fails on any LLM SDK (transitive included), LLM API host, or outbound request
+other than SimpleFIN's.
 
-CodeRabbit had not finished its review when the PR was merged, so that branch
-went in unreviewed by it. Nothing was dismissed — it simply never reported.
-Worth a glance over `src/components/CategoryFilter.tsx` and the ingest changes
-in `src/ingest/upsert.ts` if a second opinion is wanted later.
+**Next, once this branch merges:**
 
-The categorisation backlog is **cleared**: every transaction is hand-decided or
-confirmed. That is the steady state the register was rebuilt for, and it means
-the next machine pass has a locked baseline to respect rather than a mixed one.
+- `.env.example` still names `ANTHROPIC_API_KEY` (env files are blocked for
+  the agent): `sed -i '' -E '/ANTHROPIC|LLM|Haiku/d' .env.example`.
+- The compose password is a public default. A real ledger should not keep it:
+  `ALTER ROLE finance PASSWORD '…'`, then `DATABASE_URL` in `.env.local`.
+- Nothing schedules `npm run sync` yet; it has been run by hand.
 
-Two things are half-done and will be obvious to the next person:
+**Categorisation no longer uses a model.** Branch `deterministic-categorizer`,
+not yet merged. The LLM step, the Anthropic SDK and the API key are gone;
+a deterministic guesser (`src/categorize/guess.ts`) learns from the ledger's
+own human decisions instead. Every guess is still a guess — the owner
+confirms each one — which is exactly why paying a model for them bought
+nothing. Measured with `npm run backtest`, replaying the ledger's decisions:
 
-- **Categorisation rules live only in the example file.** The Venmo-by-sign,
-  Toomics, and Entertainment patterns added this session are in
-  `scripts/rules.example.ts` as illustrations. They are not active until
-  copied into `private/my-rules.ts` and run. The `rules` table is empty.
-- **The subcategory assignments were applied as one-off SQL**, not as rules.
-  They hold, but a merchant that reappears under a new description will land on
-  the parent until a rule covers it.
+| | exact category | precise when it guesses | guesses at all |
+|---|---:|---:|---:|
+| in date order (only earlier decisions known) | 79% | 94% | 84% |
+| hold-out (every other decision known) | 87% | 96% | 91% |
+
+Confidence tracks accuracy: the 0.8+ band is right ~97% of the time.
+
+**Income sources** are new: a payer (description text or ACH originator ID)
+maps to a category, managed on the Accounts page. A match is *known*, not
+guessed, and skips review. The owner's employer is registered by name, ahead
+of its first deposit. **When that first paycheck lands, check it was filed
+as a known Paycheck** — if the bank prints it through a payroll processor
+under another name, add the originator ID from that deposit.
+
+The `categorization-design` branch's finding (SimpleFIN `payee`, Chase `Type`
+are dropped on ingest) is still unacted on; both would feed the guesser
+directly.
+
+Two rows are filed at the bare `Subscriptions` parent in July 2026 while
+every other row of the same merchants sits in a subcategory — likely
+oversights. Left alone (they are human decisions); the guesser no longer
+trips on them, since a parent vote counts toward its own child.
 
 Two standing tasks the owner tracks — details in `private/STATE.local.md`:
 
 - Record a brokerage balance monthly, so investment performance has a period to
   measure over. One snapshot is a starting line, not a return.
-- Add a payroll rule when a new income source starts, so it categorises itself.
-
-Next up: design work on the look and feel, using the Figma integration.
+- Register a new income source on the Accounts page when one starts.
 
 ---
 
@@ -70,8 +93,8 @@ own checks. The app runs against live bank accounts, not fixtures: several
 hundred transactions spanning about two years, fully categorised, reconciling
 against the banks' own balances.
 
-Connected: two card/bank feeds through SimpleFIN on a daily pull, one
-snapshot-tracked brokerage, and Claude Haiku for unknown merchants.
+Connected: two card/bank feeds through SimpleFIN on a daily pull and one
+snapshot-tracked brokerage. Categorisation is local and deterministic.
 
 The cards carry their own proof: `getCardSettlement()` checks, per card, that
 `purchases − payments_applied = still_owed = what the issuer reports`. While
@@ -80,11 +103,20 @@ them as transfers — is sound rather than assumed. It holds to the cent today.
 
 ## Decisions worth not relitigating
 
+**No login; the network boundary is the access control.** One user, one
+machine, so authentication would guard nothing a loopback bind does not —
+provided the bind really is loopback, which Next's and Docker's defaults are
+not. What loopback cannot stop is a web page in the owner's own browser, so
+`src/proxy.ts` refuses any Host outside loopback and `LEDGER_ALLOWED_HOSTS`
+(DNS rebinding) and any state-changing request a browser sends from another
+origin (CSRF). Remote access goes through a reverse proxy such as
+`tailscale serve`, never a wider bind.
+
 **Categories nest one level, no more.** (Moving one between parents is a single
 `parent_id` update — done once already, for hobby goods.) `categories.parent_id`, with a trigger
 refusing a third level and refusing a child in a different group from its
 parent. A subcategory is an ORDINARY category — transactions point at exactly
-one `category_id` — so rules, the model and the palette work on it unchanged,
+one `category_id` — so rules, the guesser and the palette work on it unchanged,
 and rolling up is a join rather than a second schema. `v_transactions` exposes
 `rollup_category_*`, so anything wanting totals "as if the split never
 happened" groups by those and is right without knowing the depth.
@@ -137,13 +169,15 @@ spending; a cash-*out* back to checking is a transfer. The direction is the
 signal, not the rail. Where such a payment funded a purchase on credit, it is
 categorised by what the money *bought*, not by the rail it travelled.
 
-**The LLM reliably gets those rails wrong**, routing them to `Account Transfer`
-— mechanically defensible, since money does move through a rail, but wrong for a
-spending ledger. That category carries `necessity='transfer'`, so anything
-landing there leaves the totals entirely. It once hid several thousand dollars of
-real spending. Those rails are now claimed by explicit rules so the model cannot
-re-decide them each run. If it ever touches them again, clear
-`merchants.default_category_id` too, or the mistake becomes permanent.
+**The retired LLM reliably got those rails wrong**, routing them to `Account
+Transfer` — mechanically defensible, since money does move through a rail, but
+wrong for a spending ledger. That category carries `necessity='transfer'`, so
+anything landing there leaves the totals entirely. It once hid several thousand
+dollars of real spending, and it is part of why the model was retired. The
+guesser reads rails by direction and by the owner's history: an outgoing
+Zelle to a known person gets what that person was last paid for, an unknown
+one gets what most outgoing Zelles were. Never `Account Transfer` unless the
+owner filed that payee there.
 
 **Withdrawn cash** goes to `Cash Withdrawn`, not `Uncategorized`. It *is* an
 expenditure — it left the account — but its destination is unknowable.
@@ -173,7 +207,8 @@ than any of them, and the remaining gap was not worth more tuning.
 - **`budgets` and `holdings` tables are empty.** Both are in the schema for
   later, per `docs/DESIGN.md` §13. Leave them.
 - **Transaction splitting is out of scope** — one transaction, one category.
-- **No auth.** Runs on localhost or behind Tailscale. Adding a second user means
+- **No auth.** Runs on localhost or behind Tailscale, guarded by the loopback
+  bind and `src/proxy.ts` (see the decision above). Adding a second user means
   revisiting every query in `src/lib/queries.ts`.
 - **`@mermaid-js/mermaid-cli` is a devDependency** and pulls Puppeteer. That is
   the cost of `npm run check:diagrams` working offline and reproducibly.
@@ -185,8 +220,6 @@ Flagged rather than guessed at, per `docs/DESIGN.md` §12:
 - **Annual fee amortisation.** A card's annual fee spikes one month's fixed
   costs. Shown as-is today; spreading it over twelve months is a view change now
   and a data migration later.
-- **LLM proposing new categories.** Currently it may only pick from the existing
-  list. Allowing proposals means deciding who curates the taxonomy.
 - **Reconciliation surfacing.** A passive banner today, and now quiet: it
   tests both bases (balances that include pending rows and balances that do
   not) and reports an account only when neither matches, so the cards no longer

@@ -100,7 +100,7 @@ export function CategoryPalette({
 
     // Typing searches every category at every depth; otherwise walk the tree.
     // There is deliberately NOTHING pinned above it. Every shortcut tried here
-    // — the merchant's remembered category, "you use most", the model's best
+    // — the merchant's remembered category, "you use most", the machine's best
     // guess — lifted a category out of its place in the tree, so the same
     // category sat in two places and the structure moved as you worked. A
     // pinned section also anchored the panel, which is what made clicking a

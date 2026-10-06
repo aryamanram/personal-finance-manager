@@ -1,8 +1,8 @@
 /**
- * Deterministic categorization (DESIGN.md §8, steps 1-2).
+ * Rules — the owner's own patterns, from the `rules` table (DESIGN.md §8).
  *
- * Order: merchant default, then rules by ascending priority, first match wins.
- * EVERY query here carries `AND NOT category_locked` (I4).
+ * Ascending priority, first match wins. EVERY query here carries
+ * `AND NOT category_locked` (I4).
  */
 import type { Sql } from 'postgres';
 
@@ -55,14 +55,20 @@ export interface PassResult {
  */
 export async function applyRules(
   sql: Sql,
-  opts: { from?: string; to?: string } = {},
-): Promise<PassResult & { byRule: Record<string, number> }> {
+  opts: { from?: string; to?: string; exclude?: Set<string> } = {},
+): Promise<PassResult & { byRule: Record<string, number>; claimed: Set<string> }> {
   const rules = await sql<Rule[]>`
     SELECT * FROM rules WHERE is_active ORDER BY priority ASC, created_at ASC`;
 
   const byRule: Record<string, number> = {};
   let updated = 0;
-  const alreadyMatched = new Set<string>();
+  // Rows an earlier pass (income sources) already owns start out claimed.
+  const alreadyMatched = new Set<string>(opts.exclude ?? []);
+  // What later passes must leave alone: rows whose CATEGORY is decided. A rule
+  // that only sets necessity, cost type or merchant still wins against later
+  // rules, but it has said nothing about the category, so the guesser must
+  // still guess one — otherwise the row falls straight to Uncategorized.
+  const categorised = new Set<string>(opts.exclude ?? []);
 
   for (const rule of rules) {
     if (!rule.set_category_id && !rule.set_cost_type && !rule.set_necessity && !rule.set_merchant_id) {
@@ -98,7 +104,12 @@ export async function applyRules(
                                THEN 'rule'::category_source ELSE t.category_source END,
         merchant_id     = COALESCE(${rule.set_merchant_id}::uuid, t.merchant_id),
         cost_type_override = COALESCE(${rule.set_cost_type}::cost_type, t.cost_type_override),
-        necessity_override = COALESCE(${rule.set_necessity}::necessity, t.necessity_override)
+        necessity_override = COALESCE(${rule.set_necessity}::necessity, t.necessity_override),
+        suggested_category_id = COALESCE(${rule.set_category_id}::uuid, t.suggested_category_id),
+        suggested_confidence  = CASE WHEN ${rule.set_category_id}::uuid IS NOT NULL
+                                     THEN 0.9 ELSE t.suggested_confidence END,
+        suggested_reason      = CASE WHEN ${rule.set_category_id}::uuid IS NOT NULL
+                                     THEN ${'your rule: ' + rule.name} ELSE t.suggested_reason END
       WHERE NOT t.category_locked
         AND t.superseded_by_id IS NULL
         AND t.voided_at IS NULL
@@ -107,7 +118,9 @@ export async function applyRules(
         -- updated_at and making "did anything change?" unanswerable.
         AND (
           (${rule.set_category_id}::uuid IS NOT NULL
-             AND t.category_id IS DISTINCT FROM ${rule.set_category_id}::uuid)
+             AND (t.category_id IS DISTINCT FROM ${rule.set_category_id}::uuid
+                  OR t.category_source <> 'rule'
+                  OR t.suggested_reason IS DISTINCT FROM ${'your rule: ' + rule.name}))
           OR (${rule.set_merchant_id}::uuid IS NOT NULL
              AND t.merchant_id IS DISTINCT FROM ${rule.set_merchant_id}::uuid)
           OR (${rule.set_cost_type}::cost_type IS NOT NULL
@@ -130,16 +143,19 @@ export async function applyRules(
       RETURNING t.id`;
 
     // Claim everything this rule matched, not just what it changed.
-    for (const r of claimed) alreadyMatched.add(r.id);
+    for (const r of claimed) {
+      alreadyMatched.add(r.id);
+      if (rule.set_category_id) categorised.add(r.id);
+    }
     byRule[rule.name] = matched.length;
     updated += matched.length;
   }
 
-  return { examined: updated, updated, skippedLocked: 0, byRule };
+  return { examined: updated, updated, skippedLocked: 0, byRule, claimed: categorised };
 }
 
 /**
- * Step 4 — everything still uncategorized lands in Uncategorized so the
+ * Last step — everything still uncategorized lands in Uncategorized so the
  * dashboard's "Uncategorized: N" number is honest.
  */
 export async function applyDefaultCategory(
@@ -164,7 +180,8 @@ export async function applyDefaultCategory(
 
 /**
  * Attach a merchant to every transaction that lacks one, creating merchant rows
- * on first sight. Runs before categorization so merchant defaults can apply.
+ * on first sight. Runs before categorization so the register can offer to
+ * apply a decision to the same merchant's other rows.
  */
 export async function linkMerchants(
   sql: Sql,

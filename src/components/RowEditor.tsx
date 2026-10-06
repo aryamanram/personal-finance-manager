@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { CategoryPalette } from './CategoryPalette';
-import type { VTransaction, CategoryWithGroup } from '@/lib/types';
+import { GUESS_SOURCES, type VTransaction, type CategoryWithGroup } from '@/lib/types';
 import type { MerchantContext } from '@/lib/queries';
 
 /**
@@ -45,7 +45,7 @@ export function RowEditor({
   const isGuess =
     !txn.category_locked &&
     txn.category_id !== null &&
-    ['rule', 'llm', 'import'].includes(txn.category_source);
+    GUESS_SOURCES.includes(txn.category_source);
 
   /** Commits the name, but only when it actually changed. */
   function commitName() {
@@ -156,6 +156,13 @@ export function RowEditor({
               </span>
             </button>
           )}
+          {/* Why the machine chose it. Only while no human has: once locked,
+              the reason is history, and the choice is the owner's. */}
+          {!picking && !txn.category_locked && txn.suggested_reason && (
+            <p className="mt-2 text-xs text-paper-faint">
+              {isGuess ? 'Guessed' : 'Filed'}: {txn.suggested_reason}
+            </p>
+          )}
         </div>
 
         {/* A one-time action on rows that exist NOW. The standing "categorise
@@ -163,7 +170,7 @@ export function RowEditor({
             default re-asserted itself on every sync and silently reverted
             later, more specific decisions — it would have undone every
             subcategory assignment. A repeat charge is handled by a rule or the
-            model, both of which are visible and editable. */}
+            guesser, both of which are visible and editable. */}
         {merchant && merchant.siblings > 0 && (
           <div className="border-l-2 border-edited/40 pl-4">
             <label className="flex items-start gap-2 text-xs text-paper-dim">

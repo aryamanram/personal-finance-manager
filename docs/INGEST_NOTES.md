@@ -125,8 +125,8 @@ WHERE ... AND NOT category_locked;
 ```
 
 The `NOT category_locked` guard is the whole point of the trigger. Write it
-into every batch categorization path — nightly rules pass, LLM backfill,
-merchant-default propagation, all of them.
+into every batch categorization path — income sources, rules, the guesser,
+all of them.
 
 ## 5. Two axes, not one
 

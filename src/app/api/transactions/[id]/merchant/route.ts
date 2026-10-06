@@ -6,7 +6,7 @@
  * Applying to siblings is a ONE-TIME action on rows that exist now. There is
  * deliberately no standing "always file this merchant here" any more: a stored
  * default re-asserted itself on every sync and silently reverted later, more
- * specific decisions. A repeat charge is categorised by a rule or the model,
+ * specific decisions. A repeat charge is categorised by a rule or the guesser,
  * both of which are visible and editable; a hidden per-merchant default was
  * neither. It respects I4 by only ever touching rows that are NOT locked.
  */

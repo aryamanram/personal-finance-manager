@@ -4,7 +4,7 @@
  */
 import 'server-only';
 import { sql } from './db';
-import type { VTransaction, MonthlyCashflow, CategoryWithGroup, Account } from './types';
+import { GUESS_SOURCES, type VTransaction, type MonthlyCashflow, type CategoryWithGroup, type Account } from './types';
 
 export interface TransactionFilters {
   from?: string;
@@ -69,7 +69,7 @@ export async function getTransactions(f: TransactionFilters = {}) {
         : sql``}
       ${f.needsReviewOnly
         ? sql`AND NOT category_locked AND category_id IS NOT NULL
-              AND category_source IN ('rule','llm','import')`
+              AND category_source = ANY(${GUESS_SOURCES as string[]}::category_source[])`
         : sql``}
       ${f.search
         ? sql`AND (eff_description ILIKE ${'%' + f.search + '%'}
@@ -103,7 +103,7 @@ export async function countTransactions(f: TransactionFilters = {}): Promise<num
         : sql``}
       ${f.needsReviewOnly
         ? sql`AND NOT category_locked AND category_id IS NOT NULL
-              AND category_source IN ('rule','llm','import')`
+              AND category_source = ANY(${GUESS_SOURCES as string[]}::category_source[])`
         : sql``}
       ${f.search
         ? sql`AND (eff_description ILIKE ${'%' + f.search + '%'}
@@ -294,7 +294,7 @@ export async function getUncategorizedCount(): Promise<number> {
  * Deliberately different questions, and conflating them made the old single
  * "uncategorized" count hard to act on:
  *
- *   needs_review  — a machine (rule or LLM) chose it and no human has
+ *   needs_review  — a machine (rule or guesser) chose it and no human has
  *                   confirmed. There IS a category; it may just be wrong.
  *   uncategorized — nobody and nothing has chosen.
  *
@@ -327,7 +327,7 @@ export async function getReviewCounts(
       count(*) FILTER (
         WHERE NOT category_locked
           AND category_id IS NOT NULL
-          AND category_source IN ('rule','llm','import')
+          AND category_source = ANY(${GUESS_SOURCES as string[]}::category_source[])
       )::int AS needs_review,
       count(*) FILTER (
         WHERE category_id IS NULL OR category_source IN ('unset','default')
@@ -552,3 +552,38 @@ export async function getCardSettlement(): Promise<CardSettlement[]> {
     ORDER BY name`;
 }
 
+
+/** A registered payer, with what it has filed so far. */
+export interface IncomeSourceRow {
+  id: string;
+  name: string;
+  match_payer: string | null;
+  match_originator_id: string | null;
+  category_id: string;
+  category_name: string;
+  deposits: number;
+  last_date: string | null;
+  last_cents: number | null;
+}
+
+/**
+ * Active income sources. `deposits` counts rows the source filed — hand-filed
+ * rows from the same payer are the owner's own and are not credited to it.
+ */
+export async function getIncomeSources(): Promise<IncomeSourceRow[]> {
+  return sql<IncomeSourceRow[]>`
+    SELECT s.id, s.name, s.match_payer, s.match_originator_id, s.category_id,
+           c.name AS category_name,
+           count(t.id)::int AS deposits,
+           max(t.eff_posted_date)::text AS last_date,
+           (array_agg(t.eff_amount_cents ORDER BY t.eff_posted_date DESC))[1] AS last_cents
+    FROM income_sources s
+    JOIN categories c ON c.id = s.category_id
+    LEFT JOIN v_transactions t
+      ON t.category_source = 'income_source'
+     AND t.suggested_reason = 'income source: ' || s.name
+     AND t.superseded_by_id IS NULL AND t.voided_at IS NULL
+    WHERE s.is_active
+    GROUP BY s.id, c.name
+    ORDER BY s.created_at`;
+}

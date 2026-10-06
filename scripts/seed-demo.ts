@@ -256,7 +256,7 @@ async function main() {
     ('Brokerage',      10, 'MORGAN STANLEY',                ${await cat('Brokerage Contribution')})`;
 
   console.log('· categorizing');
-  const report = await runCategorization(sql, { noLlm: true });
+  const report = await runCategorization(sql);
   console.log(`  ${report.byRule} by rule, ${report.toUncategorized} to Uncategorized`);
 
   // Daily Cash must net against spending, not inflate income (DESIGN §6.2).

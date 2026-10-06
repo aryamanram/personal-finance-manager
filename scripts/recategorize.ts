@@ -3,7 +3,6 @@
  * development loop: tweak rules, re-run, look at what changed.
  *
  *   npm run recategorize -- --from 2026-01-01
- *   npm run recategorize -- --from 2026-01-01 --no-llm
  *
  * Safe to run any number of times. Locked rows are never touched.
  */
@@ -27,7 +26,6 @@ function arg(name: string): string | undefined {
 async function main() {
   const from = arg('from');
   const to = arg('to');
-  const noLlm = process.argv.includes('--no-llm');
 
   console.log(`recategorize${from ? ` from ${from}` : ' (all time)'}${to ? ` to ${to}` : ''}`);
 
@@ -35,13 +33,17 @@ async function main() {
     SELECT count(*)::int AS locked FROM transactions WHERE category_locked`;
   console.log(`· ${locked} rows are locked and will not be touched`);
 
-  const report = await runCategorization(sql, { from, to, noLlm, log: (m) => console.log(m) });
+  const report = await runCategorization(sql, { from, to, log: (m) => console.log(m) });
 
   console.log('');
   console.log(`  merchants linked      ${report.merchantsLinked} (${report.merchantsCreated} new)`);
-  console.log(`  by rule               ${report.byRule}`);
-  console.log(`  by model              ${report.byLlm}${report.llmSkipped ? ` (skipped: ${report.llmSkipped})` : ''}`);
+  console.log(`  by income source      ${report.byIncomeSource}`);
+  console.log(`  by your rules         ${report.byRule}`);
+  console.log(`  from history          ${report.byHistory}`);
+  console.log(`  by pattern            ${report.byPattern}`);
+  console.log(`  guesses withdrawn     ${report.withdrawn}`);
   console.log(`  to Uncategorized      ${report.toUncategorized}`);
+  console.log('  (counts are rows CHANGED this run; rows already right are not rewritten)');
 
   // Locked rows whose suggestion disagrees are exactly the cases where a rule
   // would have saved a manual edit (DESIGN.md §8).
@@ -60,7 +62,6 @@ async function main() {
     }
   }
 
-  for (const e of report.errors) console.error(`! ${e}`);
 }
 
 main()

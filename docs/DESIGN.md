@@ -28,7 +28,7 @@ and renders cashflow visualizations that answer two questions:
 
 - SimpleFIN sync for the two Chase accounts
 - Apple Card CSV import (drag-and-drop, re-import safe)
-- Rule-based categorization + LLM fallback for unknown merchants
+- Deterministic categorization: registered income sources, rules, then guesses learned from past decisions (§8)
 - Full manual edit of any transaction: category, amount, date, description, cost type, necessity, void
 - Transfer detection and exclusion from spend
 - Three views: monthly cashflow, category breakdown, transaction list
@@ -104,9 +104,9 @@ assert the transaction count is unchanged.
                     ▼
    ┌───────────────────────────────────┐
    │  Categorization pipeline          │
-   │  1. merchant default              │
+   │  1. income sources (known)        │
    │  2. rules (priority order)        │
-   │  3. LLM fallback (cached/merchant)│
+   │  3. guess: history, then patterns │
    │  ALL skip category_locked rows    │
    └────────────────┬──────────────────┘
                     ▼
@@ -142,7 +142,7 @@ categorizer after tweaking rules is the main development loop.
 | Charts | Recharts for bar/line/area; `d3-sankey` + custom SVG for the Sankey | Recharts' Sankey is too limited for the income→category flow |
 | Client state | TanStack Query | Optimistic updates on edits (see §7) |
 | Scheduling | A `pnpm sync` script invoked by system cron | No in-process scheduler; keep sync runnable by hand |
-| LLM | Anthropic SDK, Claude Haiku | Categorization only. Cheapest model that does the job. |
+| LLM | None — retired 2026-09-26, see §8 | |
 
 **Do not add:** an auth library, Redis, a queue, tRPC, or a state manager beyond
 TanStack Query. Single user, single machine.
@@ -164,8 +164,9 @@ finance/
 │  │  ├─ fingerprint.ts       # normalize() + sha256
 │  │  └─ upsert.ts            # counting dedup, pending supersession
 │  ├─ categorize/
+│  │  ├─ income-sources.ts    # registered payers
 │  │  ├─ rules.ts
-│  │  ├─ llm.ts               # merchant-level, cached
+│  │  ├─ guess.ts             # deterministic guesser, pure
 │  │  └─ run.ts               # orchestrates; enforces I4
 │  ├─ transfers/match.ts
 │  ├─ money.ts                # cents<->display, the ONLY formatting path
@@ -255,23 +256,35 @@ revert action that nulls the override and logs the revert as another edit.
 
 ## 8. Categorization pipeline
 
-Order, each step skipping rows where `category_locked = true`:
+> **Amended 2026-09-26.** The original pipeline ended in an LLM fallback
+> (Claude Haiku, per merchant) and began with a stored per-merchant default.
+> Both are gone. The merchant default silently reverted later, more specific
+> decisions. The model was retired because every guess is confirmed by hand
+> regardless, so its cost bought nothing a reviewer does not already check —
+> and replayed against the ledger's own decisions, a deterministic guesser
+> learning from them is right about as often, for free.
 
-1. **Merchant default.** If `merchants.default_category_id` is set, use it.
-   Highest precedence because it encodes a past human decision.
+Order, first claim wins, each step skipping rows where `category_locked = true`:
+
+1. **Income sources.** `income_sources` maps a payer — description text, or
+   the ACH originator ID — to a category. Inflows only. A match is *known*,
+   not guessed: `category_source = 'income_source'`, outside the review queue.
 2. **Rules.** Evaluate `rules` by ascending `priority`, first match wins.
-3. **LLM fallback.** For rows still uncategorized, batch the distinct
-   *normalized merchant names* (not transactions) and ask Claude Haiku to pick
-   from the category list. Write the result to `merchants.default_category_id`
-   so the same merchant is never sent twice. Set `category_source = 'llm'` and
-   record `suggested_confidence`.
+3. **Guess** (`src/categorize/guess.ts`, pure). From strongest evidence down:
+   the same merchant's most recent human decision; a structural pattern (ATM,
+   fee, card payment, own-account transfer); a merchant sharing two or more
+   leading name words; a generic keyword table; one shared word; the payment
+   rail. Direction-aware throughout. Writes `category_source` `'history'` or
+   `'rule'`, plus `suggested_confidence` and a one-line `suggested_reason`.
 4. Anything left lands in `Uncategorized` with `category_source = 'default'`.
+   A machine guess nothing supports any more is withdrawn to here.
 
-Always populate `suggested_category_id` even when a lock prevents applying it —
-it's the signal for finding rules worth writing.
+Every guess is still a guess: it waits in review until a human confirms it.
 
-`scripts/recategorize.ts --from 2026-01-01` re-runs steps 2–4 over a range. It
-must be safe to run any number of times.
+`scripts/recategorize.ts --from 2026-01-01` re-runs every step over a range. It
+must be safe to run any number of times. `npm run backtest` replays the
+guesser against the ledger's human decisions and reports how often it was
+right.
 
 ---
 
@@ -316,7 +329,7 @@ once. Sign detection test passes on both conventions.
 *Accept:* two consecutive syncs insert no duplicates. A pending row that posts
 carries its category forward.
 
-**M4 — Categorization.** Rules, merchant defaults, LLM fallback.
+**M4 — Categorization.** Rules and a fallback for unknown merchants (as built: an LLM; since replaced by the deterministic guesser, §8).
 *Accept:* re-running the categorizer does not change any row where
 `category_locked = true`. Write this as an actual test, not a manual check.
 
@@ -417,3 +430,4 @@ Flag these to the user rather than guessing:
   rather than a blocking error.
 - **LLM category list growth.** Should the LLM be allowed to propose new
   categories, or only pick from existing ones? Default to picking only.
+  *Moot since 2026-09-26: there is no LLM step.*

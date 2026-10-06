@@ -49,6 +49,32 @@ printf '#!/bin/sh\nexec npx tsx scripts/check-privacy.ts\n' > .git/hooks/pre-pus
 chmod +x .git/hooks/pre-push
 ```
 
+## Who can reach it
+
+There is no login, so the network boundary is the access control.
+
+- **Postgres** publishes on `127.0.0.1:5433` only. Its password is in this
+  public repo, so it must never be reachable from another machine.
+- **The app** binds to `127.0.0.1` — `npm run dev` and `npm run start` pass
+  `-H`. Next's own default is every interface, which puts an unauthenticated
+  ledger on whatever Wi-Fi you are sitting on.
+- **`src/proxy.ts`** refuses a request whose `Host` is not one the ledger
+  answers to (DNS rebinding) and a state-changing request a browser sends from
+  another site (cross-site request forgery). Without it, any page you visit
+  could read or edit the ledger through your own browser.
+
+To use it from another device, put a reverse proxy in front instead of
+widening the bind — `tailscale serve 3000`, say — and name the host it serves
+on in `.env.local`:
+
+```bash
+LEDGER_ALLOWED_HOSTS=your-machine.your-tailnet.ts.net
+```
+
+Nothing about a transaction leaves the machine except SimpleFIN's read-only
+pull. Categorisation is local and deterministic; `tests/no-network.test.ts`
+fails if an LLM client, an LLM API host, or any other outbound request appears.
+
 ## Setup
 
 ```bash
@@ -169,7 +195,7 @@ there if you are new, or when a number looks wrong.
 ```
 db/schema.sql          authoritative DDL — edit this, not migrations
 src/ingest/            fingerprint, dedup, SimpleFIN, Apple Card CSV
-src/categorize/        merchant defaults → rules → LLM → Uncategorized
+src/categorize/        income sources → rules → guess from history → Uncategorized
 src/transfers/         pair matching
 src/money.ts           the only cents↔display path
 src/lib/edit.ts        the manual edit contract
@@ -239,5 +265,3 @@ Flagged rather than guessed at, per `docs/DESIGN.md` §12:
 
 - **Annual fee amortization.** The Explorer's fee spikes one month's fixed
   costs. Show as-is, or spread over twelve months? Currently as-is.
-- **LLM category proposals.** The model may only pick from the existing list.
-  Currently no; changing it means deciding who curates the taxonomy.

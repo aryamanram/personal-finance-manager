@@ -11,7 +11,7 @@ import postgres from 'postgres';
 import { loadEnv } from './env.js';
 import { pgTypes } from '../src/lib/pg-types.js';
 import { runSync } from '../src/ingest/sync.js';
-import { runCategorization } from '../src/categorize/run.js';
+import { runCategorization, summarize } from '../src/categorize/run.js';
 import { matchTransfers } from '../src/transfers/match.js';
 import { redactUrl } from '../src/ingest/simplefin.js';
 
@@ -31,7 +31,6 @@ const sql = postgres(process.env.DATABASE_URL!, { max: 4, onnotice: () => {}, ty
 
 const args = process.argv.slice(2);
 const sinceArg = args.find((a) => a.startsWith('--since='))?.split('=')[1];
-const noLlm = args.includes('--no-llm');
 
 /** Runs sync, categorization, and transfer matching for the nightly job. */
 async function main() {
@@ -51,15 +50,8 @@ async function main() {
   );
 
   if (result.inserted > 0 || result.adopted > 0) {
-    const cat = await runCategorization(sql, { noLlm, log: (m) => console.log(m) });
-    console.log(`· categorized ${cat.byRule} by rule, ${cat.byLlm} by model`);
-    if (cat.toUncategorized > 0) {
-      console.log(`  ! ${cat.toUncategorized} left uncategorized — worth a rule`);
-    }
-    // runCategorization RETURNS LLM failures rather than throwing them, so one
-    // bad batch does not abandon the merchants already categorized. Under cron
-    // the exit code is the only signal anyone sees, so surface them here.
-    for (const e of cat.errors) result.errors.push(`categorization: ${e}`);
+    const cat = await runCategorization(sql, { log: (m) => console.log(m) });
+    console.log(`· categorized: ${summarize(cat)}`);
 
     const tr = await matchTransfers(sql, { log: (m) => console.log(m) });
     console.log(`· ${tr.linked} transfers linked, ${tr.candidates.length} need review`);

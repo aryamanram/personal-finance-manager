@@ -6,7 +6,7 @@ import { Figure } from './Figure';
 import { RowEditor } from './RowEditor';
 import { formatCents } from '@/money';
 import { formatRegisterDate } from '@/lib/format-date';
-import type { VTransaction, CategoryWithGroup } from '@/lib/types';
+import { GUESS_SOURCES, type VTransaction, type CategoryWithGroup } from '@/lib/types';
 
 /**
  * One line of the register. Click to edit in place.
@@ -83,7 +83,7 @@ export function TransactionRow({
   const isGuess =
     !txn.category_locked &&
     txn.category_id !== null &&
-    ['rule', 'llm', 'import'].includes(txn.category_source);
+    GUESS_SOURCES.includes(txn.category_source);
 
 
   return (
@@ -194,7 +194,7 @@ export function TransactionRow({
           <button
             onClick={() => onConfirm(txn.id)}
             disabled={pending}
-            title={`Categorised by ${txn.category_source} — click to confirm`}
+            title={`${txn.suggested_reason ?? `Categorised by ${txn.category_source}`} — click to confirm`}
             aria-label={`Confirm ${txn.category_name} for ${txn.eff_description}`}
             className="eyebrow shrink-0 rounded-sm border border-ink-600 px-1.5 py-0.5 text-[9px] text-paper-faint transition-colors hover:border-edited hover:text-edited disabled:opacity-40"
           >

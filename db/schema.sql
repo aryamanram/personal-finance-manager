@@ -33,8 +33,10 @@ CREATE TYPE category_source AS ENUM (
   'unset',
   'default',   -- fallback bucket
   'import',    -- category supplied by the source file (Apple Card CSV has one)
-  'rule',      -- deterministic rule matched
-  'llm',       -- model-assigned
+  'rule',      -- a rule or built-in pattern matched
+  'history',   -- learned from how you filed this merchant before
+  'income_source', -- inflow from a registered payer. KNOWN, not a guess:
+               -- you named the payer, so it never enters the review queue.
   'manual'     -- you said so. sacred.
 );
 
@@ -127,8 +129,8 @@ CREATE TABLE categories (
   -- One extra level, not a general tree -- see the CHECK below.
   --
   -- A subcategory is still an ordinary category, so transactions keep pointing
-  -- at exactly one category_id and rules, the LLM and the palette work on it
-  -- unchanged. Rolling up is a join to parent_id rather than a second schema.
+  -- at exactly one category_id and rules, the guesser and the palette work on
+  -- it unchanged. Rolling up is a join to parent_id rather than a second schema.
   parent_id   UUID REFERENCES categories(id) ON DELETE RESTRICT,
 
   UNIQUE (group_id, name)
@@ -172,8 +174,8 @@ CREATE TRIGGER categories_parent_sane
 CREATE INDEX categories_parent ON categories (parent_id) WHERE parent_id IS NOT NULL;
 
 -- ---------------------------------------------------------------------------
--- Merchants — normalized payee names, so rules and LLM calls are cached per
--- merchant instead of re-run per transaction.
+-- Merchants — normalized payee names, so a payee's rows can be found and
+-- recategorised together rather than one transaction at a time.
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE merchants (
@@ -269,6 +271,9 @@ CREATE TABLE transactions (
   -- without clobbering your choice.
   suggested_category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
   suggested_confidence  NUMERIC(3,2),
+  -- Why the machine chose it, in one line: "4 of 4 past 'costco gas' → Gas".
+  -- A reviewer confirming every row needs to see a wrong guess fast.
+  suggested_reason      TEXT,
 
   -- --- Fixed/variable + required/discretionary overrides ---------------------
   -- NULL means "inherit from the category". Non-NULL means you overrode it
@@ -394,6 +399,32 @@ CREATE TABLE rules (
 );
 
 CREATE INDEX rules_priority ON rules (priority) WHERE is_active;
+
+-- ---------------------------------------------------------------------------
+-- Income sources — "money from this payer is always X"
+-- ---------------------------------------------------------------------------
+-- Checked before everything else, and only against inflows. A match is not a
+-- guess: the owner named the payer, so the row is filed as known
+-- (category_source = 'income_source') and stays out of the review queue.
+--
+-- Two ways to recognise a payer, either sufficient:
+--   match_payer          text the description contains, e.g. the company name.
+--                        Works before the first deposit has ever arrived.
+--   match_originator_id  the NACHA originator ID. Survives the bank changing
+--                        how it formats the description; see payer.ts.
+
+CREATE TABLE income_sources (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name                 TEXT NOT NULL,
+  match_payer          TEXT,
+  match_originator_id  TEXT,
+  category_id          UUID NOT NULL REFERENCES categories(id),
+  -- Retired, never deleted (I5): rows it filed keep a traceable origin.
+  is_active            BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (match_payer IS NOT NULL OR match_originator_id IS NOT NULL),
+  CHECK (match_payer IS NULL OR length(trim(match_payer)) >= 3)
+);
 
 -- ---------------------------------------------------------------------------
 -- Recurring series — powers "fixed cost" detection and next-charge forecasting

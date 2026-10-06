@@ -56,7 +56,7 @@ afterAll(async () => { await drop(); });
 
 describe('the pipeline', () => {
   it('categorizes by rule and buckets the rest', async () => {
-    const r = await runCategorization(sql, { noLlm: true });
+    const r = await runCategorization(sql);
     expect(r.byRule).toBe(5);
     expect(r.merchantsCreated).toBeGreaterThan(0);
 
@@ -68,7 +68,7 @@ describe('the pipeline', () => {
     expect(byDesc['GREYSTAR RENT PAYMENT'].category_name).toBe('Rent');
     expect(byDesc['STARBUCKS #12345'].category_name).toBe('Coffee');
     expect(byDesc['NETFLIX.COM'].category_name).toBe('Subscriptions');
-    // No rule matched, no API key in tests: lands in Uncategorized, honestly.
+    // No rule, history or pattern fits: lands in Uncategorized, honestly.
     expect(byDesc['MYSTERY VENDOR XJ7'].category_name).toBe('Uncategorized');
     expect(byDesc['MYSTERY VENDOR XJ7'].category_source).toBe('default');
   });
@@ -77,7 +77,7 @@ describe('the pipeline', () => {
     const before = await sql<{ id: string; category_id: string; updated_at: Date }[]>`
       SELECT id, category_id FROM transactions ORDER BY id`;
 
-    const r = await runCategorization(sql, { noLlm: true });
+    const r = await runCategorization(sql);
     expect(r.byRule).toBe(0);          // nothing left to do
     expect(r.toUncategorized).toBe(0);
 
@@ -105,7 +105,7 @@ describe('I4 — machine passes never overwrite human decisions', () => {
 
     // Run everything again. The Starbucks rule matches this row and would
     // happily set it back to Coffee without the guard.
-    await runCategorization(sql, { noLlm: true });
+    await runCategorization(sql);
 
     const [after] = await sql<{ category_id: string; category_source: string }[]>`
       SELECT category_id, category_source FROM transactions WHERE id = ${target.id}`;
@@ -148,7 +148,7 @@ describe('I4 — machine passes never overwrite human decisions', () => {
       SELECT count(*)::int AS locked FROM transactions WHERE category_locked`;
     expect(locked).toBeGreaterThan(0);
 
-    const report = await runCategorization(sql, { noLlm: true });
+    const report = await runCategorization(sql);
     expect(report.lockedRowsUntouched).toBe(locked);
   });
 });
@@ -164,7 +164,7 @@ describe('rules', () => {
     await sql`INSERT INTO rules (name, priority, match_regex, set_category_id)
               VALUES ('Roastery is a restaurant', 5, 'RESERVE ROASTERY', ${restaurants})`;
 
-    await runCategorization(sql, { noLlm: true });
+    await runCategorization(sql);
 
     const [row] = await sql<{ category_name: string }[]>`
       SELECT category_name FROM v_transactions
@@ -182,8 +182,8 @@ describe('rules', () => {
       WHERE raw_description = 'STARBUCKS RESERVE ROASTERY'`;
     expect(before.category_name).toBe('Restaurants');
 
-    await runCategorization(sql, { noLlm: true });
-    await runCategorization(sql, { noLlm: true });
+    await runCategorization(sql);
+    await runCategorization(sql);
 
     const [after] = await sql<{ category_name: string }[]>`
       SELECT category_name FROM v_transactions
@@ -199,7 +199,7 @@ describe('rules', () => {
     await sql`INSERT INTO rules (name, priority, match_regex, match_amount_max, set_category_id)
               VALUES ('Big ATM', 40, 'ATM', ${-10000}, ${fees})`;
 
-    await runCategorization(sql, { noLlm: true });
+    await runCategorization(sql);
     const [row] = await sql<{ category_name: string }[]>`
       SELECT category_name FROM v_transactions WHERE raw_description = 'ATM WITHDRAWAL'`;
     expect(row.category_name).toBe('Fees & Interest');
@@ -222,7 +222,7 @@ describe('bank column padding does not defeat a rule', () => {
     await sql`INSERT INTO rules (name, priority, match_regex, set_category_id)
               VALUES ('Venmo cashout', 12, 'VENMO CASHOUT', ${transfers})`;
 
-    await runCategorization(sql, { noLlm: true });
+    await runCategorization(sql);
 
     const [row] = await sql<{ category_name: string; counts_as_spending: boolean }[]>`
       SELECT category_name, counts_as_spending FROM v_transactions
@@ -249,7 +249,7 @@ describe('a rule written with padded spaces still matches', () => {
     await sql`INSERT INTO rules (name, priority, match_regex, set_category_id)
               VALUES ('Padded pattern', 15, 'PADDED    PATTERN', ${travel})`;
 
-    await runCategorization(sql, { noLlm: true });
+    await runCategorization(sql);
 
     const [row] = await sql<{ category_name: string }[]>`
       SELECT category_name FROM v_transactions
@@ -280,7 +280,7 @@ describe('a rule can match on sign, which is what makes a payment rail usable', 
       INSERT INTO rules (name, priority, match_regex, set_category_id, match_amount_min)
       VALUES ('Rail received', 22, 'RAIL', ${reimbursement}, 1)`;
 
-    await runCategorization(sql, { noLlm: true });
+    await runCategorization(sql);
 
     const rows = await sql<{ raw_description: string; category_name: string | null }[]>`
       SELECT raw_description, category_name FROM v_transactions
@@ -302,7 +302,7 @@ describe('a rule can match on sign, which is what makes a payment rail usable', 
     await upsertTransactions(sql, [
       { accountId: acct.checkingId, amountCents: 1, postedDate: '2026-08-07', status: 'posted', rawDescription: 'RAIL TINY IN', source: 'csv', externalId: null },
     ]);
-    await runCategorization(sql, { noLlm: true });
+    await runCategorization(sql);
     const [row] = await sql<{ category_name: string | null }[]>`
       SELECT category_name FROM v_transactions WHERE raw_description = 'RAIL TINY IN'`;
     expect(row.category_name).toBe('Reimbursement');
@@ -317,43 +317,77 @@ describe('no merchant carries a standing default', () => {
    * category, so splitting Subscriptions into subcategories would have been
    * undone by the next sync — 87 rows, no error, no warning.
    *
-   * Categorisation now comes only from rules and the model, both of which are
-   * visible and editable. This asserts the property that replaced it.
+   * The guesser now learns from past decisions, which is the same shape of
+   * risk. Two properties keep it safe, and both are asserted here.
    */
-  it('leaves a categorised row alone on a re-run', async () => {
+  it('never flattens a merchant\'s human decisions to one category', async () => {
     const travel = await categoryByName(sql, 'Travel');
     const dining = await categoryByName(sql, 'Restaurants');
+    await upsertTransactions(sql, [
+      txn({ accountId: acct.appleId, rawDescription: 'SPLITTY VENDOR QQ', amountCents: -1000, postedDate: '2026-07-01' }),
+      txn({ accountId: acct.appleId, rawDescription: 'SPLITTY VENDOR QQ', amountCents: -2000, postedDate: '2026-07-02' }),
+    ]);
+    const rows = await sql<{ id: string }[]>`
+      SELECT id FROM transactions WHERE raw_description = 'SPLITTY VENDOR QQ' ORDER BY posted_date`;
+    // Same merchant, filed two ways by hand — what a subcategory split produces.
+    await sql`UPDATE transactions SET category_id = ${travel}, category_source = 'manual' WHERE id = ${rows[0].id}`;
+    await sql`UPDATE transactions SET category_id = ${dining}, category_source = 'manual' WHERE id = ${rows[1].id}`;
 
-    const [row] = await sql<{ id: string; merchant_id: string | null }[]>`
-      SELECT id, merchant_id FROM transactions
-      WHERE raw_description = 'MYSTERY VENDOR XJ7'`;
+    await runCategorization(sql);
 
-    // Two rows, same merchant, filed differently — the shape a subcategory
-    // split produces, and exactly what a merchant default used to flatten.
+    const after = await sql<{ category_name: string }[]>`
+      SELECT category_name FROM v_transactions WHERE raw_description = 'SPLITTY VENDOR QQ'
+      ORDER BY posted_date`;
+    expect(after.map((r) => r.category_name)).toEqual(['Travel', 'Restaurants']);
+  });
+
+  it('guesses a new row from the most recent decision, not a merchant-wide one', async () => {
+    await upsertTransactions(sql, [
+      txn({ accountId: acct.appleId, rawDescription: 'SPLITTY VENDOR QQ', amountCents: -3000, postedDate: '2026-07-03' }),
+    ]);
+    await runCategorization(sql);
+    const [row] = await sql<{ category_name: string; category_source: string; suggested_reason: string }[]>`
+      SELECT category_name, category_source, suggested_reason FROM v_transactions
+      WHERE raw_description = 'SPLITTY VENDOR QQ' AND NOT category_locked`;
+    expect(row.category_name).toBe('Restaurants');
+    expect(row.category_source).toBe('history');
+    expect(row.suggested_reason).toBe('1 of 2 past "splitty vendor qq" → Restaurants');
+  });
+
+  it('still guesses a category for a row a rule claimed without naming one', async () => {
+    // A rule may set only necessity, cost type or merchant. It wins against
+    // later RULES, but it has said nothing about the category, so the guesser
+    // must still get the row — it used to inherit the rule's claim and leave
+    // the row to fall straight to Uncategorized.
+    await upsertTransactions(sql, [
+      txn({ accountId: acct.appleId, rawDescription: 'TAGGED CHIPOTLE 0042', amountCents: -1250, postedDate: '2026-08-22' }),
+    ]);
+    await sql`INSERT INTO rules (name, priority, match_regex, set_necessity)
+              VALUES ('Tagged is required', 8, 'TAGGED', 'required')`;
+
+    await runCategorization(sql);
+
+    const [row] = await sql<{ category_name: string; category_source: string; eff_necessity: string }[]>`
+      SELECT category_name, category_source, eff_necessity FROM v_transactions
+      WHERE raw_description = 'TAGGED CHIPOTLE 0042'`;
+    // The keyword table's answer, and the rule's necessity, both stand.
+    expect(row).toEqual({ category_name: 'Restaurants', category_source: 'rule', eff_necessity: 'required' });
+  });
+
+  it('withdraws a machine guess that nothing supports any more', async () => {
+    // A guess is only as current as the evidence for it. One left behind by a
+    // deleted rule would otherwise look exactly like a live one.
+    const travel = await categoryByName(sql, 'Travel');
+    const [row] = await sql<{ id: string }[]>`
+      SELECT id FROM transactions WHERE raw_description = 'MYSTERY VENDOR XJ7'`;
     await sql`
       UPDATE transactions SET category_id = ${travel}, category_source = 'rule'
       WHERE id = ${row.id}`;
-    const [sibling] = await sql<{ id: string }[]>`
-      SELECT id FROM transactions
-      WHERE merchant_id = ${row.merchant_id} AND id <> ${row.id} LIMIT 1`;
-    if (sibling) {
-      await sql`
-        UPDATE transactions SET category_id = ${dining}, category_source = 'rule'
-        WHERE id = ${sibling.id}`;
-    }
 
-    await runCategorization(sql, { noLlm: true });
+    await runCategorization(sql);
 
-    const [after] = await sql<{ category_name: string }[]>`
-      SELECT category_name FROM v_transactions WHERE id = ${row.id}`;
-    expect(after.category_name).toBe('Travel');
-
-    if (sibling) {
-      // The one that matters: a sibling of the SAME merchant keeps its own
-      // category rather than being pulled to whatever the merchant "is".
-      const [sibAfter] = await sql<{ category_name: string }[]>`
-        SELECT category_name FROM v_transactions WHERE id = ${sibling.id}`;
-      expect(sibAfter.category_name).toBe('Restaurants');
-    }
+    const [after] = await sql<{ category_name: string; category_source: string }[]>`
+      SELECT category_name, category_source FROM v_transactions WHERE id = ${row.id}`;
+    expect(after).toEqual({ category_name: 'Uncategorized', category_source: 'default' });
   });
 });

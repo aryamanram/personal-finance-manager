@@ -132,7 +132,7 @@ export async function revertField(id: string, field: string): Promise<VTransacti
  *
  * Without this the "needs review" backlog is unclearable whenever you agree
  * with the machine, which is the common case — every row in a freshly synced
- * ledger is a model guess.
+ * ledger is a machine guess.
  *
  * Logged under its own field name rather than as a category_id edit: nothing
  * about the category changed, and an audit row claiming old == new would make
@@ -172,8 +172,8 @@ export async function confirmCategory(id: string): Promise<VTransaction> {
  * This is CONFIRM, not change. Picking the category a row already has is the
  * commonest bulk action there is — a screen of machine guesses that happen to
  * be right — and it is a real edit: category_source goes to 'manual' and the
- * trigger sets category_locked, which is what stops the next rules or LLM pass
- * overwriting the row (I4) and what clears the GUESS badge.
+ * trigger sets category_locked, which is what stops the next rules or guess
+ * pass overwriting the row (I4) and what clears the GUESS badge.
  *
  * Skipping rows whose category_id already matched made exactly that case a
  * silent no-op: select forty correct guesses, pick their own category, and
