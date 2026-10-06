@@ -18,7 +18,7 @@ flowchart TB
     subgraph machine["Your machine"]
         direction TB
 
-        web["<b>Next.js app</b><br/><span style='font-size:11px'>React 19 · Server Components<br/>npm run dev → :3000</span>"]
+        web["<b>Next.js app</b><br/><span style='font-size:11px'>React 19 · Server Components<br/>npm run dev → 127.0.0.1:3000</span>"]
 
         subgraph passes["Batch passes · npm scripts · idempotent"]
             direction LR
@@ -27,7 +27,7 @@ flowchart TB
             importcsv["<b>import</b><br/><span style='font-size:11px'>a statement the<br/>feed cannot reach</span>"]
         end
 
-        db[("<b>PostgreSQL 16</b><br/><span style='font-size:11px'>docker compose · :5433<br/>16 tables · 4 views</span>")]
+        db[("<b>PostgreSQL 16</b><br/><span style='font-size:11px'>docker compose · 127.0.0.1:5433<br/>16 tables · 4 views</span>")]
         envfile["<b>.env.local</b><br/><span style='font-size:11px'>bridge URL<br/>gitignored</span>"]
     end
 
@@ -67,6 +67,15 @@ flowchart TB
 Postgres is the only durable state. Losing the app is an inconvenience; losing
 the database is losing your ledger, because the 90-day bridge window cannot
 rebuild history older than that.
+
+## Who can connect
+
+Both listeners are on loopback only. The database's password is in the public
+`docker-compose.yml`, so a port published on every interface would hand the
+ledger to anyone on the same network; the app has no login, so the same is
+true of `:3000`. Reaching either from another device goes through a reverse
+proxy (`tailscale serve`), never a wider bind. `src/proxy.ts` then refuses
+requests naming any host outside `LEDGER_ALLOWED_HOSTS` and cross-site writes.
 
 ## Why the passes are separate from the app
 

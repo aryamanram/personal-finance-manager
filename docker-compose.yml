@@ -7,8 +7,11 @@ services:
       POSTGRES_USER: finance
       POSTGRES_PASSWORD: finance_dev_local
       POSTGRES_DB: finance
+    # Loopback only. A bare "5433:5432" publishes on every interface, which
+    # puts the whole ledger one hop from anyone on the same Wi-Fi — behind a
+    # superuser password that is printed in this public file.
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

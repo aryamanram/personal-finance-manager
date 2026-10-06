@@ -62,7 +62,7 @@ flowchart TB
 | Boundary | What moves | What never moves |
 |---|---|---|
 | Bridge → Ledger | Dates, amounts, descriptions, balances | Bank credentials — the bridge holds those, this app never sees them |
-| Ledger → anywhere else | Nothing | There is no other outbound call |
+| Ledger → anywhere else | Nothing | There is no other outbound call — `tests/no-network.test.ts` keeps it that way |
 
 Categorisation is entirely local. It once sent unknown merchant names to a
 language model; that step was retired because every guess is reviewed by hand
@@ -75,6 +75,11 @@ transaction leaves the machine except the bridge's own read-only pull.
 **Not multi-user.** No authentication, no tenancy, no row-level security. It
 runs on localhost or behind Tailscale. Adding a second user would mean revisiting
 every query in `src/lib/queries.ts`.
+
+With no login, the network is the boundary. Postgres and the app both bind to
+loopback, and `src/proxy.ts` refuses any request that names another host or
+that a browser sends from another website — the two ways a page you happen to
+visit could otherwise reach a server on `localhost`.
 
 **Not a source of truth for money.** The bank is. This app reconciles against
 `accounts.balance_cents` and shows the drift rather than hiding it, because a

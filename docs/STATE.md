@@ -22,7 +22,31 @@ Describe the *shape* of a decision here and keep the specifics there.
 
 ---
 
-## Right now · last updated 2026-09-26
+## Right now · last updated 2026-10-06
+
+**Both listeners are loopback-only now.** Postgres was published on every
+interface, behind the password printed in `docker-compose.yml`, and `next dev`
+binds every interface by default — an unauthenticated ledger, one hop from the
+local network. Both now bind loopback, and `src/proxy.ts` refuses DNS
+rebinding and cross-site writes. Verified against a running server: the LAN
+address refuses both ports, a forged Host gets 421, a cross-site POST 403.
+
+**The last traces of the model are gone.** The `llm` category source is
+dropped from `schema.sql` and from the live database. The one row carrying it
+was a superseded pending row no view shows; it now reads `history`. Migrated
+by hand after `npm run backup` and a rehearsal on a restored copy: cashflow,
+net worth, every resolved transaction, raw amounts, the edit log and the view
+definitions hashed identically before and after. `tests/no-network.test.ts`
+fails on any LLM SDK (transitive included), LLM API host, or outbound request
+other than SimpleFIN's.
+
+**Next, once this branch merges:**
+
+- `.env.example` still names `ANTHROPIC_API_KEY` (env files are blocked for
+  the agent): `sed -i '' -E '/ANTHROPIC|LLM|Haiku/d' .env.example`.
+- The compose password is a public default. A real ledger should not keep it:
+  `ALTER ROLE finance PASSWORD '…'`, then `DATABASE_URL` in `.env.local`.
+- Nothing schedules `npm run sync` yet; it has been run by hand.
 
 **Categorisation no longer uses a model.** Branch `deterministic-categorizer`,
 not yet merged. The LLM step, the Anthropic SDK and the API key are gone;
@@ -45,14 +69,9 @@ of its first deposit. **When that first paycheck lands, check it was filed
 as a known Paycheck** — if the bank prints it through a payroll processor
 under another name, add the originator ID from that deposit.
 
-The live database was migrated by hand (two enum values, one column, one
-table, the four views rebuilt from `schema.sql`); a pre/post fingerprint of
-cashflow, net worth and every category assignment showed nothing moved.
-
-**Not done:** `.env.example` still names `ANTHROPIC_API_KEY` — reading env
-files is blocked for the agent, so remove that line by hand. The
-`categorization-design` branch's finding (SimpleFIN `payee`, Chase `Type` are
-dropped on ingest) is still unacted on; both would feed the guesser directly.
+The `categorization-design` branch's finding (SimpleFIN `payee`, Chase `Type`
+are dropped on ingest) is still unacted on; both would feed the guesser
+directly.
 
 Two rows are filed at the bare `Subscriptions` parent in July 2026 while
 every other row of the same merchants sits in a subcategory — likely
@@ -83,6 +102,15 @@ that holds, counting card purchases as spending — and the payments that settle
 them as transfers — is sound rather than assumed. It holds to the cent today.
 
 ## Decisions worth not relitigating
+
+**No login; the network boundary is the access control.** One user, one
+machine, so authentication would guard nothing a loopback bind does not —
+provided the bind really is loopback, which Next's and Docker's defaults are
+not. What loopback cannot stop is a web page in the owner's own browser, so
+`src/proxy.ts` refuses any Host outside loopback and `LEDGER_ALLOWED_HOSTS`
+(DNS rebinding) and any state-changing request a browser sends from another
+origin (CSRF). Remote access goes through a reverse proxy such as
+`tailscale serve`, never a wider bind.
 
 **Categories nest one level, no more.** (Moving one between parents is a single
 `parent_id` update — done once already, for hobby goods.) `categories.parent_id`, with a trigger
@@ -179,7 +207,8 @@ than any of them, and the remaining gap was not worth more tuning.
 - **`budgets` and `holdings` tables are empty.** Both are in the schema for
   later, per `docs/DESIGN.md` §13. Leave them.
 - **Transaction splitting is out of scope** — one transaction, one category.
-- **No auth.** Runs on localhost or behind Tailscale. Adding a second user means
+- **No auth.** Runs on localhost or behind Tailscale, guarded by the loopback
+  bind and `src/proxy.ts` (see the decision above). Adding a second user means
   revisiting every query in `src/lib/queries.ts`.
 - **`@mermaid-js/mermaid-cli` is a devDependency** and pulls Puppeteer. That is
   the cost of `npm run check:diagrams` working offline and reproducibly.

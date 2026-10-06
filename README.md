@@ -49,6 +49,32 @@ printf '#!/bin/sh\nexec npx tsx scripts/check-privacy.ts\n' > .git/hooks/pre-pus
 chmod +x .git/hooks/pre-push
 ```
 
+## Who can reach it
+
+There is no login, so the network boundary is the access control.
+
+- **Postgres** publishes on `127.0.0.1:5433` only. Its password is in this
+  public repo, so it must never be reachable from another machine.
+- **The app** binds to `127.0.0.1` — `npm run dev` and `npm run start` pass
+  `-H`. Next's own default is every interface, which puts an unauthenticated
+  ledger on whatever Wi-Fi you are sitting on.
+- **`src/proxy.ts`** refuses a request whose `Host` is not one the ledger
+  answers to (DNS rebinding) and a state-changing request a browser sends from
+  another site (cross-site request forgery). Without it, any page you visit
+  could read or edit the ledger through your own browser.
+
+To use it from another device, put a reverse proxy in front instead of
+widening the bind — `tailscale serve 3000`, say — and name the host it serves
+on in `.env.local`:
+
+```bash
+LEDGER_ALLOWED_HOSTS=your-machine.your-tailnet.ts.net
+```
+
+Nothing about a transaction leaves the machine except SimpleFIN's read-only
+pull. Categorisation is local and deterministic; `tests/no-network.test.ts`
+fails if an LLM client, an LLM API host, or any other outbound request appears.
+
 ## Setup
 
 ```bash
