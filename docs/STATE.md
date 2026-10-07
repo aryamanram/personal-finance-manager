@@ -22,95 +22,37 @@ Describe the *shape* of a decision here and keep the specifics there.
 
 ---
 
-## Right now · last updated 2026-10-06
+## Right now · last updated 2026-10-07
 
-**Both listeners are loopback-only now.** Postgres was published on every
-interface, behind the password printed in `docker-compose.yml`, and `next dev`
-binds every interface by default — an unauthenticated ledger, one hop from the
-local network. Both now bind loopback, and `src/proxy.ts` refuses DNS
-rebinding and cross-site writes. Verified against a running server: the LAN
-address refuses both ports, a forged Host gets 421, a cross-site POST 403.
+**Nothing is in flight.** PRs #12–#16 are merged and `main` is green. The
+ledger syncs itself daily (see the decisions below), was caught up and
+reconciled on 2026-10-07, and the card that syncs daily matches its issuer to
+the cent. The employer's income source was re-registered by the text the bank
+actually prints, checked against the real deposit with the app's own matcher.
 
-**The last traces of the model are gone.** The `llm` category source is
-dropped from `schema.sql` and from the live database. The one row carrying it
-was a superseded pending row no view shows; it now reads `history`. Migrated
-by hand after `npm run backup` and a rehearsal on a restored copy: cashflow,
-net worth, every resolved transaction, raw amounts, the edit log and the view
-definitions hashed identically before and after. `tests/no-network.test.ts`
-fails on any LLM SDK (transitive included), LLM API host, or outbound request
-other than SimpleFIN's.
+**For whoever picks this up:**
 
-Both are merged (PR #12). PR #13 followed: self-hosted fonts — the browser no
-longer contacts Google on every page view — a test that no page names a
-third-party URL, real figures scrubbed from the public docs, the API key out
-of `.env.example`, and `npm run db:rotate-password`, which the owner has run:
-the compose default password is now refused.
+- **Checking's reconciliation difference is real, not timing.** It predates
+  this session, moved once on 2026-10-06, then held across later syncs — so a
+  transaction the feed never delivered is the likely cause. Next step: export
+  the checking statement as CSV and `npm run import -- <file> --account
+  "<name>" --dry-run`, then for real. Re-importing is safe — rows already
+  present are counted, not inserted — so whatever the feed missed lands, and
+  the gap closes or names itself.
+- **One card's connection updates monthly.** SimpleFIN labels it "Updated
+  Monthly", so its transactions trail its balance by up to a month and it
+  reads as off until the statement lands. Importing the current statement's
+  CSV on the Accounts page closes it sooner.
+- **Two rows sit in Uncategorized**, one a large one-off outflow. They are the
+  owner's to file.
+- Tailscale access is deferred to the very end, by the owner's choice.
 
-**The sync runs once a day**, from launchd on this machine
-(`npm run sync:schedule -- status`): at midnight, on waking if the Mac was
-asleep then, or at the first login after a day it was off — and only if no
-sync has succeeded since midnight, so a login on a day already done costs
-nothing. One SimpleFIN request on a normal day — one per 45-day window when
-catching up further. Nothing is retried within a run; a sync cut short by a
-rate-limit warning leaves its backfill unmarked, and the next run repeats it.
-The ledger was caught up by hand on 2026-10-06 after two weeks without a sync.
-
-**Waiting on the owner:**
-
-- `chmod 600 .env.local` — it is readable by other local users, and env files
-  are off-limits to the agent.
-- The bridge reports the Apple Card connection needs re-authenticating, so
-  every sync is `partial` and that card's balance is stale. Reconnect it in
-  the SimpleFIN bridge, or remove it there if the card is imported by CSV.
-- The first paycheck was filed as Paycheck by the payroll pattern, as a guess —
-  the registered income source did not match it. The bank prints the employer
-  differently from the registered payer text, and the feed masks most of the
-  originator ID. Re-register the source with the text the deposit actually
-  carries.
-- Checking's one unexplained reconciliation difference moved slightly with
-  this sync. If the next sync does not move it back, it is not a timing gap.
-
-**Deferred, by the owner's choice:** Tailscale access comes last. A separate
-least-privilege database role was declined — one person, one machine, and
-small PRs matter more here than the extra isolation.
-
-**Categorisation no longer uses a model.** Merged in PR #12. The LLM step,
-the Anthropic SDK and the API key are gone;
-a deterministic guesser (`src/categorize/guess.ts`) learns from the ledger's
-own human decisions instead. Every guess is still a guess — the owner
-confirms each one — which is exactly why paying a model for them bought
-nothing. Measured with `npm run backtest`, replaying the ledger's decisions:
-
-| | exact category | precise when it guesses | guesses at all |
-|---|---:|---:|---:|
-| in date order (only earlier decisions known) | 79% | 94% | 84% |
-| hold-out (every other decision known) | 87% | 96% | 91% |
-
-Confidence tracks accuracy: the 0.8+ band is right ~97% of the time.
-
-**Income sources** are new: a payer (description text or ACH originator ID)
-maps to a category, managed on the Accounts page. A match is *known*, not
-guessed, and skips review. The owner's employer was registered by name ahead
-of its first deposit — and that deposit, when it landed, did not match: the
-bank prints the employer differently, and the feed masks most of the
-originator ID, so the ID is no fallback. It was filed as a Paycheck guess by
-the payroll pattern instead. Re-registering the source with the text the
-deposit actually carries is on the owner's list above.
-
-The `categorization-design` branch's finding (SimpleFIN `payee`, Chase `Type`
-are dropped on ingest) is still unacted on; both would feed the guesser
-directly.
-
-Two rows are filed at the bare `Subscriptions` parent in July 2026 while
-every other row of the same merchants sits in a subcategory — likely
-oversights. Left alone (they are human decisions); the guesser no longer
-trips on them, since a parent vote counts toward its own child.
-
-Two standing tasks the owner tracks — details in `private/STATE.local.md`:
+Standing tasks the owner tracks — details in `private/STATE.local.md`:
 
 - Record a brokerage balance monthly, so investment performance has a period to
   measure over. One snapshot is a starting line, not a return.
-- Register a new income source on the Accounts page when one starts.
+- Register a new income source on the Accounts page when one starts — by the
+  text the bank prints, then check the first deposit is filed as known.
 
 ---
 
@@ -121,15 +63,62 @@ own checks. The app runs against live bank accounts, not fixtures: several
 hundred transactions spanning about two years, fully categorised, reconciling
 against the banks' own balances.
 
-Connected: two card/bank feeds through SimpleFIN on a daily pull and one
-snapshot-tracked brokerage. Categorisation is local and deterministic.
+Connected: checking and two cards through SimpleFIN on a daily pull (one card's
+connection only updates monthly), and one snapshot-tracked brokerage.
+Categorisation is local and deterministic.
 
 The cards carry their own proof: `getCardSettlement()` checks, per card, that
 `purchases − payments_applied = still_owed = what the issuer reports`. While
 that holds, counting card purchases as spending — and the payments that settle
-them as transfers — is sound rather than assumed. It holds to the cent today.
+them as transfers — is sound rather than assumed. It holds to the cent for the
+card that syncs daily; the monthly one trails until its statement lands.
 
 ## Decisions worth not relitigating
+
+**Categorisation is deterministic, and a test keeps it that way.** The LLM
+step, the Anthropic SDK and the API key are gone (PR #12); a guesser
+(`src/categorize/guess.ts`) learns from the ledger's own human decisions
+instead. Every guess is confirmed by hand regardless, which is exactly why
+paying a model for them bought nothing. Measured with `npm run backtest`,
+replaying the ledger's decisions:
+
+| | exact category | precise when it guesses | guesses at all |
+|---|---:|---:|---:|
+| in date order (only earlier decisions known) | 79% | 94% | 84% |
+| hold-out (every other decision known) | 87% | 96% | 91% |
+
+Confidence tracks accuracy: the 0.8+ band is right ~97% of the time.
+`tests/no-network.test.ts` fails on an LLM SDK (transitive included), an LLM
+API host in code, any outbound request but SimpleFIN's, or a third-party URL
+in a page — fonts are self-hosted for the same reason.
+
+**Register an income source by the text the bank prints.** The employer was
+registered by its name ahead of the first deposit, and the deposit did not
+match: payroll arrives under an abbreviated legal name, and the feed masks
+most of the ACH originator ID, so the ID is no fallback either. A source that
+never matches files nothing and says nothing — the deposit just lands as a
+payroll-pattern guess. So match on the printed text, and confirm the first
+real deposit is filed as `income_source`.
+
+**One sync a day, from this machine, one at a time.** launchd runs
+`npm run sync` at midnight and at login, and each run syncs only if no sync
+has *finished* since the last midnight — one run by hand counts. Local,
+because a cloud scheduler would cost money and need the database reachable
+from outside. Never retried within a run, because the bridge disables a token
+that keeps exceeding ~24 requests a day, and a missed day costs nothing:
+every sync re-fetches from five days before the last good one. Every sync,
+scheduled or by hand, takes one Postgres advisory lock in `runSync`, so two
+can never both call the bridge.
+
+**A hold the bank still lists merges only on exact amount and description.**
+Some charges arrive with the authorization hold still listed beside the
+posted charge, each under its own id, sync after sync. Supersession now
+considers that hold, but strictly — the same amount and description — because
+a pending row the bank is still listing could be a second purchase. The exact
+match is tried before any loose one. INGEST_NOTES §2 has the rule.
+
+**No separate least-privilege database role.** Declined by the owner: one
+person, one machine, and small PRs matter more here than the isolation.
 
 **No login; the network boundary is the access control.** One user, one
 machine, so authentication would guard nothing a loopback bind does not —
@@ -240,6 +229,16 @@ than any of them, and the remaining gap was not worth more tuning.
   revisiting every query in `src/lib/queries.ts`.
 - **`@mermaid-js/mermaid-cli` is a devDependency** and pulls Puppeteer. That is
   the cost of `npm run check:diagrams` working offline and reproducibly.
+- **The database password is not the compose default.** `POSTGRES_PASSWORD` in
+  `docker-compose.yml` is public and only applies when the volume is created;
+  the live role was rotated with `npm run db:rotate-password`, and the real
+  one lives only in `.env.local` (mode 600).
+- **The nightly sync runs whatever branch is checked out.** Leave the working
+  tree on `main` between sessions.
+- **Two rows sit at the bare `Subscriptions` parent** in July 2026 while every
+  other row of the same merchants is in a subcategory — likely oversights, left
+  alone because they are human decisions. The guesser counts a parent vote
+  toward its own child, so they do not mislead it.
 
 ## Open questions
 
@@ -251,8 +250,11 @@ Flagged rather than guessed at, per `docs/DESIGN.md` §12:
 - **Reconciliation surfacing.** A passive banner today, and now quiet: it
   tests both bases (balances that include pending rows and balances that do
   not) and reports an account only when neither matches, so the cards no longer
-  show phantom drift. One genuine checking difference remains, unexplained.
-  Revisit if it starts firing for reasons nobody chases.
+  show phantom drift. One genuine checking difference remains — confirmed not
+  timing; Right now has the next step.
+- **Feed fields thrown away.** SimpleFIN's `payee` and the Chase CSV's `Type`
+  are dropped on ingest (the `categorization-design` branch's finding). Both
+  would feed the guesser directly. Not built.
 - **Payment rails inside Shopping.** A large share of Shopping is PayPal and
   Affirm rows, which name how something was paid rather than what was bought.
   Instalment plans are deliberately *not* their own category — the destination
