@@ -93,6 +93,15 @@ describe('no code can reach a model', () => {
     expect(offenders, `unexpected network access:\n  ${offenders.join('\n  ')}`).toEqual([]);
   });
 
+  it('sends the browser nowhere else: no page or stylesheet names another host', () => {
+    // A <link> to a font CDN is a request from the owner's browser, carrying
+    // their IP and when the ledger was open. Fonts are self-hosted by
+    // next/font instead, and nothing else on a page has a reason to leave.
+    const markup = [...sourceFiles('src').filter((f) => f.endsWith('.tsx')), join('src', 'app', 'globals.css')];
+    const absolute = markup.filter((f) => /\bhttps?:\/\//.test(readFileSync(f, 'utf8')));
+    expect(absolute).toEqual([]);
+  });
+
   it('keeps categorisation local: src/categorize touches no network at all', () => {
     const files = sourceFiles(join('src', 'categorize'));
     expect(files.length).toBeGreaterThan(0);

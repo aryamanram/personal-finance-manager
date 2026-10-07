@@ -53,8 +53,10 @@
   --color-flow-invest:        #6a5cb8;
   --color-flow-leftover:      #6ee7c0;
 
-  --font-sans: "Inter Tight", ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  /* Self-hosted by next/font in app/layout.tsx, which defines both variables
+     on <html>. */
+  --font-sans: var(--font-inter-tight), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 :root {
