@@ -214,6 +214,38 @@ Exit codes: `0` ok, `1` failed, `2` partial (one institution is broken, others
 synced), `3` misconfigured, `4` another sync was already running and this one
 did nothing.
 
+## Design work
+
+Design, screenshot and test against a synthetic ledger, never your own.
+Screenshots, Figma pushes, visual-test baselines and published pages all leave
+the machine — some into this public repo.
+
+```bash
+npm run demo:setup   # (re)create finance_demo beside the real database, seeded
+npm run dev:demo     # the app on http://127.0.0.1:3001, reading finance_demo
+```
+
+The demo database lives in the same Postgres as the real one, under its own
+name, and is rebuilt from `scripts/seed-demo.ts` every time — pinned to a
+fixed date, so it renders identically run to run. The demo app builds into
+`.next-demo/` on port 3001, so it runs alongside `npm run dev`.
+
+### Agent tooling
+
+`.mcp.json` gives Claude Code three MCP servers (approve them on first start):
+
+| Server | For |
+|---|---|
+| `playwright` | Headless screenshots at exact viewport sizes; accessibility snapshots |
+| `next-devtools` | The running dev server's build and runtime errors, routes and logs |
+| `chrome-devtools` | Performance traces, layout and CSS inspection |
+
+Each is pinned to an exact version — bump them deliberately — runs headless
+with a throwaway browser profile, and has its usage telemetry switched off.
+
+For a human view of several screen sizes at once, Responsively App (free),
+Polypane or Sizzy.
+
 ## How it is put together
 
 **[Architecture diagrams](docs/architecture/)** — four levels, from a one-screen

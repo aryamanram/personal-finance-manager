@@ -68,3 +68,6 @@ CLAUDE.local.md
 .vscode/*
 !.vscode/extensions.json
 *.swp
+
+# The demo app (npm run dev:demo) builds here, apart from the real app
+.next-demo/

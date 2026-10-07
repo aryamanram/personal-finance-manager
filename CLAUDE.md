@@ -92,6 +92,12 @@ spend amber on anything else; its meaning is the point.
 
 `src/app/globals.css` holds the tokens. Read it before restyling anything.
 
+**Design against the demo ledger, never the real one.** `npm run demo:setup`
+then `npm run dev:demo` serves synthetic data on `127.0.0.1:3001`, beside the
+real app on :3000. Screenshots, Figma pushes and visual-test baselines leave
+this machine; the real ledger must not be in any of them. The Playwright,
+Next devtools and Chrome DevTools MCP servers in `.mcp.json` are for this.
+
 For visual work, these are available and worth using rather than improvising:
 
 - **`frontend-design`** skill — load before building or reshaping any UI.
