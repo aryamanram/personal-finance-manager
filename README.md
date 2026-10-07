@@ -192,9 +192,13 @@ npm run sync:schedule -- status              # last run and the log tail
 
 A Mac asleep at midnight runs it on waking; one that is off skips the night
 and the next run catches up, because every sync re-fetches from five days
-before the last good one. The job starts Docker if it is not running, makes
-one SimpleFIN request, and never retries — the bridge disables a token that
-keeps exceeding its daily limit. Elsewhere, cron can run the sync itself, but
+before the last good one. The job starts Docker if it is not running and
+never retries — the bridge disables a token that keeps exceeding its daily
+limit. A normal night is one SimpleFIN request. Catching up more than 45 days
+— a long time off, or a new account's backfill — is one request per 45-day
+window, and a rate-limit warning stops the sync before the remaining windows;
+the backfill is not marked done, so the next run picks it up again. Elsewhere,
+cron can run the sync itself, but
 it starts nothing: the database must already be up, or that night fails and
 the next run catches up.
 

@@ -49,7 +49,8 @@ the compose default password is now refused.
 **The sync runs nightly at midnight**, from launchd on this machine
 (`npm run sync:schedule -- status`). Asleep at midnight, it runs on waking;
 off, it skips the night and the next run's overlap catches up. One SimpleFIN
-request a night, no retries.
+request on a normal night — one per 45-day window when catching up further —
+and no retries.
 
 **Waiting on the owner:** `chmod 600 .env.local` — it is readable by other
 local users, and env files are off-limits to the agent.

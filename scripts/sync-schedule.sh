@@ -6,7 +6,8 @@
 #   npm run sync:schedule -- status             # last run, and the log tail
 #   npm run sync:schedule -- remove
 #
-# Local and free: one SimpleFIN request a night, nothing else.
+# Local and free: one SimpleFIN request on a normal night (one per 45-day
+# window when catching up further), nothing else.
 #
 # launchd rather than cron because it does the right thing with a laptop. A
 # Mac ASLEEP at midnight runs the job as soon as it wakes. A Mac that is OFF
