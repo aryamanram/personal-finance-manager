@@ -283,13 +283,17 @@ async function supersedePending(
       ORDER BY abs(posted_date - ${row.posted_date}::date),
                abs(amount_cents - ${row.amount_cents})`;
 
-    // A pending row the bank no longer lists has posted: the loose match
-    // stands. One it still lists in this very response needs the exact amount
-    // and the same description to count as this charge's hold.
-    const candidate = candidates.find((c) =>
-      !claimed.has(c.id)
-      || (Number(c.amount_cents) === Number(row.amount_cents)
-          && sameDescription(c.raw_description, row.raw_description)));
+    // Strongest evidence first: the exact amount and the same description, be
+    // the row still listed or not. Only failing that, the loose match — and
+    // only on a pending row the bank no longer lists, since one it still lists
+    // could be a second purchase. Taking the first loose candidate by date
+    // would let an unrelated pending row dated on the charge's own day beat
+    // the real hold dated a day earlier: the hold stays visible, and the wrong
+    // row's category is carried onto the charge.
+    const exact = (c: { amount_cents: number; raw_description: string }) =>
+      Number(c.amount_cents) === Number(row.amount_cents)
+      && sameDescription(c.raw_description, row.raw_description);
+    const candidate = candidates.find(exact) ?? candidates.find((c) => !claimed.has(c.id));
 
     if (!candidate) continue;
 

@@ -443,6 +443,36 @@ describe('M3 — a pending row that posts carries its category forward', () => {
     expect(await visible('WIDGETCO*ORDER')).toEqual([{ external_id: 'sf-charge', status: 'posted' }]);
   });
 
+  it('prefers the matching hold over a nearer, looser pending row', async () => {
+    // An unrelated pending row from an earlier sync, dated on the charge's own
+    // day and within the loose 25%, sorts ahead of the real hold — which is a
+    // day older. Taking it would leave the hold visible and carry the wrong
+    // row's category onto the charge.
+    mockFetch(baseSet([
+      { id: 'sf-stray', posted: 0, transacted_at: epoch('2026-09-02'),
+        amount: '-21.00', description: 'OTHER PLACE', pending: true },
+    ]));
+    await runSync(sql, { accessUrl: ACCESS_URL });
+
+    mockFetch(baseSet([
+      { id: 'sf-delta-hold', posted: 0, transacted_at: epoch('2026-09-01'),
+        amount: '-20.00', description: 'SHOP DELTA', pending: true },
+      { id: 'sf-delta', posted: epoch('2026-09-02'), transacted_at: epoch('2026-09-01'),
+        amount: '-20.00', description: 'SHOP DELTA' },
+    ]));
+    const r = await runSync(sql, { accessUrl: ACCESS_URL });
+    expect(r.superseded).toBe(1);
+
+    const rows = await sql<{ external_id: string; superseded_by: string | null }[]>`
+      SELECT t.external_id, s.external_id AS superseded_by
+      FROM transactions t LEFT JOIN transactions s ON s.id = t.superseded_by_id
+      WHERE t.external_id IN ('sf-stray', 'sf-delta-hold') ORDER BY t.external_id`;
+    expect(rows).toEqual([
+      { external_id: 'sf-delta-hold', superseded_by: 'sf-delta' },
+      { external_id: 'sf-stray', superseded_by: null },
+    ]);
+  });
+
   it('leaves a still-listed pending row alone unless amount and description both match', async () => {
     // Listed beside a posted charge, a pending row may be a second purchase.
     mockFetch(baseSet([
