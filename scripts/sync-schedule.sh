@@ -99,18 +99,30 @@ if [ "\$ready" != yes ]; then echo "! database not reachable — skipped; the ne
 # it. One still in flight — a 'running' row under 30 minutes old; older means
 # it died — is waited for, up to five minutes, so the two never both call the
 # bridge. Then the day is judged on how that run ended.
-q() { docker exec finance-db psql -U finance -d finance -At -c "\$1" 2>/dev/null; }
+#
+# A query that FAILS is not an answer: empty output must never read as "a
+# sync is running" (which would wait, then skip the day silently) or as "no
+# sync today" (which would start one blind). It stops the run as a failure.
+# Called inside \$(…), a subshell: so it returns rather than exits, and says
+# why on stderr, which is not captured and lands in the same log.
+q() {
+  docker exec finance-db psql -U finance -d finance -At -v ON_ERROR_STOP=1 -c "\$1" 2>/dev/null \\
+    || { echo "! could not read sync_runs — skipped; the next run re-checks" >&2; return 1; }
+}
 in_flight="SELECT count(*) FROM sync_runs WHERE status = 'running' AND started_at > now() - interval '30 minutes'"
 for i in \$(seq 1 60); do
-  [ "\$(q "\$in_flight")" = 0 ] && break
+  running=\$(q "\$in_flight") || exit 1
+  [ "\$running" = 0 ] && break
   [ "\$i" = 1 ] && echo "· a sync is already running — waiting for it"
   sleep 5
 done
-if [ "\$(q "\$in_flight")" != 0 ]; then
+if [ "\$running" != 0 ]; then
   echo "· a sync is still running — leaving today to it; the next run re-checks"
   exit 0
 fi
-last=\$(q "SELECT coalesce(extract(epoch FROM max(started_at))::bigint, 0) FROM sync_runs WHERE status IN ('ok','partial')")
+# FINISHED since midnight, not started: a run begun at 23:59 and done at
+# 00:01 is today's sync, and must not be followed by another.
+last=\$(q "SELECT coalesce(extract(epoch FROM max(finished_at))::bigint, 0) FROM sync_runs WHERE status IN ('ok','partial')") || exit 1
 if [ "\${last:-0}" -ge "\$midnight" ]; then
   [ "\$dry" = --dry-run ] || touch "\$marker"
   echo "· already synced today — nothing to do\${dry:+ (dry run)}"
