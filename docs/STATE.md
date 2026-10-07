@@ -40,19 +40,23 @@ definitions hashed identically before and after. `tests/no-network.test.ts`
 fails on any LLM SDK (transitive included), LLM API host, or outbound request
 other than SimpleFIN's.
 
-Both are merged (PR #12, with three CodeRabbit findings fixed). Branch
-`security-followups` adds self-hosted fonts — the browser no longer contacts
-Google on every page view — a test that no page names a third-party URL,
-`npm run db:rotate-password`, and real figures scrubbed from the public docs.
+Both are merged (PR #12). PR #13 followed: self-hosted fonts — the browser no
+longer contacts Google on every page view — a test that no page names a
+third-party URL, real figures scrubbed from the public docs, the API key out
+of `.env.example`, and `npm run db:rotate-password`, which the owner has run:
+the compose default password is now refused.
 
-**Waiting on the owner** (each touches an env file, which the agent may not):
+**The sync runs nightly at midnight**, from launchd on this machine
+(`npm run sync:schedule -- status`). Asleep at midnight, it runs on waking;
+off, it skips the night and the next run's overlap catches up. One SimpleFIN
+request a night, no retries.
 
-- `.env.example` still names `ANTHROPIC_API_KEY`:
-  `sed -i '' -E '/ANTHROPIC|LLM|Haiku/d' .env.example`.
-- The compose password is a public default. `npm run db:rotate-password`
-  replaces it on the role and in `.env.local` together; tested on a scratch
-  role, including putting the role back when the file cannot be written.
-- Nothing schedules `npm run sync` yet; it has been run by hand.
+**Waiting on the owner:** `chmod 600 .env.local` — it is readable by other
+local users, and env files are off-limits to the agent.
+
+**Deferred, by the owner's choice:** Tailscale access comes last. A separate
+least-privilege database role was declined — one person, one machine, and
+small PRs matter more here than the extra isolation.
 
 **Categorisation no longer uses a model.** Merged in PR #12. The LLM step,
 the Anthropic SDK and the API key are gone;
