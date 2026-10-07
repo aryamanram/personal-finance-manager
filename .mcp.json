@@ -2,7 +2,8 @@
   "mcpServers": {
     "playwright": {
       "command": "npx",
-      "args": ["-y", "@playwright/mcp@0.0.83", "--headless", "--isolated"]
+      "args": ["-y", "@playwright/mcp@0.0.83", "--headless", "--isolated",
+               "--blocked-origins", "http://127.0.0.1:3000;http://localhost:3000"]
     },
     "next-devtools": {
       "command": "npx",
@@ -11,7 +12,9 @@
     },
     "chrome-devtools": {
       "command": "npx",
-      "args": ["-y", "chrome-devtools-mcp@1.10.1", "--headless", "--isolated", "--usageStatistics=false"],
+      "args": ["-y", "chrome-devtools-mcp@1.10.1", "--headless", "--isolated", "--usageStatistics=false",
+               "--blockedUrlPattern", "http://127.0.0.1:3000/*",
+               "--blockedUrlPattern", "http://localhost:3000/*"],
       "env": { "CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS": "1" }
     }
   }

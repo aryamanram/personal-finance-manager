@@ -243,6 +243,12 @@ fixed date, so it renders identically run to run. The demo app builds into
 Each is pinned to an exact version — bump them deliberately — runs headless
 with a throwaway browser profile, and has its usage telemetry switched off.
 
+They can only see the demo. Next serves its `/_next/mcp` endpoint from
+`npm run dev:demo` alone (`experimental.mcpServer` in `next.config.mjs`), so
+`next-devtools` finds nothing on :3000; both browsers refuse to load :3000
+(`--blocked-origins`, `--blockedUrlPattern`). That guards against a wrong
+port; it is not a sandbox.
+
 For a human view of several screen sizes at once, Responsively App (free),
 Polypane or Sizzy.
 

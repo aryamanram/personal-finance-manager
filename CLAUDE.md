@@ -96,7 +96,8 @@ spend amber on anything else; its meaning is the point.
 then `npm run dev:demo` serves synthetic data on `127.0.0.1:3001`, beside the
 real app on :3000. Screenshots, Figma pushes and visual-test baselines leave
 this machine; the real ledger must not be in any of them. The Playwright,
-Next devtools and Chrome DevTools MCP servers in `.mcp.json` are for this.
+Next devtools and Chrome DevTools MCP servers in `.mcp.json` are for this,
+and are configured so they cannot reach :3000 — do not loosen that.
 
 For visual work, these are available and worth using rather than improvising:
 

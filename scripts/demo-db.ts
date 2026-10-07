@@ -32,12 +32,15 @@ function urls() {
   const real = process.env.DATABASE_URL;
   if (!real) throw new Error('DATABASE_URL is not set. Copy .env.example to .env.local.');
   const demo = new URL(real);
-  demo.pathname = `/${DEMO_DB}`;
-  // The guard everything below relies on: every write in this file goes to a
-  // database whose name ends in _demo, never to the one in DATABASE_URL.
-  if (!demo.pathname.endsWith('_demo') || demo.toString() === real) {
-    throw new Error('Refusing: the demo URL does not point at a _demo database.');
+  // The guard everything below relies on: setup() drops DEMO_DB's schema, so
+  // DATABASE_URL must name some other database. Compare the parsed names, not
+  // the URL strings — one database has many spellings (POSTGRES://, a
+  // trailing ?param), and a string mismatch would wave a demo URL through.
+  const realDb = decodeURIComponent(demo.pathname.slice(1));
+  if (realDb === DEMO_DB || realDb.endsWith('_demo')) {
+    throw new Error(`Refusing: DATABASE_URL already names a demo database (${realDb}). Point it at the real ledger — the demo URL is derived from it.`);
   }
+  demo.pathname = `/${DEMO_DB}`;
   return { real, demo: demo.toString() };
 }
 
@@ -84,10 +87,10 @@ async function setup() {
 async function dev() {
   const { demo } = urls();
   console.log(`· demo app on http://127.0.0.1:${DEMO_PORT}, reading ${DEMO_DB}`);
-  // NEXT_DIST_DIR keeps its build apart from the real app's .next, so both
-  // dev servers can run at once.
+  // LEDGER_DEMO=1 is read by next.config.mjs: its own build directory, and
+  // the only dev server that answers Next's MCP endpoint.
   const code = await run('npx', ['next', 'dev', '-H', '127.0.0.1', '-p', DEMO_PORT], {
-    ...process.env, DATABASE_URL: demo, NEXT_DIST_DIR: '.next-demo',
+    ...process.env, DATABASE_URL: demo, LEDGER_DEMO: '1',
   });
   process.exitCode = code;
 }
