@@ -94,6 +94,22 @@ over `category_id`, `category_source`, `category_locked`, and both overrides**.
 Otherwise every categorization you did on a pending transaction evaporates the
 moment it posts. Every view filters `superseded_by_id IS NULL`.
 
+**The hold can outlive the post.** Usually the bank stops listing a pending row
+once it posts. Sometimes it keeps listing the authorization hold beside the
+posted charge, each under its own id, in the same response — and does so on
+every sync until the hold drops. Matching only pending rows the run had not
+touched meant that pair never resolved, and the register showed one purchase
+twice (the pending one never counted as spending, so totals were right). But a
+pending row still being listed could also be a second, separate purchase, so
+it is superseded only on stronger evidence:
+
+- the same account and the ±5-day window, as above
+- **exactly** the same amount — no tip tolerance
+- the same description: one `normalize()`d form a prefix of the other, the
+  test fuzzy adoption uses (§1)
+
+A pending row the bank has stopped listing keeps the loose match.
+
 ## 3. Transfer matching
 
 Your setup generates three recurring transfer pairs: checking → Explorer,

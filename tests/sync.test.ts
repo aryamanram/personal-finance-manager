@@ -413,6 +413,83 @@ describe('M3 — a pending row that posts carries its category forward', () => {
       SELECT counts_as_spending FROM v_transactions WHERE id = ${pending.id}`;
     expect(v.counts_as_spending).toBe(false);
   });
+
+  /** Rows of one description the register can show: not superseded, not voided. */
+  const visible = async (description: string) =>
+    (await sql<{ external_id: string; status: string }[]>`
+      SELECT external_id, status FROM transactions
+      WHERE raw_description = ${description} AND superseded_by_id IS NULL AND voided_at IS NULL
+      ORDER BY external_id`);
+
+  it('supersedes a hold the bank still lists beside its posted charge', async () => {
+    // One purchase, two rows in ONE response: the authorization hold, still
+    // pending, and the posted charge, each under its own id. The register
+    // showed both, and every sync re-sent both, so neither ever resolved.
+    const both = baseSet([
+      { id: 'sf-hold', posted: 0, transacted_at: epoch('2026-08-25'),
+        amount: '-42.10', description: 'WIDGETCO*ORDER', pending: true },
+      { id: 'sf-charge', posted: epoch('2026-08-26'), transacted_at: epoch('2026-08-25'),
+        amount: '-42.10', description: 'WIDGETCO*ORDER' },
+    ]);
+    mockFetch(both);
+    const first = await runSync(sql, { accessUrl: ACCESS_URL });
+    expect(first.superseded).toBe(1);
+    expect(await visible('WIDGETCO*ORDER')).toEqual([{ external_id: 'sf-charge', status: 'posted' }]);
+
+    // The bank keeps listing the hold for a while. Nothing reappears.
+    mockFetch(both);
+    const second = await runSync(sql, { accessUrl: ACCESS_URL });
+    expect(second.inserted).toBe(0);
+    expect(await visible('WIDGETCO*ORDER')).toEqual([{ external_id: 'sf-charge', status: 'posted' }]);
+  });
+
+  it('prefers the matching hold over a nearer, looser pending row', async () => {
+    // An unrelated pending row from an earlier sync, dated on the charge's own
+    // day and within the loose 25%, sorts ahead of the real hold — which is a
+    // day older. Taking it would leave the hold visible and carry the wrong
+    // row's category onto the charge.
+    mockFetch(baseSet([
+      { id: 'sf-stray', posted: 0, transacted_at: epoch('2026-09-02'),
+        amount: '-21.00', description: 'OTHER PLACE', pending: true },
+    ]));
+    await runSync(sql, { accessUrl: ACCESS_URL });
+
+    mockFetch(baseSet([
+      { id: 'sf-delta-hold', posted: 0, transacted_at: epoch('2026-09-01'),
+        amount: '-20.00', description: 'SHOP DELTA', pending: true },
+      { id: 'sf-delta', posted: epoch('2026-09-02'), transacted_at: epoch('2026-09-01'),
+        amount: '-20.00', description: 'SHOP DELTA' },
+    ]));
+    const r = await runSync(sql, { accessUrl: ACCESS_URL });
+    expect(r.superseded).toBe(1);
+
+    const rows = await sql<{ external_id: string; superseded_by: string | null }[]>`
+      SELECT t.external_id, s.external_id AS superseded_by
+      FROM transactions t LEFT JOIN transactions s ON s.id = t.superseded_by_id
+      WHERE t.external_id IN ('sf-stray', 'sf-delta-hold') ORDER BY t.external_id`;
+    expect(rows).toEqual([
+      { external_id: 'sf-delta-hold', superseded_by: 'sf-delta' },
+      { external_id: 'sf-stray', superseded_by: null },
+    ]);
+  });
+
+  it('leaves a still-listed pending row alone unless amount and description both match', async () => {
+    // Listed beside a posted charge, a pending row may be a second purchase.
+    mockFetch(baseSet([
+      // Another merchant, same amount.
+      { id: 'sf-alpha', posted: epoch('2026-08-27'), amount: '-30.00', description: 'SHOP ALPHA' },
+      { id: 'sf-beta', posted: 0, transacted_at: epoch('2026-08-27'),
+        amount: '-30.00', description: 'SHOP BETA', pending: true },
+      // Same merchant, a different amount.
+      { id: 'sf-cafe', posted: epoch('2026-08-28'), amount: '-58.00', description: 'CAFE GAMMA' },
+      { id: 'sf-cafe-hold', posted: 0, transacted_at: epoch('2026-08-28'),
+        amount: '-50.00', description: 'CAFE GAMMA', pending: true },
+    ]));
+    const r = await runSync(sql, { accessUrl: ACCESS_URL });
+    expect(r.superseded).toBe(0);
+    expect((await visible('SHOP BETA')).map((x) => x.status)).toEqual(['pending']);
+    expect((await visible('CAFE GAMMA')).map((x) => x.status).sort()).toEqual(['pending', 'posted']);
+  });
 });
 
 describe('protocol error handling', () => {

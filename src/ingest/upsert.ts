@@ -24,8 +24,6 @@ export interface UpsertResult {
 
 interface Prepared extends CanonicalTxn {
   fp: string;
-  /** normalize()d description, for the fuzzy-adoption prefix test. */
-  normalized: string;
 }
 
 /** Days a pending row may differ from its posted version. */
@@ -41,6 +39,19 @@ const SUPERSEDE_DAY_WINDOW = 5;
 const ADOPT_DAY_WINDOW = 2;
 /** Fractional amount drift allowed pending→posted (tips, gas pre-auths). */
 const SUPERSEDE_AMOUNT_TOLERANCE = 0.25;
+
+/**
+ * Two descriptions of the same charge: one normalize()d form is a prefix of
+ * the other. A prefix cannot match two unrelated merchants, where looser
+ * tests can. Shared by fuzzy adoption and pending supersession so the ingest
+ * path has one definition of "the same description".
+ */
+function sameDescription(a: string, b: string): boolean {
+  const na = normalize(a);
+  const nb = normalize(b);
+  if (na.length === 0 || nb.length === 0) return false;
+  return na.startsWith(nb) || nb.startsWith(na);
+}
 
 export async function upsertTransactions(
   sql: Sql,
@@ -65,7 +76,6 @@ export async function upsertTransactions(
       amountCents: r.amountCents,
       rawDescription: r.rawDescription,
     }),
-    normalized: normalize(r.rawDescription),
   }));
 
   await sql.begin(async (tx) => {
@@ -158,11 +168,7 @@ export async function upsertTransactions(
       // The prefix test runs HERE, not in SQL: normalize() is TypeScript, and
       // reimplementing it as a SQL expression would give the ingest path two
       // definitions of "the same description" that could drift apart.
-      const fuzzy = candidates.filter((c) => {
-        const other = normalize(c.raw_description);
-        if (row.normalized.length === 0 || other.length === 0) return false;
-        return other.startsWith(row.normalized) || row.normalized.startsWith(other);
-      });
+      const fuzzy = candidates.filter((c) => sameDescription(c.raw_description, row.rawDescription));
 
       if (fuzzy.length > 0) {
         await tx`
@@ -227,6 +233,14 @@ export async function upsertTransactions(
  * INGEST_NOTES §2. For each newly posted row, find an unmatched pending row for
  * the same real transaction and carry its categorization forward. Without this,
  * every decision made on a pending transaction evaporates when it posts.
+ *
+ * Usually the bank stops listing a pending row once it posts, and the match
+ * can be loose: ±5 days, amount within 25% for tips and fuel holds. But some
+ * charges arrive with the authorization hold STILL listed beside the posted
+ * charge, each under its own id, in the same response — and a hold the bank
+ * is still listing could also be a second, separate purchase. So a pending
+ * row this run touched is superseded only on stronger evidence: exactly the
+ * same amount and the same description.
  */
 async function supersedePending(
   tx: TransactionSql<{}>,
@@ -237,9 +251,9 @@ async function supersedePending(
   if (postedIds.length === 0) return 0;
 
   const posted = await tx<
-    { id: string; account_id: string; posted_date: string; amount_cents: number }[]
+    { id: string; account_id: string; posted_date: string; amount_cents: number; raw_description: string }[]
   >`
-    SELECT id, account_id, posted_date, amount_cents
+    SELECT id, account_id, posted_date, amount_cents, raw_description
     FROM transactions
     WHERE id = ANY(${postedIds}::uuid[])
       AND status = 'posted'
@@ -257,19 +271,29 @@ async function supersedePending(
       Math.round(row.amount_cents * (1 + SUPERSEDE_AMOUNT_TOLERANCE)),
     );
 
-    const [candidate] = await tx<{ id: string }[]>`
-      SELECT id FROM transactions
+    const candidates = await tx<{ id: string; amount_cents: number; raw_description: string }[]>`
+      SELECT id, amount_cents, raw_description FROM transactions
       WHERE account_id = ${row.account_id}
         AND status = 'pending'
         AND superseded_by_id IS NULL
         AND voided_at IS NULL
         AND id <> ${row.id}
-        AND id <> ALL(${postedIds}::uuid[])
         AND amount_cents BETWEEN ${lo} AND ${hi}
         AND abs(posted_date - ${row.posted_date}::date) <= ${SUPERSEDE_DAY_WINDOW}
       ORDER BY abs(posted_date - ${row.posted_date}::date),
-               abs(amount_cents - ${row.amount_cents})
-      LIMIT 1`;
+               abs(amount_cents - ${row.amount_cents})`;
+
+    // Strongest evidence first: the exact amount and the same description, be
+    // the row still listed or not. Only failing that, the loose match — and
+    // only on a pending row the bank no longer lists, since one it still lists
+    // could be a second purchase. Taking the first loose candidate by date
+    // would let an unrelated pending row dated on the charge's own day beat
+    // the real hold dated a day earlier: the hold stays visible, and the wrong
+    // row's category is carried onto the charge.
+    const exact = (c: { amount_cents: number; raw_description: string }) =>
+      Number(c.amount_cents) === Number(row.amount_cents)
+      && sameDescription(c.raw_description, row.raw_description);
+    const candidate = candidates.find(exact) ?? candidates.find((c) => !claimed.has(c.id));
 
     if (!candidate) continue;
 
