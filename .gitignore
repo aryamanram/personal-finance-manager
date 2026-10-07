@@ -68,3 +68,10 @@ CLAUDE.local.md
 .vscode/*
 !.vscode/extensions.json
 *.swp
+
+# The demo app (npm run dev:demo) builds here, apart from the real app
+.next-demo/
+
+# Playwright MCP writes page snapshots and console logs here — a snapshot is
+# the page's text, so one taken of the real app would be real data.
+.playwright-mcp/

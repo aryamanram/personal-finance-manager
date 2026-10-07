@@ -22,8 +22,19 @@ loadEnv();
 const sql = postgres(process.env.DATABASE_URL!, { max: 4, onnotice: () => {}, types: pgTypes });
 
 const MONTHS = 6;
-const today = new Date();
-const iso = (d: Date) => d.toISOString().slice(0, 10);
+// SEED_TODAY=yyyy-mm-dd pins the ledger's "now", so a reseed produces the same
+// dates as well as the same amounts — what makes screenshots of the demo
+// comparable from one run to the next. Unset, the data ends today.
+const today = process.env.SEED_TODAY
+  ? new Date(`${process.env.SEED_TODAY}T12:00:00`)
+  : new Date();
+if (Number.isNaN(today.getTime())) throw new Error(`SEED_TODAY is not a date: ${process.env.SEED_TODAY}`);
+// Every date below is built from local calendar parts (new Date(y, m, d)), so
+// it is written out from local parts too. toISOString() would convert to UTC
+// first, and east of Greenwich local midnight is the previous UTC day — the
+// whole ledger would shift back one day and the screenshots with it.
+const iso = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 /** Deterministic PRNG so a reseed produces the same ledger. */
 let seed = 42;
