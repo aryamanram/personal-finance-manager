@@ -181,10 +181,30 @@ removes two real transactions from spending. Confirm one with:
 npx tsx scripts/match-transfers.ts --link <id-a> <id-b>
 ```
 
-Cron, since there is no in-process scheduler:
+There is no in-process scheduler. On a Mac, schedule the sync nightly at
+midnight with launchd:
+
+```bash
+npm run sync:schedule -- install --dry-run   # rehearse: the job only checks
+npm run sync:schedule -- install             # then for real
+npm run sync:schedule -- status              # last run and the log tail
+```
+
+A Mac asleep at midnight runs it on waking; one that is off skips the night
+and the next run catches up, because every sync re-fetches from five days
+before the last good one. The job starts Docker if it is not running and
+never retries — the bridge disables a token that keeps exceeding its daily
+limit. A normal night is one SimpleFIN request. Catching up more than 45 days
+— a long time off, or a new account's backfill — is one request per 45-day
+window, and a rate-limit warning stops the sync before the remaining windows;
+the backfill is not marked done, so the next run picks it up again. Elsewhere,
+cron can run the sync itself, but
+it starts nothing: the database must already be up, or that night fails and
+the next run catches up. Its bare `PATH` will not find npm either, so give the
+full path (`which npm`):
 
 ```cron
-0 6 * * * cd /path/to/ledger && /usr/local/bin/npm run sync >> sync.log 2>&1
+0 0 * * * cd /path/to/ledger && /usr/local/bin/npm run sync >> sync.log 2>&1
 ```
 
 Exit codes: `0` ok, `1` failed, `2` partial (one institution is broken, others

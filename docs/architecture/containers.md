@@ -95,10 +95,15 @@ Idempotency is not incidental. It is enforced by tests:
 ## Scheduling
 
 There is no in-process scheduler. `sync` is a plain script so it stays runnable
-by hand:
+by hand, and `npm run sync:schedule -- install` has launchd run it nightly at
+midnight — on waking, if the Mac was asleep; skipped, and caught up by the next
+run's overlap window, if it was off. The job starts Docker and waits for the
+database first. Elsewhere, cron — which starts nothing, so the database must
+already be up, and whose bare `PATH` will not find npm, so replace the path
+below with the output of `which npm`:
 
 ```cron
-0 6 * * * cd /path/to/ledger && npm run sync >> sync.log 2>&1
+0 0 * * * cd /path/to/ledger && /usr/local/bin/npm run sync >> sync.log 2>&1
 ```
 
 Exit codes: `0` ok · `1` failed · `2` partial, one institution broken while
