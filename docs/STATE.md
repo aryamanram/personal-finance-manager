@@ -25,9 +25,9 @@ Describe the *shape* of a decision here and keep the specifics there.
 ## Right now · last updated 2026-10-07
 
 **Nothing is in flight.** PRs #12–#16 are merged and `main` is green. The
-ledger syncs itself daily (see the decisions below), was caught up and
-reconciled on 2026-10-07, and the card that syncs daily matches its issuer to
-the cent. The employer's income source was re-registered by the text the bank
+ledger syncs itself daily (see the decisions below) and was caught up on
+2026-10-07. It reconciles except for checking's one difference, below; the
+card that syncs daily matches its issuer to the cent. The employer's income source was re-registered by the text the bank
 actually prints, checked against the real deposit with the app's own matcher.
 
 **For whoever picks this up:**
@@ -43,8 +43,8 @@ actually prints, checked against the real deposit with the app's own matcher.
   Monthly", so its transactions trail its balance by up to a month and it
   reads as off until the statement lands. Importing the current statement's
   CSV on the Accounts page closes it sooner.
-- **Two rows sit in Uncategorized**, one a large one-off outflow. They are the
-  owner's to file.
+- **A few rows sit in Uncategorized**, among them a large one-off outflow.
+  They are the owner's to file.
 - Tailscale access is deferred to the very end, by the owner's choice.
 
 Standing tasks the owner tracks — details in `private/STATE.local.md`:
@@ -102,7 +102,8 @@ real deposit is filed as `income_source`.
 
 **One sync a day, from this machine, one at a time.** launchd runs
 `npm run sync` at midnight and at login, and each run syncs only if no sync
-has *finished* since the last midnight — one run by hand counts. Local,
+has *finished* `ok` or `partial` since the last midnight — one run by hand
+counts; a failed one leaves the day open. Local,
 because a cloud scheduler would cost money and need the database reachable
 from outside. Never retried within a run, because the bridge disables a token
 that keeps exceeding ~24 requests a day, and a missed day costs nothing:
@@ -235,7 +236,7 @@ than any of them, and the remaining gap was not worth more tuning.
   one lives only in `.env.local` (mode 600).
 - **The nightly sync runs whatever branch is checked out.** Leave the working
   tree on `main` between sessions.
-- **Two rows sit at the bare `Subscriptions` parent** in July 2026 while every
+- **A couple of rows sit at the bare `Subscriptions` parent** in July 2026 while every
   other row of the same merchants is in a subcategory — likely oversights, left
   alone because they are human decisions. The guesser counts a parent vote
   toward its own child, so they do not mislead it.
