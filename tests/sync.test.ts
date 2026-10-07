@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi, afterEach } from 'vitest';
 import postgres, { type Sql } from 'postgres';
 import { createTestDb, categoryByName } from './helpers/db';
+import { pgTypes } from '@/lib/pg-types';
 import { runSync, inferAccountType, splitWindows, SyncBusyError, SYNC_LOCK_KEY } from '@/ingest/sync';
 import { redactUrl, epochToIsoDate, toCanonical, isRateLimitWarning } from '@/ingest/simplefin';
 import type { AccountSet, SimpleFinAccount } from '@/ingest/simplefin';
@@ -119,6 +120,21 @@ describe('one sync at a time', () => {
       await other.end();   // the session ends, and its lock with it
     }
   });
+
+  it('refuses a single-connection client at once instead of hanging', async () => {
+    // The lock takes a connection of its own, and the sync needs another. On
+    // a one-connection client it would wait forever for the connection
+    // holding its own lock — no error, no request, a sync that never ends.
+    const single = postgres(dbUrl, { max: 1, onnotice: () => {}, types: pgTypes });
+    try {
+      const spy = vi.fn(async () => new Response(JSON.stringify(baseSet([])), { status: 200 }));
+      vi.stubGlobal('fetch', spy);
+      await expect(runSync(single, { accessUrl: ACCESS_URL })).rejects.toThrow(/at least two connections/);
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      await single.end();
+    }
+  }, 10_000);
 
   it('lets the next sync through once the lock is free — even after one failed', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 403 })));

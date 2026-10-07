@@ -183,6 +183,15 @@ export async function runSync(
     accessUrl: '',
   },
 ): Promise<SyncResult> {
+  // The lock holds one connection for the whole run and the sync needs
+  // another — it cannot run on the reserved one, which has no begin() for
+  // the ingest transaction. With a single-connection client the sync would
+  // wait forever on the connection holding its own lock, so refuse at once.
+  if (sql.options.max < 2) {
+    throw new Error(
+      'runSync needs a client with at least two connections: one holds the sync lock while the sync runs on another.',
+    );
+  }
   const lock = await sql.reserve();
   try {
     const [{ locked }] = await lock<{ locked: boolean }[]>`
