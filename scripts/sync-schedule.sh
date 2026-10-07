@@ -95,9 +95,22 @@ for _ in \$(seq 1 60); do
 done
 if [ "\$ready" != yes ]; then echo "! database not reachable — skipped; the next run catches up"; exit 1; fi
 
-# A sync run by hand counts too: sync_runs records every run, whoever started it.
-last=\$(docker exec finance-db psql -U finance -d finance -At -c \\
-  "SELECT coalesce(extract(epoch FROM max(started_at))::bigint, 0) FROM sync_runs WHERE status IN ('ok','partial')" 2>/dev/null)
+# A sync run by hand counts too: sync_runs records every run, whoever started
+# it. One still in flight — a 'running' row under 30 minutes old; older means
+# it died — is waited for, up to five minutes, so the two never both call the
+# bridge. Then the day is judged on how that run ended.
+q() { docker exec finance-db psql -U finance -d finance -At -c "\$1" 2>/dev/null; }
+in_flight="SELECT count(*) FROM sync_runs WHERE status = 'running' AND started_at > now() - interval '30 minutes'"
+for i in \$(seq 1 60); do
+  [ "\$(q "\$in_flight")" = 0 ] && break
+  [ "\$i" = 1 ] && echo "· a sync is already running — waiting for it"
+  sleep 5
+done
+if [ "\$(q "\$in_flight")" != 0 ]; then
+  echo "· a sync is still running — leaving today to it; the next run re-checks"
+  exit 0
+fi
+last=\$(q "SELECT coalesce(extract(epoch FROM max(started_at))::bigint, 0) FROM sync_runs WHERE status IN ('ok','partial')")
 if [ "\${last:-0}" -ge "\$midnight" ]; then
   [ "\$dry" = --dry-run ] || touch "\$marker"
   echo "· already synced today — nothing to do\${dry:+ (dry run)}"
@@ -168,7 +181,9 @@ status() {
   launchctl print "$DOMAIN/$LABEL" | grep -E $'^\t(state|runs|last exit code) =' | sed $'s/^\t/  /'
   grep -q -- '--dry-run' "$PLIST" && echo "  mode = dry run" || echo "  mode = live"
   if [ -f "$MARKER" ]; then
-    echo "  last scheduled sync = $(date -r "$(stat -f %m "$MARKER")" '+%Y-%m-%d %H:%M %Z')"
+    # The marker records a DAY found done — by this job's sync, or by one run
+    # by hand that the job then saw — not necessarily a sync it ran itself.
+    echo "  last day marked synced = $(date -r "$(stat -f %m "$MARKER")" '+%Y-%m-%d %H:%M %Z')"
   fi
   if [ -f "$LOG" ]; then echo "  log ($LOG):"; tail -n 8 "$LOG" | sed 's/^/    /'; fi
 }

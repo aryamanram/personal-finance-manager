@@ -90,10 +90,12 @@ Confidence tracks accuracy: the 0.8+ band is right ~97% of the time.
 
 **Income sources** are new: a payer (description text or ACH originator ID)
 maps to a category, managed on the Accounts page. A match is *known*, not
-guessed, and skips review. The owner's employer is registered by name, ahead
-of its first deposit. **When that first paycheck lands, check it was filed
-as a known Paycheck** — if the bank prints it through a payroll processor
-under another name, add the originator ID from that deposit.
+guessed, and skips review. The owner's employer was registered by name ahead
+of its first deposit — and that deposit, when it landed, did not match: the
+bank prints the employer differently, and the feed masks most of the
+originator ID, so the ID is no fallback. It was filed as a Paycheck guess by
+the payroll pattern instead. Re-registering the source with the text the
+deposit actually carries is on the owner's list above.
 
 The `categorization-design` branch's finding (SimpleFIN `payee`, Chase `Type`
 are dropped on ingest) is still unacted on; both would feed the guesser
