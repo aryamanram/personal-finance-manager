@@ -97,7 +97,10 @@ then `npm run dev:demo` serves synthetic data on `127.0.0.1:3001`, beside the
 real app on :3000. Screenshots, Figma pushes and visual-test baselines leave
 this machine; the real ledger must not be in any of them. The Playwright,
 Next devtools and Chrome DevTools MCP servers in `.mcp.json` are for this,
-and are configured so they cannot reach :3000 — do not loosen that.
+and are configured so they cannot reach :3000 — do not loosen that. Playwright
+is held to :3001 by an origin allowlist that does not see redirects, which is
+safe only because the app has none: never add a redirect to a URL taken from
+the request.
 
 For visual work, these are available and worth using rather than improvising:
 

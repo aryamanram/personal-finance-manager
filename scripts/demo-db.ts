@@ -40,8 +40,24 @@ function urls() {
   if (realDb === DEMO_DB || realDb.endsWith('_demo')) {
     throw new Error(`Refusing: DATABASE_URL already names a demo database (${realDb}). Point it at the real ledger — the demo URL is derived from it.`);
   }
+  // postgres.js sends unknown query keys as startup parameters, after the
+  // path's database — so ?database=finance would survive the path swap
+  // below and win, and setup() would reset the real ledger.
+  if (demo.searchParams.has('database')) {
+    throw new Error('Refusing: DATABASE_URL has a ?database= parameter, which would override the demo database. Name the database in the path.');
+  }
   demo.pathname = `/${DEMO_DB}`;
   return { real, demo: demo.toString() };
+}
+
+/**
+ * Asks the server which database this connection reached, and refuses unless
+ * it is the demo. The URL checks above reason about how the driver will parse
+ * a URL; this is the answer, taken on the connection that will do the writing.
+ */
+async function assertDemo(sql: postgres.Sql) {
+  const [{ db }] = await sql`SELECT current_database() AS db`;
+  if (db !== DEMO_DB) throw new Error(`Refusing: the demo URL reached ${db}, not ${DEMO_DB}.`);
 }
 
 function run(cmd: string, args: string[], env: NodeJS.ProcessEnv): Promise<number> {
@@ -68,8 +84,10 @@ async function setup() {
   }
 
   // Start clean every time: drop and re-apply the schema, then seed.
+  // max: 1, so the connection that answers assertDemo is the one that drops.
   const sql = postgres(demo, { max: 1, onnotice: () => {} });
   try {
+    await assertDemo(sql);
     await sql.unsafe('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
     await sql.unsafe(readFileSync('db/schema.sql', 'utf8'));
     console.log(`· applied db/schema.sql to ${DEMO_DB}`);
@@ -86,6 +104,14 @@ async function setup() {
 
 async function dev() {
   const { demo } = urls();
+  // The demo app is what the design tools are allowed to see; check it is
+  // not about to serve the real ledger.
+  const sql = postgres(demo, { max: 1, onnotice: () => {} });
+  try {
+    await assertDemo(sql);
+  } finally {
+    await sql.end();
+  }
   console.log(`· demo app on http://127.0.0.1:${DEMO_PORT}, reading ${DEMO_DB}`);
   // LEDGER_DEMO=1 is read by next.config.mjs: its own build directory, and
   // the only dev server that answers Next's MCP endpoint.

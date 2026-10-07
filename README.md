@@ -245,9 +245,12 @@ with a throwaway browser profile, and has its usage telemetry switched off.
 
 They can only see the demo. Next serves its `/_next/mcp` endpoint from
 `npm run dev:demo` alone (`experimental.mcpServer` in `next.config.mjs`), so
-`next-devtools` finds nothing on :3000; both browsers refuse to load :3000
-(`--blocked-origins`, `--blockedUrlPattern`). That guards against a wrong
-port; it is not a sandbox.
+`next-devtools` finds nothing on :3000. Chrome DevTools blocks :3000 at the
+network layer, redirects included (`--blockedUrlPattern`). Playwright's
+filter does not see a server's redirects, so it allows :3001 and nothing
+else (`--allowed-origins`) — and the app never redirects, so no page it can
+load leads to :3000. These guard against a wrong port or a stray redirect;
+they are not a sandbox against an agent that also has a shell.
 
 For a human view of several screen sizes at once, Responsively App (free),
 Polypane or Sizzy.
