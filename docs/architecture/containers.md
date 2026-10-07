@@ -107,7 +107,8 @@ below with the output of `which npm`:
 ```
 
 Exit codes: `0` ok · `1` failed · `2` partial, one institution broken while
-others synced · `3` misconfigured. The distinction matters under cron, where the
+others synced · `3` misconfigured · `4` another sync held the lock, so this one
+did nothing. The distinction matters under cron, where the
 exit code is the only thing anyone reads.
 
 ## The one configuration trap

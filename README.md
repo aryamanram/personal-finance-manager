@@ -211,7 +211,8 @@ full path (`which npm`):
 ```
 
 Exit codes: `0` ok, `1` failed, `2` partial (one institution is broken, others
-synced), `3` misconfigured.
+synced), `3` misconfigured, `4` another sync was already running and this one
+did nothing.
 
 ## How it is put together
 

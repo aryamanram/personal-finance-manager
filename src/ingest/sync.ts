@@ -153,9 +153,52 @@ async function markBackfilled(sql: Sql, accountIds: string[]): Promise<void> {
     WHERE id = ANY(${accountIds}::uuid[]) AND backfilled_at IS NULL`;
 }
 
-/** Synchronizes SimpleFIN accounts, transactions, balances, and holdings. */
+/**
+ * Every sync contends for this one Postgres advisory lock, however it was
+ * started — by hand, or by the daily schedule. Two at once would both call
+ * the bridge, spending a daily allowance it enforces by disabling the token.
+ */
+export const SYNC_LOCK_KEY = 7270331503;
 
+/** Another sync holds the lock. This one did nothing and asked nothing. */
+export class SyncBusyError extends Error {
+  constructor() {
+    super('Another sync is already running. This one made no request and changed nothing.');
+    this.name = 'SyncBusyError';
+  }
+}
+
+/**
+ * Synchronizes SimpleFIN accounts, transactions, balances, and holdings —
+ * under the sync lock, taken before anything is read or requested.
+ *
+ * The lock is session-level, on a connection reserved for it: the pool hands
+ * queries to whichever connection is free, and an advisory lock belongs to
+ * the session that took it. A process that dies drops that connection, and
+ * the lock with it, so there is nothing to clear up after a crash.
+ */
 export async function runSync(
+  sql: Sql,
+  opts: { accessUrl: string; since?: Date; log?: (msg: string) => void } = {
+    accessUrl: '',
+  },
+): Promise<SyncResult> {
+  const lock = await sql.reserve();
+  try {
+    const [{ locked }] = await lock<{ locked: boolean }[]>`
+      SELECT pg_try_advisory_lock(${SYNC_LOCK_KEY}::bigint) AS locked`;
+    if (!locked) throw new SyncBusyError();
+    try {
+      return await syncUnderLock(sql, opts);
+    } finally {
+      await lock`SELECT pg_advisory_unlock(${SYNC_LOCK_KEY}::bigint)`;
+    }
+  } finally {
+    lock.release();
+  }
+}
+
+async function syncUnderLock(
   sql: Sql,
   opts: { accessUrl: string; since?: Date; log?: (msg: string) => void } = {
     accessUrl: '',

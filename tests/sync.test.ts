@@ -6,9 +6,9 @@
  * bridge, so this runs offline and deterministically.
  */
 import { describe, it, expect, beforeAll, afterAll, vi, afterEach } from 'vitest';
-import type { Sql } from 'postgres';
+import postgres, { type Sql } from 'postgres';
 import { createTestDb, categoryByName } from './helpers/db';
-import { runSync, inferAccountType, splitWindows } from '@/ingest/sync';
+import { runSync, inferAccountType, splitWindows, SyncBusyError, SYNC_LOCK_KEY } from '@/ingest/sync';
 import { redactUrl, epochToIsoDate, toCanonical, isRateLimitWarning } from '@/ingest/simplefin';
 import type { AccountSet, SimpleFinAccount } from '@/ingest/simplefin';
 
@@ -43,10 +43,13 @@ const baseSet = (txns: SimpleFinAccount['transactions']): AccountSet => ({
   accounts: [checkingAccount(txns)],
 });
 
+let dbUrl: string;
+
 beforeAll(async () => {
   const db = await createTestDb('sync');
   sql = db.sql;
   drop = db.drop;
+  dbUrl = db.url;
 }, 30_000);
 
 afterAll(async () => { await drop(); });
@@ -89,6 +92,45 @@ describe('window splitting', () => {
   it('never returns zero windows', () => {
     const t = new Date('2026-09-16T12:00:00Z');
     expect(splitWindows(t, t, 45).length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('one sync at a time', () => {
+  /**
+   * A sync started by hand and the daily schedule can coincide. Both would
+   * call the bridge, which disables a token that keeps exceeding its daily
+   * allowance — so every sync takes one advisory lock before it reads or
+   * requests anything.
+   */
+  it('makes no request and records no run while another sync holds the lock', async () => {
+    const other = postgres(dbUrl, { max: 1, onnotice: () => {} });
+    try {
+      await other`SELECT pg_advisory_lock(${SYNC_LOCK_KEY}::bigint)`;
+      const spy = vi.fn(async () => new Response(JSON.stringify(baseSet([])), { status: 200 }));
+      vi.stubGlobal('fetch', spy);
+      const [{ before }] = await sql<{ before: number }[]>`SELECT count(*)::int AS before FROM sync_runs`;
+
+      await expect(runSync(sql, { accessUrl: ACCESS_URL })).rejects.toBeInstanceOf(SyncBusyError);
+
+      expect(spy).not.toHaveBeenCalled();
+      const [{ after }] = await sql<{ after: number }[]>`SELECT count(*)::int AS after FROM sync_runs`;
+      expect(after).toBe(before);
+    } finally {
+      await other.end();   // the session ends, and its lock with it
+    }
+  });
+
+  it('lets the next sync through once the lock is free — even after one failed', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 403 })));
+    await expect(runSync(sql, { accessUrl: ACCESS_URL })).rejects.toThrow(/403/);
+
+    const spy = vi.fn(async () => new Response(JSON.stringify(baseSet([])), { status: 200 }));
+    vi.stubGlobal('fetch', spy);
+    const r = await runSync(sql, { accessUrl: ACCESS_URL });
+    // Got through and reached the bridge. (A first sync backfills 89 days in
+    // 45-day windows, so it is more than one request.)
+    expect(spy).toHaveBeenCalled();
+    expect(r.status).toBe('ok');
   });
 });
 

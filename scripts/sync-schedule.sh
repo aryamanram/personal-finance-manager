@@ -141,6 +141,10 @@ code=\$?
 # 0 ok; 2 partial — one connection needs attention, the rest synced. Either
 # way the bridge answered, and today is done.
 if [ "\$code" -eq 0 ] || [ "\$code" -eq 2 ]; then touch "\$marker"; fi
+# 4: a sync started by hand took the lock first and is making today's request;
+# this one made none. Not a failure — and not marked here: the next run will
+# find that sync in sync_runs, finished, and close the day on it.
+if [ "\$code" -eq 4 ]; then echo "· another sync held the lock — left today to it"; exit 0; fi
 exit \$code
 RUNNER
   chmod 700 "$RUNNER"
