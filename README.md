@@ -200,10 +200,11 @@ window, and a rate-limit warning stops the sync before the remaining windows;
 the backfill is not marked done, so the next run picks it up again. Elsewhere,
 cron can run the sync itself, but
 it starts nothing: the database must already be up, or that night fails and
-the next run catches up.
+the next run catches up. Its bare `PATH` will not find npm either, so give the
+full path (`which npm`):
 
 ```cron
-0 0 * * * cd /path/to/ledger && npm run sync >> sync.log 2>&1
+0 0 * * * cd /path/to/ledger && /usr/local/bin/npm run sync >> sync.log 2>&1
 ```
 
 Exit codes: `0` ok, `1` failed, `2` partial (one institution is broken, others

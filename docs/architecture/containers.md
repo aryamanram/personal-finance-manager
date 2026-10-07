@@ -102,7 +102,7 @@ database first. Elsewhere, cron — which starts nothing, so the database must
 already be up:
 
 ```cron
-0 0 * * * cd /path/to/ledger && npm run sync >> sync.log 2>&1
+0 0 * * * cd /path/to/ledger && /usr/local/bin/npm run sync >> sync.log 2>&1
 ```
 
 Exit codes: `0` ok · `1` failed · `2` partial, one institution broken while
