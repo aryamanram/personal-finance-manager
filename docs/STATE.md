@@ -24,10 +24,11 @@ Describe the *shape* of a decision here and keep the specifics there.
 
 ## Right now · last updated 2026-10-07
 
-**Nothing is in flight.** PRs #12–#16 are merged and `main` is green. The
-ledger syncs itself daily (see the decisions below) and was caught up on
-2026-10-07. It reconciles except for checking's one difference, below; the
-card that syncs daily matches its issuer to the cent. The employer's income source was re-registered by the text the bank
+**Nothing is in flight.** PRs #12–#17 are merged and `main` is green. The
+ledger syncs itself daily (see the decisions below), was caught up on
+2026-10-07, and the owner has confirmed every row the register shows — the
+review backlog is empty. The card that syncs daily matches its issuer to the
+cent. The employer's income source was re-registered by the text the bank
 actually prints, checked against the real deposit with the app's own matcher.
 
 **For whoever picks this up:**
@@ -42,11 +43,12 @@ actually prints, checked against the real deposit with the app's own matcher.
   once: the CLI errors on an identical file it already imported (see Open
   questions), though it inserts nothing doing so.
 - **One card's connection updates monthly.** SimpleFIN labels it "Updated
-  Monthly", so its transactions trail its balance by up to a month and it
-  reads as off until the statement lands. Importing the current statement's
-  CSV on the Accounts page closes it sooner.
-- **A few rows sit in Uncategorized**, among them a large one-off outflow.
-  They are the owner's to file.
+  Monthly", so its transactions trail its balance by up to a month. Its
+  statement export was imported on 2026-10-07 — the overlap with synced rows
+  deduplicated by fingerprint, as predicted beforehand — and it still reads
+  as off by activity after the export's last row: the balance is newer than
+  the file. Expect it to close when the next statement is imported or the
+  feed catches up; if it does not, it is not timing.
 - Tailscale access is deferred to the very end, by the owner's choice.
 
 Standing tasks the owner tracks — details in `private/STATE.local.md`:
@@ -282,6 +284,8 @@ docs/architecture/       four diagrams, system context → module detail
 docs/STATE.md            this file — public, no personal specifics
 private/STATE.local.md   the same picture with real numbers — gitignored
 private/my-rules.ts      real categorisation rules — gitignored
+data/statements/<acct>/  statement exports already imported, one file each — gitignored
+db/dumps/                ledger backups from npm run backup — gitignored, local only
 src/money.ts             the only cents↔display path
 src/lib/queries.ts       every read, through v_transactions
 src/lib/edit.ts          every manual write, plus the audit log
