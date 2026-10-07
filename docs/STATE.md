@@ -46,15 +46,29 @@ third-party URL, real figures scrubbed from the public docs, the API key out
 of `.env.example`, and `npm run db:rotate-password`, which the owner has run:
 the compose default password is now refused.
 
-**The sync runs nightly at midnight**, from launchd on this machine
-(`npm run sync:schedule -- status`). Asleep at midnight, it runs on waking;
-off, it skips the night and the next run's overlap catches up. One SimpleFIN
-request on a normal night — one per 45-day window when catching up further.
-Nothing is retried within a run; a sync cut short by a rate-limit warning
-leaves its backfill unmarked, and the next night's run repeats it.
+**The sync runs once a day**, from launchd on this machine
+(`npm run sync:schedule -- status`): at midnight, on waking if the Mac was
+asleep then, or at the first login after a day it was off — and only if no
+sync has succeeded since midnight, so a login on a day already done costs
+nothing. One SimpleFIN request on a normal day — one per 45-day window when
+catching up further. Nothing is retried within a run; a sync cut short by a
+rate-limit warning leaves its backfill unmarked, and the next run repeats it.
+The ledger was caught up by hand on 2026-10-06 after two weeks without a sync.
 
-**Waiting on the owner:** `chmod 600 .env.local` — it is readable by other
-local users, and env files are off-limits to the agent.
+**Waiting on the owner:**
+
+- `chmod 600 .env.local` — it is readable by other local users, and env files
+  are off-limits to the agent.
+- The bridge reports the Apple Card connection needs re-authenticating, so
+  every sync is `partial` and that card's balance is stale. Reconnect it in
+  the SimpleFIN bridge, or remove it there if the card is imported by CSV.
+- The first paycheck was filed as Paycheck by the payroll pattern, as a guess —
+  the registered income source did not match it. The bank prints the employer
+  differently from the registered payer text, and the feed masks most of the
+  originator ID. Re-register the source with the text the deposit actually
+  carries.
+- Checking's one unexplained reconciliation difference moved slightly with
+  this sync. If the next sync does not move it back, it is not a timing gap.
 
 **Deferred, by the owner's choice:** Tailscale access comes last. A separate
 least-privilege database role was declined — one person, one machine, and
@@ -76,10 +90,12 @@ Confidence tracks accuracy: the 0.8+ band is right ~97% of the time.
 
 **Income sources** are new: a payer (description text or ACH originator ID)
 maps to a category, managed on the Accounts page. A match is *known*, not
-guessed, and skips review. The owner's employer is registered by name, ahead
-of its first deposit. **When that first paycheck lands, check it was filed
-as a known Paycheck** — if the bank prints it through a payroll processor
-under another name, add the originator ID from that deposit.
+guessed, and skips review. The owner's employer was registered by name ahead
+of its first deposit — and that deposit, when it landed, did not match: the
+bank prints the employer differently, and the feed masks most of the
+originator ID, so the ID is no fallback. It was filed as a Paycheck guess by
+the payroll pattern instead. Re-registering the source with the text the
+deposit actually carries is on the owner's list above.
 
 The `categorization-design` branch's finding (SimpleFIN `payee`, Chase `Type`
 are dropped on ingest) is still unacted on; both would feed the guesser

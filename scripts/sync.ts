@@ -1,16 +1,16 @@
 /**
- * The nightly sync. Invoke from system cron (DESIGN.md §4) — there is no
- * in-process scheduler, so this stays runnable by hand.
- *
- *   0 6 * * *  cd /path/to/finance && /usr/local/bin/npm run sync >> sync.log 2>&1
+ * The daily sync. Scheduled by `npm run sync:schedule` (launchd) or system
+ * cron (DESIGN.md §4) — there is no in-process scheduler, so this stays
+ * runnable by hand.
  *
  * Exit codes: 0 ok, 1 failed, 2 partial (a connection is broken but others
- * synced), 3 misconfigured.
+ * synced), 3 misconfigured, 4 another sync was already running (this one
+ * did nothing).
  */
 import postgres from 'postgres';
 import { loadEnv } from './env.js';
 import { pgTypes } from '../src/lib/pg-types.js';
-import { runSync } from '../src/ingest/sync.js';
+import { runSync, SyncBusyError } from '../src/ingest/sync.js';
 import { runCategorization, summarize } from '../src/categorize/run.js';
 import { matchTransfers } from '../src/transfers/match.js';
 import { redactUrl } from '../src/ingest/simplefin.js';
@@ -74,6 +74,11 @@ async function main() {
 
 main()
   .catch((err) => {
+    if (err instanceof SyncBusyError) {
+      console.error(err.message);
+      process.exitCode = 4;
+      return;
+    }
     // Never let a credentialed URL reach a log file.
     console.error('sync failed:', err instanceof Error ? err.message : err);
     process.exitCode = 1;

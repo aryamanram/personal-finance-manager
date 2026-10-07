@@ -181,8 +181,8 @@ removes two real transactions from spending. Confirm one with:
 npx tsx scripts/match-transfers.ts --link <id-a> <id-b>
 ```
 
-There is no in-process scheduler. On a Mac, schedule the sync nightly at
-midnight with launchd:
+There is no in-process scheduler. On a Mac, schedule the sync once a day with
+launchd — at midnight, or at the first login after a day the Mac missed:
 
 ```bash
 npm run sync:schedule -- install --dry-run   # rehearse: the job only checks
@@ -190,11 +190,14 @@ npm run sync:schedule -- install             # then for real
 npm run sync:schedule -- status              # last run and the log tail
 ```
 
-A Mac asleep at midnight runs it on waking; one that is off skips the night
-and the next run catches up, because every sync re-fetches from five days
-before the last good one. The job starts Docker if it is not running and
-never retries — the bridge disables a token that keeps exceeding its daily
-limit. A normal night is one SimpleFIN request. Catching up more than 45 days
+The job fires at midnight and at every login, and syncs only if no sync has
+succeeded since the last midnight — one run by hand counts. So a Mac asleep at
+midnight syncs on waking, one that was off syncs at the next login, and a login
+on a day already done does nothing, not even start Docker. Nothing is lost
+across a missed day, because every sync re-fetches from five days before the
+last good one. The job starts Docker if it is not running and never retries
+within a run — the bridge disables a token that keeps exceeding its daily
+limit. A normal day is one SimpleFIN request. Catching up more than 45 days
 — a long time off, or a new account's backfill — is one request per 45-day
 window, and a rate-limit warning stops the sync before the remaining windows;
 the backfill is not marked done, so the next run picks it up again. Elsewhere,
@@ -208,7 +211,8 @@ full path (`which npm`):
 ```
 
 Exit codes: `0` ok, `1` failed, `2` partial (one institution is broken, others
-synced), `3` misconfigured.
+synced), `3` misconfigured, `4` another sync was already running and this one
+did nothing.
 
 ## How it is put together
 
