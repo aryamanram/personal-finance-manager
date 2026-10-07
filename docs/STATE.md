@@ -36,9 +36,11 @@ actually prints, checked against the real deposit with the app's own matcher.
   this session, moved once on 2026-10-06, then held across later syncs — so a
   transaction the feed never delivered is the likely cause. Next step: export
   the checking statement as CSV and `npm run import -- <file> --account
-  "<name>" --dry-run`, then for real. Re-importing is safe — rows already
-  present are counted, not inserted — so whatever the feed missed lands, and
-  the gap closes or names itself.
+  "<name>" --dry-run`, then for real. A statement overlapping the synced rows
+  is safe — rows already present are counted, not inserted — so whatever the
+  feed missed lands, and the gap closes or names itself. Import each file
+  once: the CLI errors on an identical file it already imported (see Open
+  questions), though it inserts nothing doing so.
 - **One card's connection updates monthly.** SimpleFIN labels it "Updated
   Monthly", so its transactions trail its balance by up to a month and it
   reads as off until the statement lands. Importing the current statement's
@@ -256,6 +258,11 @@ Flagged rather than guessed at, per `docs/DESIGN.md` §12:
 - **Feed fields thrown away.** SimpleFIN's `payee` and the Chase CSV's `Type`
   are dropped on ingest (the `categorization-design` branch's finding). Both
   would feed the guesser directly. Not built.
+- **An identical CLI re-import errors.** `scripts/import-csv.ts` records its
+  batch as `running`, deduplicates (inserting nothing), then fails marking it
+  `ok` against the unique file hash, leaving a stale `running` batch row. The
+  ledger is right either way; the Accounts page instead reports "already
+  imported". Checking for a prior import first would make the two agree.
 - **Payment rails inside Shopping.** A large share of Shopping is PayPal and
   Affirm rows, which name how something was paid rather than what was bought.
   Instalment plans are deliberately *not* their own category — the destination
