@@ -32,6 +32,12 @@ need() {
   command -v "$1" >/dev/null 2>&1 || { echo "! $1 is not on PATH" >&2; exit 3; }
 }
 
+# A value for a plist <string>: escape what XML gives meaning to. sed rather
+# than ${//}, whose '&' means "the match" under bash 5.2's patsub_replacement.
+xml() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
+
+loaded() { launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1; }
+
 install() {
   local dry="${1:-}"
   need node; need npm; need docker
@@ -42,12 +48,18 @@ install() {
 
   mkdir -p "$SUPPORT" "$(dirname "$PLIST")" "$(dirname "$LOG")"
 
+  # Baked into the runner as shell words, quoted, so a path with a space,
+  # quote or '$' in it stays one literal argument.
+  local repo_q path_q
+  repo_q=$(printf '%q' "$REPO")
+  path_q=$(printf '%q' "$path_dirs")
+
   cat > "$RUNNER" <<RUNNER
 #!/bin/bash
 # Written by scripts/sync-schedule.sh — re-run its install to change this.
-export PATH="$path_dirs"
+export PATH=$path_q
 echo "=== \$(date '+%Y-%m-%d %H:%M:%S %Z')"
-cd "$REPO" || { echo "! repo not found: $REPO"; exit 3; }
+cd $repo_q || { echo "! repo not found: "$repo_q; exit 3; }
 
 # The ledger lives in Docker: start it if it is not running.
 if ! docker info >/dev/null 2>&1; then
@@ -80,11 +92,11 @@ RUNNER
 <dict>
   <key>Label</key><string>$LABEL</string>
   <key>ProgramArguments</key>
-  <array><string>/bin/bash</string><string>$RUNNER</string>$extra</array>
+  <array><string>/bin/bash</string><string>$(xml "$RUNNER")</string>$extra</array>
   <key>StartCalendarInterval</key>
   <dict><key>Hour</key><integer>0</integer><key>Minute</key><integer>0</integer></dict>
-  <key>StandardOutPath</key><string>$LOG</string>
-  <key>StandardErrorPath</key><string>$LOG</string>
+  <key>StandardOutPath</key><string>$(xml "$LOG")</string>
+  <key>StandardErrorPath</key><string>$(xml "$LOG")</string>
 </dict>
 </plist>
 PLIST
@@ -97,7 +109,17 @@ PLIST
 }
 
 remove() {
-  launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+  if loaded; then
+    launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+    for _ in 1 2 3 4 5; do loaded || break; sleep 1; done
+    # Deleting the runner under a job launchd still holds would leave it
+    # firing at midnight at a file that is not there.
+    if loaded; then
+      echo "! launchd still has the job loaded; its files are left in place." >&2
+      echo "  Try again, or: launchctl bootout $DOMAIN/$LABEL" >&2
+      exit 1
+    fi
+  fi
   rm -f "$PLIST" "$RUNNER"
   echo "✓ removed"
 }
@@ -114,7 +136,12 @@ status() {
 }
 
 case "${1:-}" in
-  install) install "${2:-}" ;;
+  install)
+    # A typo must not quietly install a LIVE job in place of a rehearsal.
+    case "${2:-}" in
+      ""|--dry-run) install "${2:-}" ;;
+      *) echo "unknown install option: $2 (the only one is --dry-run)" >&2; exit 2 ;;
+    esac ;;
   remove)  remove ;;
   status)  status ;;
   *) echo "usage: npm run sync:schedule -- install [--dry-run] | status | remove" >&2; exit 2 ;;

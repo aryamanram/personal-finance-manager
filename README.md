@@ -194,7 +194,9 @@ A Mac asleep at midnight runs it on waking; one that is off skips the night
 and the next run catches up, because every sync re-fetches from five days
 before the last good one. The job starts Docker if it is not running, makes
 one SimpleFIN request, and never retries — the bridge disables a token that
-keeps exceeding its daily limit. Elsewhere, cron does the same job:
+keeps exceeding its daily limit. Elsewhere, cron can run the sync itself, but
+it starts nothing: the database must already be up, or that night fails and
+the next run catches up.
 
 ```cron
 0 0 * * * cd /path/to/ledger && npm run sync >> sync.log 2>&1
