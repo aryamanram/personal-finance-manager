@@ -121,7 +121,10 @@ if [ "\$running" != 0 ]; then
   exit 0
 fi
 # FINISHED since midnight, not started: a run begun at 23:59 and done at
-# 00:01 is today's sync, and must not be followed by another.
+# 00:01 is today's sync, and must not be followed by another. And midnight
+# is taken again here: starting Docker and waiting on an in-flight run can
+# take minutes, and a run that began at 23:58 must judge the NEW day.
+midnight=\$(date -j -v0H -v0M -v0S +%s)
 last=\$(q "SELECT coalesce(extract(epoch FROM max(finished_at))::bigint, 0) FROM sync_runs WHERE status IN ('ok','partial')") || exit 1
 if [ "\${last:-0}" -ge "\$midnight" ]; then
   [ "\$dry" = --dry-run ] || touch "\$marker"
