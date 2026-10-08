@@ -85,7 +85,14 @@ export const cashflow: MonthlyCashflow[] = [
 
 export const september = cashflow[cashflow.length - 1];
 
-// --- September's spending by category ---------------------------------------
+// --- Spending by category --------------------------------------------------
+//
+// What the app's own getCategoryBreakdownRange returns on the demo for each
+// month. September's discretionary rows sum to 222 cents MORE than its
+// discretionary total: getPeriodTotals nets the Daily Cash credit into the
+// bucket, while the breakdown drops any category whose net is a credit
+// (HAVING SUM > 0). The Flow page draws the same gap, so the stories keep it
+// rather than paper over it. August has the same shape (243 cents).
 
 const row = (name: string, cents: number, count: number): CategoryBreakdownRow => {
   const c = category(name);
@@ -113,6 +120,20 @@ export const breakdown: CategoryBreakdownRow[] = [
   row('Subscriptions', 2997, 3),
   row('Coffee', 2825, 5),
   row('Gifts', 451, 1),
+];
+
+export const augustBreakdown: CategoryBreakdownRow[] = [
+  row('Rent', 285000, 1),
+  row('Groceries', 49110, 4),
+  row('Restaurants', 29928, 7),
+  row('Shopping', 18392, 3),
+  row('Gas', 10870, 2),
+  row('Utilities', 10461, 1),
+  row('Renters Insurance', 8500, 1),
+  row('Internet & Phone', 7000, 1),
+  row('Fitness', 4500, 1),
+  row('Coffee', 3436, 6),
+  row('Subscriptions', 2997, 3),
 ];
 
 export const SEPTEMBER = { from: '2026-09-01', to: '2026-09-30' };

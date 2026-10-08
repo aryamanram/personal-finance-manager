@@ -9,17 +9,26 @@ test('every story renders without errors and contacts no other host', async ({ p
   const stories = Object.values(index.entries).filter((e) => e.type === 'story');
   expect(stories.length).toBeGreaterThan(0);
 
+  // Stopped before it is sent, not just noticed after: a request to a third
+  // party has already said who is looking by the time it can be counted.
+  const storybook = new URL(test.info().project.use.baseURL!).origin;
   const offMachine = new Set<string>();
-  page.on('request', (r) => {
-    const { protocol, hostname } = new URL(r.url());
-    if (protocol.startsWith('http') && hostname !== '127.0.0.1' && hostname !== 'localhost') offMachine.add(r.url());
+  await page.route('**/*', (route) => {
+    const url = route.request().url();
+    if (new URL(url).origin === storybook) return route.continue();
+    offMachine.add(url);
+    return route.abort('blockedbyclient');
   });
 
   const broken: string[] = [];
   for (const story of stories) {
     const errors: string[] = [];
     const onError = (e: Error) => errors.push(e.message);
-    const onConsole = (m: { type(): string; text(): string }) => { if (m.type() === 'error') errors.push(m.text()); };
+    // A request this test aborted logs its own console error; it is reported
+    // once, below, as the URL it was — not 42 times as a broken story.
+    const onConsole = (m: { type(): string; text(): string }) => {
+      if (m.type() === 'error' && !m.text().includes('ERR_BLOCKED_BY_CLIENT')) errors.push(m.text());
+    };
     page.on('pageerror', onError);
     page.on('console', onConsole);
     await page.goto(`/iframe.html?viewMode=story&id=${story.id}`);
@@ -36,6 +45,6 @@ test('every story renders without errors and contacts no other host', async ({ p
     page.off('console', onConsole);
   }
 
-  expect(broken).toEqual([]);
   expect([...offMachine]).toEqual([]);
+  expect(broken).toEqual([]);
 });
