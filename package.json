@@ -26,6 +26,7 @@
     "seed": "tsx scripts/seed-demo.ts",
     "demo:setup": "tsx scripts/demo-db.ts setup",
     "demo:reseed": "tsx scripts/demo-db.ts reseed",
+    "tokens": "tsx scripts/tokens.ts",
     "sync": "tsx scripts/sync.ts",
     "sync:schedule": "bash scripts/sync-schedule.sh",
     "import": "tsx scripts/import-csv.ts",
