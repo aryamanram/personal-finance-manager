@@ -32,10 +32,12 @@ export function Figure({
     // Spending and investing are not alarms: they print in ink, and the
     // sign says which way the money went. Only earned money has a colour.
     : tone === 'out' || tone === 'invest' ? 'text-ink'
+    // A positive number is not earned money: a balance, a refund, a card
+    // payment are all positive. Earned is a fact about the row (tone="in",
+    // from its necessity), never about the sign.
     : cents == null ? 'text-ink-faint'
-    : cents > 0 ? 'text-earned'
-    : cents < 0 ? 'text-ink'
-    : 'text-ink-dim';
+    : cents === 0 ? 'text-ink-dim'
+    : 'text-ink';
 
   return (
     <span

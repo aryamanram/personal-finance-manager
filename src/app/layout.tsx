@@ -6,6 +6,7 @@ import './globals.css';
 import { Providers } from './providers';
 import { Nav } from '@/components/Nav';
 import { ThemeSwitch, type ThemeChoice } from '@/components/ThemeSwitch';
+import { getReviewCounts } from '@/lib/queries';
 
 // Fetched once at build time and served from this app. A stylesheet link to
 // fonts.googleapis.com told Google the viewer's IP and when the ledger was
@@ -25,14 +26,31 @@ export const metadata: Metadata = {
  */
 const NAV = [
   { href: '/', label: 'Flow' },
+  { href: '/review', label: 'Review' },
   { href: '/transactions', label: 'Register' },
   { href: '/accounts', label: 'Accounts' },
+  { href: '/setup', label: 'Setup' },
 ] as const;
+
+/**
+ * Everything outstanding — the number Review opens on (V3). A failure here
+ * must not take every page down with it, so it degrades to no badge.
+ */
+async function outstanding(): Promise<number | undefined> {
+  try {
+    const c = await getReviewCounts();
+    return c.needs_review + c.uncategorized;
+  } catch {
+    return undefined;
+  }
+}
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // Pinned by the theme switch; absent means follow the system.
   const stored = (await cookies()).get('theme')?.value;
   const theme: ThemeChoice = stored === 'light' || stored === 'dark' ? stored : 'system';
+  const toReview = await outstanding();
+  const nav = NAV.map((item) => (item.href === '/review' ? { ...item, count: toReview } : item));
 
   return (
     <html
@@ -53,7 +71,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               {/* The nav reads the URL's period; Suspense keeps a page that
                   renders statically (not-found) from failing the build. */}
               <Suspense fallback={null}>
-                <Nav items={NAV} />
+                <Nav items={nav} />
               </Suspense>
               <div className="ml-auto">
                 <ThemeSwitch initial={theme} />

@@ -161,7 +161,7 @@ function EmptyState() {
         will show where the money went.
       </p>
       <div className="mt-6 flex justify-center gap-6 text-sm">
-        <Link href="/accounts" className="border-b border-ink-faint pb-0.5 text-ink hover:border-ink">
+        <Link href="/setup" className="border-b border-ink-faint pb-0.5 text-ink hover:border-ink">
           Import a statement
         </Link>
         <code className="figure text-xs text-ink-faint">npm run sync</code>

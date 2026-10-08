@@ -1,24 +1,27 @@
+import Link from 'next/link';
 import {
-  getAccounts, getNetWorth, getInvestmentPerformance, getLastSync, getIncomeSources, getCategories,
+  getAccounts, getNetWorth, getInvestmentPerformance, getLastSync, getReconciliation, getCardSettlement,
+  type CardSettlement,
 } from '@/lib/queries';
 import { Figure } from '@/components/Figure';
-import { CsvImport } from '@/components/CsvImport';
-import { BalanceSnapshotForm } from '@/components/BalanceSnapshotForm';
-import { IncomeSources } from '@/components/IncomeSources';
 import { formatCents } from '@/money';
 import { formatTimestampLong } from '@/lib/format-date';
 
 export const dynamic = 'force-dynamic';
 
-/** Renders account balances, investment performance, and import controls. */
+/**
+ * Balances, net worth and investment returns, and the two standing checks
+ * that the ledger matches the banks. Viewing only: recording a balance, an
+ * import and income sources are on Setup.
+ */
 export default async function AccountsPage() {
-  const [accounts, netWorth, performance, lastSync, incomeSources, categories] = await Promise.all([
+  const [accounts, netWorth, performance, lastSync, drift, cards] = await Promise.all([
     getAccounts(),
     getNetWorth(),
     getInvestmentPerformance(),
     getLastSync(),
-    getIncomeSources(),
-    getCategories(),
+    getReconciliation(),
+    getCardSettlement(),
   ]);
 
   const total = netWorth.reduce((a, n) => a + n.balance_cents, 0);
@@ -66,11 +69,22 @@ export default async function AccountsPage() {
         )}
       </section>
 
-      <section>
+      <section aria-labelledby="checks-heading">
         <div className="rule-b pb-2">
-          <h2 className="eyebrow">Income sources</h2>
+          <h2 id="checks-heading" className="eyebrow">Does the ledger match the banks?</h2>
         </div>
-        <IncomeSources sources={incomeSources} categories={categories} />
+        <ul className="mt-1">
+          <Check ok={drift.length === 0} name="Balances">
+            {drift.length === 0
+              ? 'every account adds up to the balance its bank reports'
+              : drift.map((d) => (
+                <span key={d.name} className="mr-4">
+                  {d.name} differs from the bank by <span className="figure text-ink">{formatCents(d.drift_cents)}</span>
+                </span>
+              ))}
+          </Check>
+          <CardsCheck cards={cards} />
+        </ul>
       </section>
 
       {performance.map((p) => {
@@ -150,9 +164,11 @@ export default async function AccountsPage() {
             </p>
           )}
 
-          <div className="mt-6 max-w-lg">
-            <BalanceSnapshotForm accountId={p.account_id} />
-          </div>
+          <p className="mt-4 text-xs text-ink-faint">
+            <Link href="/setup" className="underline decoration-rule-strong underline-offset-4 hover:text-ink">
+              Record this month&rsquo;s balance in Setup →
+            </Link>
+          </p>
         </section>
         );
       })}
@@ -166,18 +182,64 @@ export default async function AccountsPage() {
               <h2 className="eyebrow">{a.name}</h2>
             </div>
             <p className="mt-3 text-sm text-ink-dim">
-              No balance recorded yet. Add one to start tracking performance.
+              No balance recorded yet.{' '}
+              <Link href="/setup" className="underline decoration-rule-strong underline-offset-4 hover:text-ink">
+                Record one in Setup
+              </Link>{' '}
+              to start tracking performance.
             </p>
-            <div className="mt-4 max-w-lg">
-              <BalanceSnapshotForm accountId={a.id} />
-            </div>
           </section>
         ))}
-
-      <section>
-        <CsvImport accounts={accounts} />
-      </section>
     </div>
+  );
+}
+
+/**
+ * One standing check, stated plainly when it holds: "no warning" and "not
+ * checked" look identical otherwise.
+ */
+function Check({ ok, name, children }: { ok: boolean; name: string; children: React.ReactNode }) {
+  return (
+    <li className="rule-b flex items-baseline gap-4 py-3 text-sm">
+      <span className={ok ? 'w-24 shrink-0 text-ink-dim' : 'w-24 shrink-0 font-medium text-alert'}>
+        <span aria-hidden className="mr-1.5">{ok ? '✓' : '△'}</span>{name}
+      </span>
+      <span className="text-ink-dim">{children}</span>
+    </li>
+  );
+}
+
+/**
+ * Whether the credit cards' purchases can be trusted as a spending record.
+ *
+ * Card purchases are counted as spending and the payments that settle them are
+ * not (they carry necessity 'transfer'), which is only sound while the cards
+ * are actually paid off. This is the standing evidence: for each card,
+ * charges minus applied payments should equal what the issuer says is owed.
+ */
+function CardsCheck({ cards }: { cards: CardSettlement[] }) {
+  if (cards.length === 0) return null;
+  const off = cards.filter((c) => c.gap_cents !== 0);
+  const clearing = cards.filter((c) => c.clearing_cents > 0);
+  return (
+    <Check ok={off.length === 0} name="Cards">
+      {off.length === 0 ? (
+        <>
+          every charge is settled or still owed — the ledger and the issuers agree
+          {clearing.map((c) => (
+            <span key={c.name} className="ml-2 text-ink-faint">
+              ({c.name}: <span className="figure">{formatCents(c.clearing_cents)}</span> clearing)
+            </span>
+          ))}
+        </>
+      ) : (
+        off.map((c) => (
+          <span key={c.name} className="mr-4">
+            {c.name} is <span className="figure text-ink">{formatCents(c.gap_cents)}</span> from what its issuer reports
+          </span>
+        ))
+      )}
+    </Check>
   );
 }
 

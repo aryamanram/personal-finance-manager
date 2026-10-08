@@ -55,6 +55,7 @@ export function Nav({
             {item.count !== undefined && item.count > 0 && (
               <span className="figure rounded-sm bg-well px-1.5 text-xs text-ink-dim">
                 {item.count}
+                <span className="sr-only"> outstanding</span>
               </span>
             )}
           </Link>

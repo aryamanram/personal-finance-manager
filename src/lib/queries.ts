@@ -491,21 +491,20 @@ export interface ReviewCounts {
 }
 
 /**
- * The two review backlogs, optionally within a date range.
+ * The two review backlogs, under exactly the filters of the view that will
+ * show them (V3 in docs/design/OVERHAUL.md).
  *
- * These count what the REGISTER CAN SHOW, which means every predicate the
- * register applies unconditionally has to appear here too. A chip promises
- * rows; clicking it must deliver them.
- *
- * It has broken twice the same way. First the counts were global while the
- * table was scoped to a period, so "Needs review · 338" sat above 34 rows.
- * Then card-payment credit legs became permanently invisible, and the four
- * of them that no human had confirmed became a chip reading "4" over an
- * empty table with no way to clear it — the backlog could never reach zero.
+ * A chip promises rows; clicking it must deliver them. This has broken three
+ * times the same way. First the counts were global while the table was
+ * scoped to a period, so "Needs review · 338" sat above 34 rows. Then
+ * card-payment credit legs became permanently invisible, and the four of them
+ * no human had confirmed became a chip over an empty table. Then the register
+ * hid Credit Card Payment by default while the count still included it — 216
+ * to review over 204 rows. So the count no longer restates the register's
+ * predicates: it reads the same WHERE clause, with the backlog filters taken
+ * off so both chips can be counted at once.
  */
-export async function getReviewCounts(
-  range?: { from?: string; to?: string },
-): Promise<ReviewCounts> {
+export async function getReviewCounts(f: TransactionFilters = {}): Promise<ReviewCounts> {
   const [row] = await sql<ReviewCounts[]>`
     SELECT
       count(*) FILTER (
@@ -517,16 +516,28 @@ export async function getReviewCounts(
         WHERE category_id IS NULL OR category_source IN ('unset','default')
       )::int AS uncategorized
     FROM v_transactions
-    WHERE superseded_by_id IS NULL AND voided_at IS NULL
-      -- The register never shows these, so counting them offers work that
-      -- cannot be done.
-      AND NOT is_card_payment_credit
-      ${range?.from ? sql`AND eff_posted_date >= ${range.from}::date` : sql``}
-      ${range?.to ? sql`AND eff_posted_date <= ${range.to}::date` : sql``}`;
+    ${transactionWhere({ ...f, needsReviewOnly: false, uncategorizedOnly: false, limit: undefined, offset: undefined })}`;
   return row;
 }
 
-
+/**
+ * Review's inbox: every row a machine guessed that no human has confirmed,
+ * and every row nobody has categorised — newest first, the way they arrive.
+ *
+ * Nothing is hidden by category here, unlike the register: a guess that
+ * filed a purchase as Credit Card Payment takes it out of spending entirely,
+ * which is exactly the guess most worth checking.
+ */
+export async function getReviewQueue(range: { from?: string; to?: string } = {}): Promise<VTransaction[]> {
+  return sql<VTransaction[]>`
+    SELECT * FROM v_transactions
+    ${transactionWhere(range)}
+      AND ((NOT category_locked AND category_id IS NOT NULL
+            AND category_source = ANY(${GUESS_SOURCES as string[]}::category_source[]))
+           OR category_id IS NULL OR category_source IN ('unset','default'))
+    ORDER BY eff_posted_date DESC, created_at DESC
+    LIMIT 1000`;
+}
 
 /**
  * What the register knows about one row's merchant, for the edit panel.

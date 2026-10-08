@@ -53,8 +53,8 @@ export default async function TransactionsPage({
     // clicked in the Flow lands on the same number here.
     getTransactionTotals(filters),
     getAccounts(),
-    // Scoped to the period, so the chip counts what the table would show.
-    getReviewCounts({ from: filters.from, to: filters.to }),
+    // Under the table's own filters, so each chip counts what it would show (V3).
+    getReviewCounts(filters),
   ]);
 
   return (

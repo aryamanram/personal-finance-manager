@@ -81,6 +81,7 @@ export function CsvImport({ accounts }: { accounts: Account[] }) {
         <h2 className="eyebrow">Import a statement</h2>
         {csvAccounts.length > 1 && (
           <select
+            aria-label="Import into"
             value={accountId}
             onChange={(e) => setAccountId(e.target.value)}
             className="rounded-sm border border-rule-strong bg-well px-2 py-1 text-xs"
