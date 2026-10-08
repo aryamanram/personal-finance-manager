@@ -79,3 +79,6 @@ CLAUDE.local.md
 # Playwright test output: reports and the actual/diff images of a failed run
 playwright-report/
 test-results/
+
+# Storybook's static build
+storybook-static/

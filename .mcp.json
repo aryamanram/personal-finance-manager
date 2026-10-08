@@ -3,7 +3,7 @@
     "playwright": {
       "command": "npx",
       "args": ["-y", "@playwright/mcp@0.0.83", "--headless", "--isolated",
-               "--allowed-origins", "http://127.0.0.1:3001;http://localhost:3001"]
+               "--allowed-origins", "http://127.0.0.1:3001;http://localhost:3001;http://127.0.0.1:6006;http://localhost:6006"]
     },
     "next-devtools": {
       "command": "npx",
