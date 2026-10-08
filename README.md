@@ -286,6 +286,28 @@ builder `next/font/google` loads them from fonts.gstatic.com at view time,
 which tells Google who is looking — `test:storybook` fails if any request
 leaves the machine. And telemetry is off (`core.disableTelemetry`).
 
+### Design tokens and Figma
+
+`src/app/globals.css` is the only place a colour or font is defined. `npm run
+tokens` derives `docs/design/tokens.json` from its `@theme` block — every
+colour, both font families, and the comment that explains each one — in the
+format the [Tokens Studio](https://tokens.studio) Figma plugin reads. A test
+fails if the JSON and the CSS disagree, so change the CSS, run `npm run
+tokens`, and commit both; never edit the JSON by hand.
+
+To bring them into Figma, in Tokens Studio:
+
+1. **Settings → Add new sync provider → GitHub**, repository
+   `aryamanram/personal-finance-manager`, branch `main`, file path
+   `docs/design/tokens.json`. It needs a personal access token; a
+   fine-grained one with read-only *Contents* on this repository is enough.
+2. Set **Token format** to **W3C DTCG**.
+3. Pull, then **Styles & Variables → Export Styles and Variables** to create a variable
+   collection — `color/ink-900`, `color/edited`, `font/sans`, … named as the
+   CSS is, so `--color-out` in code is `color/out` in a mockup.
+
+Without GitHub sync, **Load from file** on the same JSON does the same once.
+
 ### Agent tooling
 
 `.mcp.json` gives Claude Code three MCP servers (approve them on first start):

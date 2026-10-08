@@ -1,61 +1,82 @@
 /**
- * Keeps the Figma design system and the app's CSS from drifting apart.
+ * Keeps the design tokens Figma sees and the CSS the app ships from drifting.
  *
- * The Figma file at docs/design/figma-tokens.json is the design source of
- * truth; src/app/globals.css is what actually ships. When they disagree, a
- * mockup stops predicting the app — which is the entire reason the design
- * system exists.
+ * src/app/globals.css is the single source of truth. docs/design/tokens.json
+ * is derived from it by `npm run tokens` (scripts/tokens.ts), in the format
+ * Tokens Studio reads, and Tokens Studio turns it into Figma variables. When
+ * the two disagree, a mockup stops predicting the app — which is the entire
+ * reason the design system exists.
  *
- * This is the free half of what Figma's Code Connect would do. Code Connect
- * needs an Organization plan; a test that fails the build is arguably stronger,
- * because drift breaks CI rather than just looking stale in a panel.
- *
- * If this test fails: change BOTH the Figma variable and globals.css, then
- * update the snapshot. Never silence it by editing only the snapshot.
+ * If the first test fails: you changed globals.css. Run `npm run tokens` and
+ * commit the result, then pull it into Figma. Never edit tokens.json by hand;
+ * the next run overwrites it.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { buildTokens, renderTokens, SET, TOKENS_PATH, type TokenFile } from '../scripts/tokens';
 
-interface Snapshot {
-  primitives: Record<string, string>;
-  cssVariableFor: Record<string, string>;
-}
-
-const snapshot = JSON.parse(
-  readFileSync('docs/design/figma-tokens.json', 'utf8'),
-) as Snapshot;
+const committed = JSON.parse(readFileSync(TOKENS_PATH, 'utf8')) as TokenFile;
 const css = readFileSync('src/app/globals.css', 'utf8');
+const layout = readFileSync('src/app/layout.tsx', 'utf8');
 
-/** Read a custom property's value out of the @theme block. */
-function cssValue(name: string): string | null {
-  const m = new RegExp(`${name}\\s*:\\s*(#[0-9a-fA-F]{3,8})`).exec(css);
-  return m ? m[1].toLowerCase() : null;
-}
-
-describe('Figma and globals.css agree on every colour token', () => {
-  it('maps every Figma primitive to a CSS variable', () => {
-    const missing = Object.keys(snapshot.primitives)
-      .filter((k) => !(k in snapshot.cssVariableFor));
-    expect(missing, `Figma primitives with no CSS mapping: ${missing.join(', ')}`).toEqual([]);
-  });
-
-  it('has the same value on both sides', () => {
+describe('docs/design/tokens.json is globals.css, for Figma', () => {
+  it('is exactly what npm run tokens writes from the current CSS', () => {
+    const fresh = JSON.parse(renderTokens()) as TokenFile;
     const drift: string[] = [];
-
-    for (const [token, figmaHex] of Object.entries(snapshot.primitives)) {
-      const cssVar = snapshot.cssVariableFor[token];
-      const actual = cssValue(cssVar);
-
-      if (actual === null) {
-        drift.push(`${cssVar} is not defined in globals.css (Figma has ${token} = ${figmaHex})`);
-        continue;
-      }
-      if (actual !== figmaHex.toLowerCase()) {
-        drift.push(`${token}: Figma ${figmaHex} vs ${cssVar} ${actual}`);
+    for (const group of ['color', 'font'] as const) {
+      const a = committed[SET][group];
+      const b = fresh[SET][group];
+      for (const name of new Set([...Object.keys(a), ...Object.keys(b)])) {
+        const was = a[name]?.$value;
+        const now = b[name]?.$value;
+        if (was !== now) drift.push(`${group}/${name}: tokens.json ${was ?? '(missing)'} vs globals.css ${now ?? '(removed)'}`);
       }
     }
+    expect(drift, `tokens.json is stale — run npm run tokens:\n  ${drift.join('\n  ')}`).toEqual([]);
+    // Descriptions and layout too, not only values.
+    expect(readFileSync(TOKENS_PATH, 'utf8')).toBe(renderTokens());
+  });
 
-    expect(drift, `design tokens have drifted:\n  ${drift.join('\n  ')}`).toEqual([]);
+  it('carries every @theme custom property', () => {
+    const declared = [...css.matchAll(/^\s*(--(?:color|font)-[a-z0-9-]+)\s*:/gm)].map((m) => m[1]);
+    const tokens = [
+      ...Object.keys(committed[SET].color).map((n) => `--color-${n}`),
+      ...Object.keys(committed[SET].font).map((n) => `--font-${n}`),
+    ];
+    expect(tokens.sort()).toEqual([...new Set(declared)].sort());
+    expect(Object.keys(committed[SET].color).length).toBe(20);
+  });
+
+  it('is a file Tokens Studio can load', () => {
+    // A token set per top-level key, plus the two $-keys beside them; any
+    // other top-level key would be read as a set.
+    expect(Object.keys(committed).sort()).toEqual(['$metadata', '$themes', SET].sort());
+    expect(committed.$metadata.tokenSetOrder).toEqual([SET]);
+    for (const group of Object.values(committed[SET])) {
+      for (const [name, token] of Object.entries(group)) {
+        expect(Object.keys(token).every((k) => ['$value', '$type', '$description'].includes(k)), name).toBe(true);
+        // Tokens Studio rejects these characters in token names.
+        expect(/[{}$]/.test(name), name).toBe(false);
+        if (token.$type === 'color') expect(token.$value, name).toMatch(/^#[0-9a-f]{6}$/);
+      }
+    }
+  });
+
+  it('takes the font family names from the fonts the app loads', () => {
+    expect(committed[SET].font.sans.$value).toBe('Inter Tight');
+    expect(committed[SET].font.mono.$value).toBe('JetBrains Mono');
+  });
+
+  it('takes the meaning along with the colour', () => {
+    // Figma shows a variable's description; the amber rule has to travel.
+    expect(committed[SET].color.edited.$description).toMatch(/Reserved for human edits/);
+  });
+
+  it('refuses what it cannot translate rather than guessing', () => {
+    const theme = (body: string) => `@theme {\n${body}\n}\n`;
+    expect(() => buildTokens(theme('  --color-x: oklch(70% 0.1 200);'), layout)).toThrow(/not a #rrggbb/);
+    expect(() => buildTokens(theme('  --font-x: var(--font-unknown), serif;'), layout)).toThrow(/cannot resolve/);
+    expect(() => buildTokens(theme('  --radius-x: 4px;'), layout)).toThrow(/no token type/);
   });
 });
 
@@ -77,13 +98,15 @@ describe('contrast stays within WCAG AA', () => {
     return (hi + 0.05) / (lo + 0.05);
   };
 
-  const P = snapshot.primitives;
+  const P = Object.fromEntries(
+    Object.entries(committed[SET].color).map(([name, t]) => [name, t.$value]),
+  );
 
   it('keeps body text above 4.5:1 on the page ground', () => {
     // These carry actual content at 11-16px, below the large-text threshold.
-    for (const token of ['paper/base', 'paper/dim', 'paper/faint']) {
-      const r = contrast(P[token], P['ink/900']);
-      expect(r, `${token} on ink/900 is ${r.toFixed(2)}:1, below AA 4.5:1`)
+    for (const token of ['paper', 'paper-dim', 'paper-faint']) {
+      const r = contrast(P[token], P['ink-900']);
+      expect(r, `${token} on ink-900 is ${r.toFixed(2)}:1, below AA 4.5:1`)
         .toBeGreaterThanOrEqual(4.5);
     }
   });
@@ -91,8 +114,8 @@ describe('contrast stays within WCAG AA', () => {
   it('keeps the edited marker clearly legible', () => {
     // Amber means "a human changed this". If it is hard to see, the one signal
     // the ledger depends on stops working.
-    const r = contrast(P['amber/base'], P['ink/900']);
-    expect(r, `amber on ink/900 is ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+    const r = contrast(P['edited'], P['ink-900']);
+    expect(r, `edited (amber) on ink-900 is ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
   });
 
   // A token pair can pass on its own and still fail on screen: CSS `opacity`
@@ -114,8 +137,8 @@ describe('contrast stays within WCAG AA', () => {
     // 1 = today's behaviour (text-only dim, badge untouched). The lower values
     // stand in for anyone reintroducing a subtree opacity.
     for (const alpha of [1, 0.6]) {
-      const bg = composite(P['ink/700'], P['ink/900'], alpha);
-      const fg = composite(P['paper/faint'], P['ink/900'], alpha);
+      const bg = composite(P['ink-700'], P['ink-900'], alpha);
+      const fg = composite(P['paper-faint'], P['ink-900'], alpha);
       const r = contrast(fg, bg);
 
       if (alpha === 1) {
@@ -138,18 +161,18 @@ describe('contrast stays within WCAG AA', () => {
   // 3:1 against each other. Unlike the Sankey's four buckets (below), two
   // bands can reach that comfortably, so they are held to the full bar.
   it('separates the cost-mix chart bands by 3:1', () => {
-    const r = contrast(P['clay/base'], P['clay/lift']);
+    const r = contrast(P['out'], P['out-lift']);
     expect(
       r,
-      `the fixed band ${P['clay/base']} and the variable band ${P['clay/lift']} are ` +
+      `the fixed band ${P['out']} and the variable band ${P['out-lift']} are ` +
         `${r.toFixed(2)}:1 apart, below the 3:1 WCAG asks of meaningful graphics`,
     ).toBeGreaterThanOrEqual(3);
   });
 
   it('keeps the flow colours distinguishable from the ground', () => {
-    for (const token of ['green/base', 'clay/base', 'blue/base']) {
-      const r = contrast(P[token], P['ink/900']);
-      expect(r, `${token} on ink/900 is ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
+    for (const token of ['in', 'out', 'invest']) {
+      const r = contrast(P[token], P['ink-900']);
+      expect(r, `${token} on ink-900 is ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
     }
   });
 
@@ -158,10 +181,10 @@ describe('contrast stays within WCAG AA', () => {
   // well-meaning tweak toward "prettier" could silently merge the two colours
   // that a ledger must never confuse. Pin the gap.
   it('separates inflow from outflow by lightness, not hue alone', () => {
-    const r = contrast(P['green/base'], P['clay/base']);
+    const r = contrast(P['in'], P['out']);
     expect(
       r,
-      `inflow ${P['green/base']} vs outflow ${P['clay/base']} is only ${r.toFixed(2)}:1. ` +
+      `inflow ${P['in']} vs outflow ${P['out']} is only ${r.toFixed(2)}:1. ` +
         'They must differ in lightness by at least 3:1 so the distinction survives ' +
         'red-green colourblindness.',
     ).toBeGreaterThanOrEqual(3);
@@ -186,11 +209,11 @@ describe('contrast stays within WCAG AA', () => {
   // secondary cue (WCAG 1.4.1), which is what makes the remaining overlap
   // acceptable. These assertions keep it honest as a secondary cue.
   it('keeps every reachable bucket pair distinguishable', () => {
-    const BUCKETS = ['flow/required', 'flow/discretionary', 'flow/invest', 'flow/leftover'];
+    const BUCKETS = ['flow-required', 'flow-discretionary', 'flow-invest', 'flow-leftover'];
 
     for (const token of BUCKETS) {
-      const r = contrast(P[token], P['ink/900']);
-      expect(r, `${token} on ink/900 is ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
+      const r = contrast(P[token], P['ink-900']);
+      expect(r, `${token} on ink-900 is ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
     }
 
     // Every pair, since any of them can become adjacent.
@@ -247,7 +270,7 @@ describe('contrast stays within WCAG AA', () => {
     };
 
     for (const [name, matrix] of Object.entries(FORMS)) {
-      const r = contrast(simulate(P['green/base'], matrix), simulate(P['clay/base'], matrix));
+      const r = contrast(simulate(P['in'], matrix), simulate(P['out'], matrix));
       expect(r, `under ${name} inflow and outflow are ${r.toFixed(2)}:1 apart`)
         .toBeGreaterThanOrEqual(2.5);
     }

@@ -91,6 +91,8 @@ underline under a corrected amount, the diamond on a locked category. Do not
 spend amber on anything else; its meaning is the point.
 
 `src/app/globals.css` holds the tokens. Read it before restyling anything.
+After changing its `@theme` block, run `npm run tokens` and commit
+`docs/design/tokens.json` with it — that file is how Figma gets the change.
 
 **Design against the demo ledger, never the real one.** `npm run demo:setup`
 then `npm run dev:demo` serves synthetic data on `127.0.0.1:3001`, beside the
