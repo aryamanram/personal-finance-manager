@@ -265,6 +265,27 @@ its line is deleted, and trading one failing element for another does too.
 Neither suite is part of `prepush`. During a redesign the baselines are
 meant to change; run them deliberately, look at the diffs, then update.
 
+### Storybook
+
+```bash
+npm run storybook         # http://127.0.0.1:6006
+npm run build-storybook   # static build in storybook-static/
+npm run test:storybook    # every story renders, and none contacts another host
+```
+
+Stories cover the components that render from props alone — figures, stat
+cards, the cost-mix chart, the Sankey, category rows, the period picker,
+filter chips, the category palette, and each state of a register row
+(guessed, locked, corrected, pending, voided). They live in `src/stories/`
+and read `src/stories/fixtures.ts`: the demo ledger's own numbers, typed as
+the app types them, with the period list built by the app's `buildPeriods`.
+
+Two things differ from the app on purpose. Fonts come from
+`@fontsource-variable` rather than `next/font`: under Storybook's Vite
+builder `next/font/google` loads them from fonts.gstatic.com at view time,
+which tells Google who is looking — `test:storybook` fails if any request
+leaves the machine. And telemetry is off (`core.disableTelemetry`).
+
 ### Agent tooling
 
 `.mcp.json` gives Claude Code three MCP servers (approve them on first start):
@@ -282,9 +303,9 @@ They can only see the demo. Next serves its `/_next/mcp` endpoint from
 `npm run dev:demo` alone (`experimental.mcpServer` in `next.config.mjs`), so
 `next-devtools` finds nothing on :3000. Chrome DevTools blocks :3000 at the
 network layer, redirects included (`--blockedUrlPattern`). Playwright's
-filter does not see a server's redirects, so it allows :3001 and nothing
-else (`--allowed-origins`) — and the app never redirects, so no page it can
-load leads to :3000. These guard against a wrong port or a stray redirect;
+filter does not see a server's redirects, so it allows :3001 and
+Storybook's :6006 and nothing else (`--allowed-origins`) — and neither
+redirects off its own origin, so no page it can load leads to :3000. These guard against a wrong port or a stray redirect;
 they are not a sandbox against an agent that also has a shell.
 
 For a human view of several screen sizes at once, Responsively App (free),
