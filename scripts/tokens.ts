@@ -47,7 +47,10 @@ export function fontFamilies(layout: string): Map<string, string> {
  * line by line, so a declaration that shares a line with a comment is not
  * skipped. Anything else in the block stops the build.
  */
-export function themeDeclarations(css: string): { name: string; value: string; description?: string }[] {
+export function themeDeclarations(source: string): { name: string; value: string; description?: string }[] {
+  // Windows line endings would hide every blank line from the scan below,
+  // letting a comment describe declarations it was never meant to reach.
+  const css = source.replace(/\r\n?/g, '\n');
   const block = /@theme\s*\{([\s\S]*?)\n\}/.exec(css);
   if (!block) throw new Error('globals.css has no @theme block');
   const body = block[1];

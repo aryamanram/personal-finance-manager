@@ -88,6 +88,14 @@ describe('docs/design/tokens.json is globals.css, for Figma', () => {
     expect(t.c.$description).toBe('before');
   });
 
+  it('reads Windows line endings the same as Unix ones', () => {
+    const lf = '@theme {\n  /* first */\n  --color-a: #111111;\n\n  --color-b: #222222;\n}\n';
+    const crlf = lf.replace(/\n/g, '\r\n');
+    expect(buildTokens(crlf, layout)).toEqual(buildTokens(lf, layout));
+    // The blank line ends the comment's reach: b has no description.
+    expect(buildTokens(crlf, layout).ledger.color.b.$description).toBeUndefined();
+  });
+
   it('refuses what it cannot translate rather than guessing', () => {
     const theme = (body: string) => `@theme {\n${body}\n}\n`;
     expect(() => buildTokens(theme('  --color-x: oklch(70% 0.1 200);'), layout)).toThrow(/not a #rrggbb/);
