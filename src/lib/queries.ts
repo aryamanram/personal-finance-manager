@@ -43,9 +43,14 @@ export interface TransactionFilters {
   offset?: number;
 }
 
-export async function getTransactions(f: TransactionFilters = {}) {
-  const rows = await sql<VTransaction[]>`
-    SELECT * FROM v_transactions
+/**
+ * The register's filters as one WHERE clause. The rows, their count and their
+ * totals all read it, so they cannot disagree about which transactions a
+ * filter means — the count used to skip the necessity, cost-type and
+ * transfer filters that the rows applied.
+ */
+function transactionWhere(f: TransactionFilters) {
+  return sql`
     WHERE superseded_by_id IS NULL
       ${f.includeVoided ? sql`` : sql`AND voided_at IS NULL`}
       ${f.includeCardPaymentCredits ? sql`` : sql`AND NOT is_card_payment_credit`}
@@ -74,7 +79,13 @@ export async function getTransactions(f: TransactionFilters = {}) {
       ${f.search
         ? sql`AND (eff_description ILIKE ${'%' + f.search + '%'}
                    OR raw_description ILIKE ${'%' + f.search + '%'})`
-        : sql``}
+        : sql``}`;
+}
+
+export async function getTransactions(f: TransactionFilters = {}) {
+  const rows = await sql<VTransaction[]>`
+    SELECT * FROM v_transactions
+    ${transactionWhere(f)}
     ORDER BY eff_posted_date DESC, created_at DESC
     LIMIT ${f.limit ?? 200} OFFSET ${f.offset ?? 0}`;
   return rows;
@@ -82,34 +93,35 @@ export async function getTransactions(f: TransactionFilters = {}) {
 
 export async function countTransactions(f: TransactionFilters = {}): Promise<number> {
   const [{ c }] = await sql<{ c: number }[]>`
-    SELECT count(*)::int AS c FROM v_transactions
-    WHERE superseded_by_id IS NULL
-      ${f.includeVoided ? sql`` : sql`AND voided_at IS NULL`}
-      ${f.includeCardPaymentCredits ? sql`` : sql`AND NOT is_card_payment_credit`}
-      ${f.from ? sql`AND eff_posted_date >= ${f.from}::date` : sql``}
-      ${f.to ? sql`AND eff_posted_date <= ${f.to}::date` : sql``}
-      ${f.accountIds?.length ? sql`AND account_id = ANY(${f.accountIds}::uuid[])` : sql``}
-      ${f.categoryIds?.length
-        ? sql`AND (category_id = ANY(${f.categoryIds}::uuid[])
-                   OR rollup_category_id = ANY(${f.categoryIds}::uuid[]))`
-        : sql``}
-      ${f.excludeCategoryIds?.length
-        ? sql`AND (category_id IS NULL
-                   OR (NOT category_id = ANY(${f.excludeCategoryIds}::uuid[])
-                       AND NOT rollup_category_id = ANY(${f.excludeCategoryIds}::uuid[])))`
-        : sql``}
-      ${f.uncategorizedOnly
-        ? sql`AND (category_id IS NULL OR category_source IN ('unset','default'))`
-        : sql``}
-      ${f.needsReviewOnly
-        ? sql`AND NOT category_locked AND category_id IS NOT NULL
-              AND category_source = ANY(${GUESS_SOURCES as string[]}::category_source[])`
-        : sql``}
-      ${f.search
-        ? sql`AND (eff_description ILIKE ${'%' + f.search + '%'}
-                   OR raw_description ILIKE ${'%' + f.search + '%'})`
-        : sql``}`;
+    SELECT count(*)::int AS c FROM v_transactions ${transactionWhere(f)}`;
   return c;
+}
+
+export interface TransactionTotals {
+  /** Money out on spending rows, as a positive number of cents. */
+  spent_cents: number;
+  /** Money back on spending rows — refunds, Daily Cash — as a positive number. */
+  credit_cents: number;
+}
+
+/**
+ * Spending totals over EVERY row a filter matches, not just the page of them
+ * the register loads. The register used to sum the rows it had fetched, so a
+ * filter matching more than its 300-row limit printed a partial total.
+ *
+ * Gross, not net: a figure the Flow draws is gross, and clicking it must land
+ * on a register that shows the same number.
+ */
+export async function getTransactionTotals(f: TransactionFilters = {}): Promise<TransactionTotals> {
+  const [row] = await sql<TransactionTotals[]>`
+    SELECT
+      COALESCE(-SUM(eff_amount_cents) FILTER (
+        WHERE counts_as_spending AND eff_amount_cents < 0), 0)::bigint AS spent_cents,
+      COALESCE(SUM(eff_amount_cents) FILTER (
+        WHERE counts_as_spending AND eff_amount_cents > 0), 0)::bigint AS credit_cents
+    FROM v_transactions
+    ${transactionWhere(f)}`;
+  return row;
 }
 
 export async function getTransaction(id: string): Promise<VTransaction | null> {
@@ -190,6 +202,75 @@ export async function getPeriodTotals(from: string, to: string): Promise<PeriodT
     FROM v_transactions
     WHERE eff_posted_date >= ${from}::date AND eff_posted_date <= ${to}::date`;
   return row;
+}
+
+export interface FlowCategory extends CategoryBreakdownRow {
+  /** Money back in this category over the range, positive; not in total_cents. */
+  credit_cents: number;
+}
+
+/** What the Flow draws for a range. Shaped for lib/flow.ts's buildFlow. */
+export interface FlowData {
+  incomeCents: number;
+  investedCents: number;
+  /** Refunds and other money back on spending rows — a source of its own. */
+  creditsCents: number;
+  /** Gross spending per category: total_cents counts money out only. */
+  categories: FlowCategory[];
+}
+
+/**
+ * The Flow's numbers, gross.
+ *
+ * The buckets used to come from getPeriodTotals, which nets a credit into its
+ * bucket, while the categories under them came from a breakdown that drops
+ * any category netting to a credit — so whenever one did, the flows exceeded
+ * their bucket. Here every category is money out only, credits are counted
+ * once, separately, and the buckets are the sum of their categories, so the
+ * diagram balances by construction. Net = gross − credits, which a test holds
+ * against v_monthly_cashflow.
+ */
+export async function getFlow(from: string, to: string): Promise<FlowData> {
+  const [totals, categories] = await Promise.all([
+    getPeriodTotals(from, to),
+    sql<FlowCategory[]>`
+      WITH per_axis AS (
+        SELECT
+          category_id,
+          COALESCE(category_name, 'Uncategorized')   AS category_name,
+          COALESCE(category_group_name, 'Other')     AS category_group_name,
+          eff_necessity::text                        AS necessity,
+          eff_cost_type::text                        AS cost_type,
+          COALESCE(-SUM(eff_amount_cents) FILTER (WHERE eff_amount_cents < 0), 0)::bigint AS spent,
+          COALESCE(SUM(eff_amount_cents) FILTER (WHERE eff_amount_cents > 0), 0)::bigint  AS credit,
+          count(*)::int                              AS txn_count
+        FROM v_transactions
+        WHERE counts_as_spending
+          AND eff_posted_date >= ${from}::date AND eff_posted_date <= ${to}::date
+        GROUP BY 1,2,3,4,5
+      )
+      SELECT
+        category_id,
+        category_name,
+        category_group_name,
+        necessity,
+        (ARRAY_AGG(cost_type ORDER BY spent DESC))[1] AS cost_type,
+        SUM(spent)::bigint                            AS total_cents,
+        SUM(credit)::bigint                           AS credit_cents,
+        SUM(txn_count)::int                           AS txn_count
+      FROM per_axis
+      GROUP BY 1,2,3,4
+      ORDER BY total_cents DESC, category_name`,
+  ]);
+
+  return {
+    incomeCents: totals.income_cents,
+    investedCents: totals.invested_cents,
+    creditsCents: categories.reduce((a, c) => a + c.credit_cents, 0),
+    // A category that only took money back has nothing to draw; its credit
+    // is already in creditsCents.
+    categories: categories.filter((c) => c.total_cents > 0),
+  };
 }
 
 /** Category breakdown over an arbitrary range. */

@@ -1,8 +1,5 @@
 import Link from 'next/link';
-import {
-  getCashflow, getCategoryBreakdownRange, getPeriodTotals,
-  getLedgerBounds, getActiveMonths,
-} from '@/lib/queries';
+import { getCashflow, getFlow, getLedgerBounds, getActiveMonths } from '@/lib/queries';
 import { PeriodPicker } from '@/components/PeriodPicker';
 import { buildPeriods } from '@/lib/periods';
 import { resolvePeriod } from '@/lib/resolve-period';
@@ -35,10 +32,9 @@ export default async function FlowPage({
   const periods = buildPeriods(activeMonths, bounds);
   const period = resolvePeriod(periods, cashflow, requested);
 
-  const [totals, breakdown] = await Promise.all([
-    getPeriodTotals(period.from, period.to),
-    getCategoryBreakdownRange(period.from, period.to),
-  ]);
+  // One query for the diagram and the list beneath it, so they cannot
+  // disagree: gross categories, credits counted once as their own source.
+  const flow = await getFlow(period.from, period.to);
 
   return (
     <div className="space-y-10">
@@ -49,22 +45,10 @@ export default async function FlowPage({
       </header>
 
       <section>
-        <Sankey
-          data={{
-            incomeCents: totals.income_cents,
-            requiredCents: totals.required_cents,
-            discretionaryCents: totals.discretionary_cents,
-            investedCents: totals.invested_cents,
-            categories: breakdown.map((b) => ({
-              name: b.category_name,
-              necessity: b.necessity,
-              cents: b.total_cents,
-            })),
-          }}
-        />
+        <Sankey data={flow} />
       </section>
 
-      <FlowDrilldown breakdown={breakdown} from={period.from} to={period.to} />
+      <FlowDrilldown breakdown={flow.categories} from={period.from} to={period.to} />
     </div>
   );
 }

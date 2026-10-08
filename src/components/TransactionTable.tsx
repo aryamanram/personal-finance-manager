@@ -7,6 +7,7 @@ import { TransactionRow } from './TransactionRow';
 import { CategoryPalette } from './CategoryPalette';
 import { Figure } from './Figure';
 import type { VTransaction, CategoryWithGroup, Account } from '@/lib/types';
+import type { TransactionTotals } from '@/lib/queries';
 
 /**
  * The register. Edits are optimistic and reconciled against the row the server
@@ -18,12 +19,15 @@ export function TransactionTable({
   categories,
   accounts,
   total,
+  totals,
   allCategoriesHidden = false,
 }: {
   initial: VTransaction[];
   categories: CategoryWithGroup[];
   accounts: Account[];
   total: number;
+  /** Spending over every row the filter matches, from the server. */
+  totals: TransactionTotals;
   /** Every category is filtered out — an empty table the user asked for. */
   allCategoriesHidden?: boolean;
 }) {
@@ -84,6 +88,9 @@ export function TransactionTable({
     onSuccess: (fresh) => {
       setRows((rs) => rs.map((r) => (r.id === fresh.id ? fresh : r)));
       qc.invalidateQueries({ queryKey: ['cashflow'] });
+      // The spending total is the server's, over every matching row; an
+      // amount, a void or a recategorisation can move it.
+      router.refresh();
     },
   });
 
@@ -137,10 +144,6 @@ export function TransactionTable({
   });
 
   // The year most of the register is in — dates outside it carry a short year
-  const shownTotal = useMemo(
-    () => rows.filter((r) => r.counts_as_spending).reduce((a, r) => a + r.eff_amount_cents, 0),
-    [rows],
-  );
 
   /**
    * Toggles one row, or — with shift held — every row between the last one
@@ -188,10 +191,18 @@ export function TransactionTable({
       <div className="rule-b flex flex-wrap items-baseline justify-between gap-4 pb-2">
         {/* The header already carries the total, so repeating "n of N" here
             said the same number twice on one screen. What this line adds is
-            the money — and the fact that the view is truncated, which only
-            matters when it actually is. */}
+            the money — over every matching row, not just the ones loaded —
+            and the fact that the view is truncated, which only matters when
+            it actually is. Gross, with credits beside it, so it is the same
+            figure the Flow draws for this filter. */}
         <div className="text-xs text-paper-faint">
-          Spending <Figure cents={shownTotal} tone="neutral" showCents={false} />
+          Spent <Figure cents={-totals.spent_cents} tone="neutral" />
+          {totals.credit_cents > 0 && (
+            <>
+              {' · credits '}
+              <Figure cents={totals.credit_cents} tone="neutral" signed />
+            </>
+          )}
           {rows.length < total && (
             <>
               {' · showing the latest '}

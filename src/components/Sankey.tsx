@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { sankey, sankeyLinkHorizontal, sankeyJustify } from 'd3-sankey';
 import { formatCentsCompact, formatCents } from '@/money';
+import { buildFlow, type FlowInput, type SourceKey, type BucketKey } from '@/lib/flow';
 
 /**
  * Income -> necessity -> category. The view the whole project is for.
@@ -12,15 +13,8 @@ import { formatCentsCompact, formatCents } from '@/money';
  * else in the chart encodes magnitude.
  */
 
-export interface SankeyInput {
-  incomeCents: number;
-  requiredCents: number;
-  discretionaryCents: number;
-  investedCents: number;
-  categories: { name: string; necessity: string; cents: number }[];
-  /** Label for the source node. Defaults to "Income". */
-  sourceLabel?: string;
-}
+/** What the chart draws: getFlow's numbers, through lib/flow.ts. */
+export type SankeyInput = FlowInput;
 
 interface N { name: string; kind: 'income' | 'bucket' | 'category'; cents: number; tone: string }
 interface L {
@@ -51,7 +45,15 @@ const TONE = {
   invest: 'var(--color-flow-invest)',
   leftover: 'var(--color-flow-leftover)',
   left: 'var(--color-paper-dim)',
+  credit: 'var(--color-in-dim)',
 } as const;
+
+const SOURCE_TONE: Record<SourceKey, string> = {
+  income: TONE.in, investments: TONE.invest, credits: TONE.credit, savings: TONE.left,
+};
+const BUCKET_TONE: Record<BucketKey, string> = {
+  required: TONE.required, discretionary: TONE.discretionary, invested: TONE.invest, leftover: TONE.leftover,
+};
 
 const WIDTH = 940;
 const HEIGHT = 340;
@@ -80,25 +82,12 @@ export function Sankey({ data }: { data: SankeyInput }) {
   const [hover, setHover] = useState<number | null>(null);
 
   const graph = useMemo(() => {
-    const { incomeCents, requiredCents, discretionaryCents, investedCents } = data;
+    // The arithmetic lives in lib/flow.ts, where it is tested: sources,
+    // buckets and categories there balance to the cent, credits included.
+    const model = buildFlow(data);
+    if (!model) return null;
+    const sourceTotal = model.totalCents;
 
-    const spent = requiredCents + discretionaryCents + investedCents;
-
-    // When spending exceeds income the difference came from somewhere —
-    // savings, a transfer in, or an existing balance. Naming it keeps the
-    // diagram balanced and honest. Refusing to draw at all (the old behaviour
-    // whenever income was zero) hid the entire breakdown in exactly the months
-    // a person most wants to see where the money went.
-    const drawdown = Math.max(0, spent - incomeCents);
-    const sourceTotal = incomeCents + drawdown;
-    if (sourceTotal <= 0) return null;
-
-    const leftover = Math.max(0, incomeCents - spent);
-
-    // Naming the source node is not cosmetic. When spending outruns income the
-    // node's value is income + drawdown, and calling that "Income" contradicts
-    // the income figure in the header above it. Split it into two source nodes
-    // instead, so both numbers are true and the funding gap is visible.
     const nodes: N[] = [];
     const links: L[] = [];
 
@@ -114,26 +103,10 @@ export function Sankey({ data }: { data: SankeyInput }) {
     };
 
     const sourceIndexes: number[] = [];
-    if (incomeCents > 0) {
+    for (const src of model.sources) {
       sourceIndexes.push(nodes.length);
-      nodes.push({
-        name: data.sourceLabel ?? 'Income',
-        kind: 'income',
-        cents: incomeCents,
-        tone: TONE.in,
-      });
+      nodes.push({ name: src.label, kind: 'income', cents: src.cents, tone: SOURCE_TONE[src.key] });
     }
-    if (drawdown > 0) {
-      sourceIndexes.push(nodes.length);
-      nodes.push({ name: 'From savings', kind: 'income', cents: drawdown, tone: TONE.left });
-    }
-
-    const buckets: { name: string; cents: number; tone: string; necessity: string }[] = [
-      { name: 'Required', cents: requiredCents, tone: TONE.required, necessity: 'required' },
-      { name: 'Discretionary', cents: discretionaryCents, tone: TONE.discretionary, necessity: 'discretionary' },
-      { name: 'Invested', cents: investedCents, tone: TONE.invest, necessity: 'investment' },
-      { name: 'Unspent', cents: leftover, tone: TONE.leftover, necessity: 'leftover' },
-    ].filter((b) => b.cents > 0);
 
     // With two sources, fanning each one into every bucket produces a mess of
     // crossing ribbons that encodes nothing — the ledger cannot say which
@@ -148,41 +121,13 @@ export function Sankey({ data }: { data: SankeyInput }) {
       }
     }
 
-    const bucketIndex = new Map<string, number>();
-    for (const b of buckets) {
-      const i = nodes.length;
-      nodes.push({ name: b.name, kind: 'bucket', cents: b.cents, tone: b.tone });
-      bucketIndex.set(b.necessity, i);
-      addLink(poolIndex, i, b.cents, b.tone);
-    }
+    for (const b of model.buckets) {
+      const parent = nodes.length;
+      nodes.push({ name: b.label, kind: 'bucket', cents: b.cents, tone: BUCKET_TONE[b.key] });
+      addLink(poolIndex, parent, b.cents, BUCKET_TONE[b.key]);
 
-    // Fold any repeated (necessity, name) pair. getCategoryBreakdownRange now
-    // returns one row per category, but this component takes a plain array from
-    // whoever calls it, and a duplicate here would render as two nodes with the
-    // same label rather than failing visibly.
-    const merged = new Map<string, { name: string; necessity: string; cents: number }>();
-    for (const c of data.categories) {
-      if (c.cents <= 0) continue;
-      const key = `${c.necessity}|${c.name}`;
-      const existing = merged.get(key);
-      if (existing) existing.cents += c.cents;
-      else merged.set(key, { ...c });
-    }
-
-    // Top categories only; the tail becomes one "Other" flow so the chart
-    // stays readable without hiding money.
-    const byNecessity = new Map<string, { name: string; necessity: string; cents: number }[]>();
-    for (const c of merged.values()) {
-      const g = byNecessity.get(c.necessity);
-      if (g) g.push(c);
-      else byNecessity.set(c.necessity, [c]);
-    }
-
-    for (const [necessity, cats] of byNecessity) {
-      const parent = bucketIndex.get(necessity);
-      if (parent === undefined) continue;
-
-      const sorted = [...cats].sort((a, b) => b.cents - a.cents);
+      const sorted = b.categories;
+      if (sorted.length === 0) continue;
       // Keep the big ones; fold everything too thin to render into one flow, so
       // no money is hidden but no hairline is unreadable.
       const keep = sorted.filter(

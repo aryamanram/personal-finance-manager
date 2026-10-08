@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { sql } from '@/lib/db';
-import { getTransactions, getCategories, getAccounts } from '@/lib/queries';
+import {
+  getTransactions, countTransactions, getTransactionTotals, getCategories, getAccounts,
+} from '@/lib/queries';
 import { TransactionTable } from '@/components/TransactionTable';
 import { CategoryDefaults } from '@/components/CategoryDefaults';
 import { Figure } from '@/components/Figure';
@@ -31,7 +33,9 @@ export default async function CategoryPage({
 
   if (!category) notFound();
 
-  const [trend, transactions, categories, accounts] = await Promise.all([
+  // The rows, their count and their totals all read the same filter.
+  const filter = { categoryIds: [id] };
+  const [trend, transactions, total, totals, categories, accounts] = await Promise.all([
     sql<{ month: string; total_cents: number; n: number }[]>`
       SELECT date_trunc('month', eff_posted_date)::date AS month,
              -SUM(eff_amount_cents)::bigint AS total_cents,
@@ -39,7 +43,9 @@ export default async function CategoryPage({
       FROM v_transactions
       WHERE category_id = ${id} AND counts_as_spending
       GROUP BY 1 ORDER BY 1 DESC LIMIT 12`,
-    getTransactions({ categoryIds: [id], limit: 200 }),
+    getTransactions({ ...filter, limit: 200 }),
+    countTransactions(filter),
+    getTransactionTotals(filter),
     getCategories(),
     getAccounts(),
   ]);
@@ -115,7 +121,8 @@ export default async function CategoryPage({
           initial={transactions}
           categories={categories}
           accounts={accounts}
-          total={transactions.length}
+          total={total}
+          totals={totals}
         />
       </section>
     </div>

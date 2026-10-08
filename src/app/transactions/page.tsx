@@ -1,6 +1,6 @@
 import {
   getTransactions, countTransactions, getCategories, getAccounts,
-  getReviewCounts, getActiveMonths, getLedgerBounds,
+  getReviewCounts, getActiveMonths, getLedgerBounds, getTransactionTotals,
 } from '@/lib/queries';
 import { TransactionTable } from '@/components/TransactionTable';
 import { FilterChips } from '@/components/FilterChips';
@@ -64,9 +64,12 @@ export default async function TransactionsPage({
   };
 
   const categories = allCategories;
-  const [transactions, total, accounts, review] = await Promise.all([
+  const [transactions, total, totals, accounts, review] = await Promise.all([
     getTransactions(filters),
     countTransactions(filters),
+    // Over every matching row, not the 300 loaded — and gross, so a figure
+    // clicked in the Flow lands on the same number here.
+    getTransactionTotals(filters),
     getAccounts(),
     // Scoped to the period, so the chip counts what the table would show.
     getReviewCounts({ from: filters.from, to: filters.to }),
@@ -155,6 +158,7 @@ export default async function TransactionsPage({
         categories={categories}
         accounts={accounts}
         total={total}
+        totals={totals}
         allCategoriesHidden={
           allCategories.length > 0 && hiddenCategoryIds.length >= allCategories.length
         }

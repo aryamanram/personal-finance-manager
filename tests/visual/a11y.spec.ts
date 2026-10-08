@@ -42,7 +42,7 @@ const KNOWN: Known[] = [
   { rule: 'select-name', element: 'select "Apple CardChase United Explorer" in "Import a statement"', pages: ['accounts'] },
   { rule: 'label', element: 'input[type=date] in "Morgan Stanley Brokerage"', pages: ['accounts'] },
   // The Sankey scrolls sideways on a phone but cannot be reached by keyboard.
-  { rule: 'scrollable-region-focusable', element: 'figure "Income → Available $5,400.00From"', pages: ['flow'], projects: ['mobile'] },
+  { rule: 'scrollable-region-focusable', element: 'figure "Income → Available $5,400.00Cred"', pages: ['flow'], projects: ['mobile'] },
 ];
 
 /**
