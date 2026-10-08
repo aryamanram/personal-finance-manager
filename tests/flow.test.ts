@@ -198,6 +198,20 @@ describe('a category opens to the same number (V2)', () => {
     }
   });
 
+  it("opens each of Cashflow's net figures on a register whose net is that figure", async () => {
+    // Cashflow's list is net (a refund reduces its category); the register
+    // prints spent, credits and, when there are credits, the net between.
+    const rows = await q.getCategoryBreakdownRange(MONTHS.may[0], MONTHS.may[1]);
+    const groceries = rows.find((r) => r.category_name === 'Groceries' && r.necessity === 'required');
+    expect(groceries?.total_cents).toBe(30000 - 2000);
+    for (const r of rows) {
+      const t = await q.getTransactionTotals({
+        leafCategoryIds: [r.category_id!], necessity: [r.necessity], from: MONTHS.may[0], to: MONTHS.may[1],
+      });
+      expect(t.spent_cents - t.credit_cents, `${r.category_name} (${r.necessity})`).toBe(r.total_cents);
+    }
+  });
+
   it('needs both: the category alone, or with its subcategories, is a different number', async () => {
     const may = { from: MONTHS.may[0], to: MONTHS.may[1] };
     // Groceries' required figure in the Flow is 300.00; the looser filters are not.

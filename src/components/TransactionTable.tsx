@@ -197,10 +197,15 @@ export function TransactionTable({
             figure the Flow draws for this filter. */}
         <div className="text-xs text-paper-faint">
           Spent <Figure cents={-totals.spent_cents} tone="neutral" />
+          {/* With credits the net is printed too: the Flow links here with a
+              gross figure and Cashflow with a net one, and whichever was
+              clicked has to be on this line (V2). */}
           {totals.credit_cents > 0 && (
             <>
               {' · credits '}
               <Figure cents={totals.credit_cents} tone="neutral" signed />
+              {' · net '}
+              <Figure cents={totals.credit_cents - totals.spent_cents} tone="neutral" />
             </>
           )}
           {rows.length < total && (
