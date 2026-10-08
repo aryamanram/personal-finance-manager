@@ -1,6 +1,6 @@
 # Data flow
 
-How one transaction travels from your bank to a number on the dashboard, and
+How one transaction travels from your bank to a number on the Flow, and
 where to look when that number is wrong.
 
 ← [Level 3](./components.md) · [Level 2](./containers.md) · [Level 1](./README.md)
@@ -38,7 +38,7 @@ flowchart LR
         direction TB
         view["v_transactions<br/><span style='font-size:11px'>resolves eff_* and<br/>counts_as_spending</span>"]
         totals["v_monthly_cashflow"]
-        screen["dashboard"]
+        screen["the Flow"]
     end
 
     human["<b>you</b><br/><span style='font-size:11px'>correct it</span>"]
@@ -109,7 +109,7 @@ Work down this list. Each step rules out a whole class of cause.
 
 **1. Does the ledger agree with the bank?**
 
-The dashboard shows a reconciliation banner when it does not. Non-zero drift
+The Flow page shows a line when it does not, and Accounts states the check either way. Non-zero drift
 means the ledger is missing or double-counting transactions, and nothing
 downstream is trustworthy until it is explained. A real example: a drift equal,
 to the cent, to one purchase turned out to be an Apple Card charge that fell

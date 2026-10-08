@@ -8,6 +8,14 @@ The work happens on a local branch, `overhaul`. Nothing is pushed and no PR
 is opened until the owner asks: there will be many design changes, and a
 review round-trip per change would slow them down.
 
+**Where it stands (2026-10-08):** all nine steps below are built on
+`overhaul`, one commit each, and checked on the demo ledger in both themes
+and at phone width. V1–V10 each have a test: V1, V2 and V3 in
+`tests/flow.test.ts` and `tests/review.test.ts` against the app's own
+queries, V2 again end to end in `tests/visual/links.spec.ts`, V9 in
+`tests/design-tokens.test.ts`. The a11y suite's known list is empty. Not
+pushed; waiting on the owner's look.
+
 ## The asks
 
 **2026-10-07**, answered as choices:
@@ -318,8 +326,12 @@ and visual baselines are only updated after they have been looked at.
    rollup in `v_transactions` and the category picker.
 2. **A ninth spending group.** Drawn in neutral ink with its label (above).
    If groups multiply, the palette needs a second dimension, not more hues.
-3. **The Flow on a phone.** Scrolling sideways with the table a tap away is
-   the first answer. A vertical Flow is the better one if the phone becomes a
-   place this is used.
-4. **Review's rhythm.** Proposed: accepting moves to the next row; accepting
-   every row from a merchant is Shift+A with an inline confirm.
+3. **The Flow on a phone.** Built: on a narrow screen both Flows open as
+   tables, with the chart a tap away, scrolling sideways in a focusable
+   region. A vertical Flow is the better answer if the phone becomes a place
+   this is used.
+4. **Review's rhythm.** Built as proposed, open to change: accepting moves to
+   the next row; accepting every row from a merchant is `m` with an inline
+   confirm (Enter or Esc). The merchant-wide accept reaches that merchant's
+   unlocked rows in every period, as the register's "apply to the others"
+   always has.

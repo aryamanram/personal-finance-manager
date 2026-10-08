@@ -42,7 +42,7 @@ flowchart TB
 
     subgraph ui["Read path — src/app + src/components"]
         direction LR
-        pages["<b>pages</b><br/><span style='font-size:11px'>dashboard · register · accounts</span>"]
+        pages["<b>pages</b><br/><span style='font-size:11px'>flow · review · register<br/>accounts · setup</span>"]
         api["<b>API routes</b><br/><span style='font-size:11px'>PATCH · bulk · import · snapshot</span>"]
         money["<b>money.ts</b><br/><span style='font-size:11px'>the ONLY cents ↔ display path</span>"]
     end

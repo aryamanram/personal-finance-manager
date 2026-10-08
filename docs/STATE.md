@@ -22,12 +22,20 @@ Describe the *shape* of a decision here and keep the specifics there.
 
 ---
 
-## Right now · last updated 2026-10-07
+## Right now · last updated 2026-10-08
 
-**Nothing is in flight.** PRs #12–#17 are merged and `main` is green. The
-ledger syncs itself daily (see the decisions below), was caught up on
-2026-10-07, and the owner has confirmed every row the register shows — the
-review backlog is empty. The card that syncs daily matches its issuer to the
+**The overhaul is built on a local branch, `overhaul`, and is not pushed.**
+The owner asked for no push or PR until they say so: there will be many
+design changes. It carries the whole of `docs/design/OVERHAUL.md` — the Flow
+as the first page with a category's own Flow beneath, the light and dark
+colour scheme, Review, Setup — with V1–V10 tested and the a11y suite clean.
+The owner has not seen it yet. The working tree is left on `overhaul` so
+they can run it; it changes no sync code and no schema, so the nightly sync
+behaves as on `main`. Switch back to `main` once they are done looking.
+
+`main` itself is as on 2026-10-07: PRs #12–#22 merged, green. The ledger syncs
+itself daily, was caught up on 2026-10-07, and the owner has confirmed every
+row the register shows. The card that syncs daily matches its issuer to the
 cent. The employer's income source was re-registered by the text the bank
 actually prints, checked against the real deposit with the app's own matcher.
 
@@ -55,8 +63,9 @@ Standing tasks the owner tracks — details in `private/STATE.local.md`:
 
 - Record a brokerage balance monthly, so investment performance has a period to
   measure over. One snapshot is a starting line, not a return.
-- Register a new income source on the Accounts page when one starts — by the
-  text the bank prints, then check the first deposit is filed as known.
+- Register a new income source when one starts — on Accounts on `main`, on
+  Setup once the overhaul lands — by the text the bank prints, then check the
+  first deposit is filed as known.
 
 ---
 
@@ -216,6 +225,23 @@ earlier months as a trend, and do not propose a budget from them.
 reading has no period to measure over. The page says tracking starts here rather
 than printing a meaningless 0.00%, and Modified Dietz only becomes meaningful at
 the second reading.
+
+**Colour is by category group, and buckets are ink.** One hue per category
+cannot be told apart past eight, and the taxonomy has dozens; a group is a
+handful and means something. The slot is the group's position among groups
+holding spending, in the taxonomy's sort order, so it moves only when the
+taxonomy does. Neutral sources and buckets are what let the group colours
+carry without competing (docs/design/OVERHAUL.md, "Colour").
+
+**Review opens on everything outstanding, whatever the period.** Its nav
+badge counts everything outstanding, and a count must be what its
+destination shows (V3); a period would make the two disagree. Flow and
+Register share the period; Review's own picker narrows it.
+
+**A review count reads the view's own WHERE clause.** `getReviewCounts`
+takes the register's filters and runs `transactionWhere`, so the chips can no
+longer count rows the table hides — the third time that bug had appeared in
+a new form.
 
 ## Known and deliberate
 

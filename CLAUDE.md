@@ -85,14 +85,24 @@ in code, not in a test fixture, not in a doc, not in a commit message.
 ## Design work
 
 The look and feel is deliberate, not a default theme: a **ledger**, not a
-dashboard. Ink ground, tabular figures so a column of numbers aligns on the
-decimal, and amber reserved exclusively for "a human changed this" — the dotted
-underline under a corrected amount, the diamond on a locked category. Do not
-spend amber on anything else; its meaning is the point.
+dashboard. Ink on paper, in a light and a dark theme, each chosen rather than
+flipped; tabular figures so a column of numbers aligns on the decimal. Colour
+is spent in one place — the chart — where a category wears its **group's**
+slot of an eight-colour palette, the same everywhere it appears. Three hues
+are reserved and never chart colours: amber exclusively for "a human changed
+this" (the dotted underline under a corrected amount, the diamond on a locked
+category), green for money earned, red for something a person must look at.
+Do not spend amber on anything else; its meaning is the point.
+`docs/design/OVERHAUL.md` is the current design spec, with its invariants
+(V1–V10) and the palette's validation.
 
-`src/app/globals.css` holds the tokens. Read it before restyling anything.
-After changing its `@theme` block, run `npm run tokens` and commit
-`docs/design/tokens.json` with it — that file is how Figma gets the change.
+`src/app/globals.css` holds the tokens, each written `light-dark(<light>,
+<dark>)`. Read it before restyling anything. After changing its `@theme`
+block, run `npm run tokens` and commit `docs/design/tokens.json` with it —
+that file is how Figma gets the change, as a Light and a Dark token set. The
+token tests check text contrast on every surface and the palette's
+separation in both themes; a palette change must pass them, not argue with
+them.
 
 **Design against the demo ledger, never the real one.** `npm run demo:setup`
 then `npm run dev:demo` serves synthetic data on `127.0.0.1:3001`, beside the

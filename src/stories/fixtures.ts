@@ -4,8 +4,7 @@
  * comes from on :3001 show the same numbers. Never put a real merchant,
  * amount or account here — this file is public.
  */
-import type { CategoryBreakdownRow } from '@/lib/queries';
-import type { FlowInput } from '@/lib/flow';
+import type { FlowInput, FlowRow, CategoryFlowInputRow } from '@/lib/flow';
 import { buildPeriods } from '@/lib/periods';
 import type {
   CategoryWithGroup, CostType, MonthlyCashflow, Necessity, VTransaction,
@@ -38,7 +37,7 @@ const TAXONOMY: [group: string, sort: number, names: [string, CostType, Necessit
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
-export const categories: CategoryWithGroup[] = TAXONOMY.flatMap(([group, groupSort, names]) =>
+const top: CategoryWithGroup[] = TAXONOMY.flatMap(([group, groupSort, names]) =>
   names.map(([name, cost, necessity], i) => ({
     id: `cat-${slug(name)}`,
     group_id: `grp-${slug(group)}`,
@@ -54,6 +53,28 @@ export const categories: CategoryWithGroup[] = TAXONOMY.flatMap(([group, groupSo
     group_sort_order: groupSort,
     parent_name: null,
   })));
+
+/** The demo's three split parents (scripts/seed-demo.ts). */
+const SUBCATEGORIES: [parent: string, children: string[]][] = [
+  ['Restaurants', ['Dining out', 'Takeout']],
+  ['Subscriptions', ['Streaming', 'Apps & cloud']],
+  ['Shopping', ['Clothing', 'Household']],
+];
+
+export const categories: CategoryWithGroup[] = [
+  ...top,
+  ...SUBCATEGORIES.flatMap(([parentName, children]) => {
+    const parent = top.find((c) => c.name === parentName)!;
+    return children.map((name, i) => ({
+      ...parent, id: `cat-${slug(name)}`, name, parent_id: parent.id, parent_name: parent.name, sort_order: i + 1,
+    }));
+  }),
+];
+
+/** The palette slot of each group that holds spending, as getGroupSlots returns it. */
+export const groupSlots: Record<string, number> = {
+  Housing: 1, Transportation: 2, Food: 3, Health: 4, Lifestyle: 5, Financial: 6,
+};
 
 const category = (name: string) => {
   const c = categories.find((x) => x.name === name);
@@ -86,67 +107,64 @@ export const cashflow: MonthlyCashflow[] = [
 
 export const september = cashflow[cashflow.length - 1];
 
-// --- Spending by category --------------------------------------------------
+// --- The Flow ---------------------------------------------------------------
 //
-// What the app's own getFlow returns on the demo for each month: gross money
-// out per category. The month's Daily Cash is not in any of these — it is a
-// credit, counted once as the Flow's Credits source (222 cents in September,
-// 243 in August), which is what makes the diagram balance.
+// What the app's own getFlow returns on the demo for September (to the 27th,
+// where its data ends): gross money out per category, a subcategory carrying
+// its parent. Credits — the month's Daily Cash and an Amazon return — are
+// counted once, as the Flow's Credits source, which is what makes it balance.
 
-const row = (name: string, cents: number, count: number): CategoryBreakdownRow => {
+const flowRow = (name: string, necessity: string, cents: number, count: number, credit = 0): FlowRow => {
   const c = category(name);
   return {
     category_id: c.id,
     category_name: name,
     category_group_name: c.group_name,
-    necessity: c.default_necessity,
-    cost_type: c.default_cost_type,
+    parent_id: c.parent_id,
+    parent_name: c.parent_name,
+    necessity,
     total_cents: cents,
+    credit_cents: credit,
     txn_count: count,
   };
 };
 
-export const breakdown: CategoryBreakdownRow[] = [
-  row('Rent', 285000, 1),
-  row('Groceries', 47879, 4),
-  row('Restaurants', 30276, 7),
-  row('Shopping', 12208, 3),
-  row('Gas', 10543, 2),
-  row('Renters Insurance', 8500, 1),
-  row('Utilities', 7326, 1),
-  row('Internet & Phone', 7000, 1),
-  row('Fitness', 4500, 1),
-  row('Subscriptions', 2997, 3),
-  row('Coffee', 2825, 5),
-  row('Gifts', 451, 1),
+export const septemberFlow: FlowInput = {
+  incomeCents: 540000,
+  investedCents: 200000,
+  creditsCents: 4566,
+  groupSlots,
+  categories: [
+    flowRow('Rent', 'required', 285000, 1),
+    flowRow('Groceries', 'required', 44518, 4),
+    flowRow('Takeout', 'discretionary', 19537, 5),
+    flowRow('Gas', 'required', 10829, 2),
+    flowRow('Household', 'discretionary', 8918, 1),
+    flowRow('Renters Insurance', 'required', 8500, 1),
+    flowRow('Utilities', 'required', 7250, 1),
+    flowRow('Internet & Phone', 'required', 7000, 1),
+    flowRow('Clothing', 'discretionary', 6913, 1),
+    flowRow('Dining out', 'discretionary', 6578, 2),
+    flowRow('Rideshare', 'discretionary', 5469, 2),
+    flowRow('Entertainment', 'discretionary', 5204, 1),
+    flowRow('Fitness', 'discretionary', 4500, 1),
+    flowRow('Streaming', 'discretionary', 2698, 2),
+    flowRow('Coffee', 'discretionary', 2538, 5),
+    flowRow('Shopping', 'discretionary', 2500, 2, 4275),
+    flowRow('Pharmacy', 'required', 2419, 1),
+    flowRow('Gifts', 'discretionary', 684, 1),
+    flowRow('Apps & cloud', 'discretionary', 299, 1),
+  ],
+};
+
+export const SEPTEMBER = { from: '2026-09-01', to: '2026-09-27' };
+
+/** getCategoryFlow for Restaurants in September, as the page gets it. */
+export const restaurantsFlow: CategoryFlowInputRow[] = [
+  { category_id: 'cat-takeout', category_name: 'Takeout', necessity: 'discretionary', merchant_id: 'm-chipotle', merchant_name: 'Chipotle', total_cents: 11161, credit_cents: 0, txn_count: 3 },
+  { category_id: 'cat-takeout', category_name: 'Takeout', necessity: 'discretionary', merchant_id: 'm-taco-haus', merchant_name: 'Taco Haus', total_cents: 8376, credit_cents: 0, txn_count: 2 },
+  { category_id: 'cat-dining-out', category_name: 'Dining out', necessity: 'discretionary', merchant_id: 'm-noodle-bar', merchant_name: 'Noodle Bar', total_cents: 6578, credit_cents: 0, txn_count: 2 },
 ];
-
-export const augustBreakdown: CategoryBreakdownRow[] = [
-  row('Rent', 285000, 1),
-  row('Groceries', 49110, 4),
-  row('Restaurants', 29928, 7),
-  row('Shopping', 18392, 3),
-  row('Gas', 10870, 2),
-  row('Utilities', 10461, 1),
-  row('Renters Insurance', 8500, 1),
-  row('Internet & Phone', 7000, 1),
-  row('Fitness', 4500, 1),
-  row('Coffee', 3436, 6),
-  row('Subscriptions', 2997, 3),
-];
-
-export const SEPTEMBER = { from: '2026-09-01', to: '2026-09-30' };
-
-const flow = (totals: MonthlyCashflow, rows: CategoryBreakdownRow[], creditsCents: number): FlowInput => ({
-  incomeCents: totals.income_cents ?? 0,
-  investedCents: totals.invested_cents ?? 0,
-  creditsCents,
-  categories: rows.map((r) => ({ ...r, credit_cents: 0 })),
-});
-
-/** getFlow for each month, as the Flow page passes it to the Sankey. */
-export const septemberFlow = flow(cashflow[cashflow.length - 1], breakdown, 222);
-export const augustFlow = flow(cashflow[cashflow.length - 2], augustBreakdown, 243);
 
 // --- The period picker, built by the app's own code -------------------------
 

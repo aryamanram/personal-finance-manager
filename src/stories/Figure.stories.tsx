@@ -3,7 +3,7 @@ import { Figure } from '@/components/Figure';
 
 /**
  * Every amount in the ledger. Tabular figures, so a column of them aligns on
- * the decimal; tone from the sign unless the caller says otherwise; and the
+ * the decimal; ink unless the row is earned money (tone "in"); and the
  * amber dotted underline when a human corrected the bank's number.
  */
 const meta = {
