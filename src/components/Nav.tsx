@@ -14,17 +14,23 @@ const KEEPS_PERIOD = new Set(['/', '/transactions']);
  * decoration: with five items the nav is long enough that "which page am I on"
  * stops being obvious from the heading alone.
  */
-export function Nav({
-  items,
-}: {
-  items: readonly { href: string; label: string; count?: number }[];
-}) {
-  const pathname = usePathname();
-  const params = useSearchParams();
+type NavItem = { href: string; label: string; count?: number };
+
+export function Nav({ items }: { items: readonly NavItem[] }) {
   // Carried only between pages that share it. The value is passed through
   // as a query parameter, never as a destination (V7), and each page
   // validates it against the periods it knows.
-  const period = params.get('period');
+  const period = useSearchParams().get('period');
+  return <NavLinks items={items} period={period} />;
+}
+
+/**
+ * The links themselves. Also the layout's Suspense fallback: reading the URL
+ * suspends on the server, and a fallback of nothing painted a header with no
+ * nav for the moment React takes to reveal the boundary.
+ */
+export function NavLinks({ items, period }: { items: readonly NavItem[]; period: string | null }) {
+  const pathname = usePathname();
 
   return (
     <nav className="flex items-center gap-6">

@@ -158,7 +158,8 @@ function Chip({
   return (
     <Link
       href={href}
-      aria-pressed={on}
+      // A link cannot be pressed; it can be the current filter.
+      aria-current={on ? 'true' : undefined}
       className={clsx(
         'rounded-sm border px-3 py-1.5 transition-colors',
         on

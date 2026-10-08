@@ -69,10 +69,13 @@ export function CategoryPalette({
   categories,
   currentId,
   clearLabel = { name: 'Uncategorized', hint: 'clear' },
+  groupSlots = {},
   onPick,
   onClose,
 }: {
   categories: CategoryWithGroup[];
+  /** Each group's palette slot, so a group and its categories wear its colour (V10). */
+  groupSlots?: Record<string, number>;
   currentId?: string | null;
   /**
    * What picking nothing means here. Assigning a category, that is clearing
@@ -214,7 +217,10 @@ export function CategoryPalette({
                 }}
                 className="flex w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left text-sm text-ink-dim transition-colors hover:bg-well hover:text-ink"
               >
-                <span className="truncate">{g.name}</span>
+                <span className="flex min-w-0 items-center gap-2">
+                  {g.into === 'group' && <Swatch slot={groupSlots[g.name]} />}
+                  <span className="truncate">{g.name}</span>
+                </span>
                 <span className="shrink-0 text-xs text-ink-faint">
                   {g.count} <span aria-hidden>›</span>
                 </span>
@@ -237,7 +243,8 @@ export function CategoryPalette({
                         active ? 'bg-well text-ink' : 'text-ink-dim',
                       )}
                     >
-                      <span className="truncate">
+                      <span className="flex min-w-0 items-center gap-2 truncate">
+                        <Swatch slot={groupSlots[category.group_name]} />
                         {label ?? category.name}
                         {category.id === currentId && (
                           <span className="ml-2 text-xs text-ink-faint">current</span>
@@ -367,4 +374,15 @@ export function browseSections(
 function matches(c: CategoryWithGroup, q: string): boolean {
   if (!q) return true;
   return c.name.toLowerCase().includes(q) || c.group_name.toLowerCase().includes(q);
+}
+
+/** The group's colour, as a small square — never the edit marker's diamond. */
+function Swatch({ slot }: { slot?: number }) {
+  return (
+    <span
+      aria-hidden
+      className="swatch"
+      style={{ background: slot ? `var(--color-group-${slot})` : 'var(--color-chart-strong)' }}
+    />
+  );
 }

@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 import { Inter_Tight, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
-import { Nav } from '@/components/Nav';
+import { Nav, NavLinks } from '@/components/Nav';
 import { ThemeSwitch, type ThemeChoice } from '@/components/ThemeSwitch';
 import { getReviewCounts } from '@/lib/queries';
 
@@ -68,9 +68,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <header className="rule-b sticky top-0 z-30 bg-ground/95 backdrop-blur">
             <div className="mx-auto flex max-w-[1400px] items-center gap-8 px-6 py-3">
               <span className="figure text-sm font-semibold tracking-tight text-ink">ledger</span>
-              {/* The nav reads the URL's period; Suspense keeps a page that
-                  renders statically (not-found) from failing the build. */}
-              <Suspense fallback={null}>
+              {/* The nav reads the URL's period, which suspends on the server.
+                  The fallback is the same links without it, so the header
+                  never paints empty while the boundary resolves. */}
+              <Suspense fallback={<NavLinks items={nav} period={null} />}>
                 <Nav items={nav} />
               </Suspense>
               <div className="ml-auto">

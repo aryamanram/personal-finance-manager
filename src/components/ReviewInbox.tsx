@@ -227,6 +227,7 @@ export function ReviewInbox({
                     {mode === 'picking' ? (
                       <CategoryPalette
                         categories={categories}
+                        groupSlots={groupSlots}
                         currentId={r.category_id}
                         clearLabel={{ name: 'Decide later', hint: 'skip' }}
                         onPick={(id) => {

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { sql } from '@/lib/db';
 import {
-  getTransactions, countTransactions, getTransactionTotals, getCategories, getAccounts,
+  getTransactions, countTransactions, getTransactionTotals, getCategories, getAccounts, getGroupSlots,
 } from '@/lib/queries';
 import { TransactionTable } from '@/components/TransactionTable';
 import { CategoryDefaults } from '@/components/CategoryDefaults';
@@ -35,7 +35,7 @@ export default async function CategoryPage({
 
   // The rows, their count and their totals all read the same filter.
   const filter = { categoryIds: [id] };
-  const [trend, transactions, total, totals, categories, accounts] = await Promise.all([
+  const [trend, transactions, total, totals, categories, accounts, groupSlots] = await Promise.all([
     sql<{ month: string; total_cents: number; n: number }[]>`
       SELECT date_trunc('month', eff_posted_date)::date AS month,
              -SUM(eff_amount_cents)::bigint AS total_cents,
@@ -48,7 +48,11 @@ export default async function CategoryPage({
     getTransactionTotals(filter),
     getCategories(),
     getAccounts(),
+    getGroupSlots(),
   ]);
+  // The group's colour, the same as in the Flow and the register (V10).
+  const slot = groupSlots[category.group_name] ?? null;
+  const colour = slot ? `var(--color-group-${slot})` : 'var(--color-chart-strong)';
 
   const months = [...trend].reverse();
   const peak = Math.max(...months.map((m) => m.total_cents), 1);
@@ -59,10 +63,14 @@ export default async function CategoryPage({
   return (
     <div className="space-y-10">
       <header>
-        <Link href="/" className="eyebrow transition-colors hover:text-ink-dim">
-          ← {category.group_name}
+        <Link href="/transactions" className="eyebrow transition-colors hover:text-ink-dim">
+          ← Register
         </Link>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">{category.name}</h1>
+        <h1 className="mt-1 flex items-center gap-3 text-2xl font-semibold tracking-tight">
+          <span aria-hidden className="swatch h-3 w-3" style={{ background: colour }} />
+          {category.name}
+          <span className="text-sm font-normal text-ink-faint">{category.group_name}</span>
+        </h1>
       </header>
 
       <section className="grid gap-10 lg:grid-cols-[1fr_320px]">
@@ -82,10 +90,10 @@ export default async function CategoryPage({
                 <span className="figure w-16 shrink-0 text-ink-faint">
                   {formatMonthShort(m.month)}
                 </span>
-                <span className="h-4 flex-1 bg-raised">
+                <span className="h-4 flex-1 bg-well">
                   <span
-                    className="block h-full bg-chart-mid"
-                    style={{ width: `${(m.total_cents / peak) * 100}%` }}
+                    className="block h-full"
+                    style={{ width: `${(m.total_cents / peak) * 100}%`, background: colour }}
                   />
                 </span>
                 <span className="figure w-20 shrink-0 text-right text-ink-dim">
@@ -123,6 +131,7 @@ export default async function CategoryPage({
           accounts={accounts}
           total={total}
           totals={totals}
+          groupSlots={groupSlots}
         />
       </section>
     </div>

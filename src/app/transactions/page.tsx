@@ -1,6 +1,6 @@
 import {
   getTransactions, countTransactions, getCategories, getAccounts,
-  getReviewCounts, getActiveMonths, getLedgerBounds, getTransactionTotals,
+  getReviewCounts, getActiveMonths, getLedgerBounds, getTransactionTotals, getGroupSlots,
 } from '@/lib/queries';
 import { TransactionTable } from '@/components/TransactionTable';
 import { FilterChips } from '@/components/FilterChips';
@@ -31,7 +31,19 @@ export default async function TransactionsPage({
     ? buildPeriods(activeMonths, bounds)
     : [];
   const requested = one('period');
-  const period = periods.find((p) => p.key === requested) ?? periods[0];
+  // A link from a figure names its dates; when they are exactly a period,
+  // the picker says which, rather than "All time" over one month's rows.
+  // Periods are clamped to the ledger, so the dates are too before comparing:
+  // September 1st-30th is September in a ledger that ends on the 28th.
+  const clamp = (d: string | undefined, edge: 'first' | 'last') => {
+    if (!d || !bounds) return d;
+    return edge === 'first' ? (d < bounds.first ? bounds.first : d) : (d > bounds.last ? bounds.last : d);
+  };
+  const dated = one('from') || one('to')
+    ? periods.find((p) => p.from === clamp(one('from'), 'first') && p.to === clamp(one('to'), 'last'))
+    : undefined;
+  const period = dated ?? periods.find((p) => p.key === requested) ?? periods[0];
+  const customRange = !dated && (one('from') || one('to'));
 
   const allCategories = await getCategories();
 
@@ -46,7 +58,7 @@ export default async function TransactionsPage({
   const filters = { ...view, limit: 300 };
 
   const categories = allCategories;
-  const [transactions, total, totals, accounts, review] = await Promise.all([
+  const [transactions, total, totals, accounts, review, groupSlots] = await Promise.all([
     getTransactions(filters),
     countTransactions(filters),
     // Over every matching row, not the 300 loaded — and gross, so a figure
@@ -55,6 +67,7 @@ export default async function TransactionsPage({
     getAccounts(),
     // Under the table's own filters, so each chip counts what it would show (V3).
     getReviewCounts(filters),
+    getGroupSlots(),
   ]);
 
   return (
@@ -93,6 +106,7 @@ export default async function TransactionsPage({
             />
             <select
               name="account"
+              aria-label="Account"
               defaultValue={one('account') ?? ''}
               className="rounded-sm border border-rule-strong bg-well px-2 py-1.5"
             >
@@ -120,7 +134,16 @@ export default async function TransactionsPage({
           </form>
         </div>
 
-        {period && (
+        {customRange ? (
+          <p className="text-sm text-ink-dim">
+            <span className="figure text-ink">{one('from') ?? 'the start'}</span> to{' '}
+            <span className="figure text-ink">{one('to') ?? 'today'}</span>
+            {' · '}
+            <a href={withoutParams(params, ['from', 'to'])} className="text-xs text-ink-faint underline decoration-rule-strong underline-offset-4 hover:text-ink">
+              any date
+            </a>
+          </p>
+        ) : period && (
           <PeriodPicker options={periods} active={period.key} />
         )}
 
@@ -157,6 +180,7 @@ export default async function TransactionsPage({
         accounts={accounts}
         total={total}
         totals={totals}
+        groupSlots={groupSlots}
         allCategoriesHidden={
           allCategories.length > 0 && hiddenCategoryIds.length >= allCategories.length
         }

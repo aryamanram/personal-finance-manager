@@ -21,8 +21,11 @@ export function TransactionTable({
   total,
   totals,
   allCategoriesHidden = false,
+  groupSlots = {},
 }: {
   initial: VTransaction[];
+  /** Each group's palette slot, so a category wears its colour (V10). */
+  groupSlots?: Record<string, number>;
   categories: CategoryWithGroup[];
   accounts: Account[];
   total: number;
@@ -32,6 +35,13 @@ export function TransactionTable({
   allCategoriesHidden?: boolean;
 }) {
   const qc = useQueryClient();
+  const slotOf = useMemo(() => {
+    const group = new Map(categories.map((c) => [c.id, c.group_name]));
+    return (id: string | null) => {
+      const g = id ? group.get(id) : undefined;
+      return g ? (groupSlots[g] ?? null) : null;
+    };
+  }, [categories, groupSlots]);
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [rows, setRows] = useState(initial);
@@ -196,16 +206,10 @@ export function TransactionTable({
             it actually is. Gross, with credits beside it, so it is the same
             figure the Flow draws for this filter. */}
         <div className="text-xs text-ink-faint">
-          {/* Income and investing are not spending, so a register opened on
-              either from the Flow says what it holds in the Flow's own words:
-              the figure clicked is on this line (V2). */}
-          {totals.income_cents !== 0 && (
-            <>Received <Figure cents={totals.income_cents} tone="neutral" signed />{' · '}</>
+          {(totals.spent_cents !== 0 || totals.credit_cents !== 0
+            || (totals.income_cents === 0 && totals.invested_cents === 0)) && (
+            <>Spent <Figure cents={-totals.spent_cents} tone="neutral" /></>
           )}
-          {totals.invested_cents !== 0 && (
-            <>Invested <Figure cents={totals.invested_cents} tone="neutral" />{' · '}</>
-          )}
-          Spent <Figure cents={-totals.spent_cents} tone="neutral" />
           {/* With credits the net is printed too: the Flow links here with a
               gross figure and Cashflow with a net one, and whichever was
               clicked has to be on this line (V2). */}
@@ -216,6 +220,17 @@ export function TransactionTable({
               {' · net '}
               <Figure cents={totals.credit_cents - totals.spent_cents} tone="neutral" />
             </>
+          )}
+          {/* Income and investing are not spending, so a register opened on
+              either from the Flow says what it holds in the Flow's own words:
+              the figure clicked is on this line (V2). */}
+          {totals.income_cents !== 0 && (
+            <>{totals.spent_cents !== 0 || totals.credit_cents !== 0 ? ' · received ' : 'Received '}
+              <Figure cents={totals.income_cents} tone="neutral" signed /></>
+          )}
+          {totals.invested_cents !== 0 && (
+            <>{totals.spent_cents !== 0 || totals.credit_cents !== 0 || totals.income_cents !== 0 ? ' · invested ' : 'Invested '}
+              <Figure cents={totals.invested_cents} tone="neutral" /></>
           )}
           {rows.length < total && (
             <>
@@ -269,6 +284,8 @@ export function TransactionTable({
               // Rows are sorted by date descending, so a repeat is always the
               // row immediately above.
               repeatsDate={i > 0 && rows[i - 1]!.eff_posted_date === txn.eff_posted_date}
+              groupSlot={slotOf(txn.category_id)}
+              groupSlots={groupSlots}
               selected={selected.has(txn.id)}
               onSelect={toggle}
               onPatch={(id, p) => patch.mutate({ id, patch: p })}
@@ -325,6 +342,7 @@ export function TransactionTable({
                 <div className="absolute bottom-full right-0 z-50 mb-1">
                   <CategoryPalette
                     categories={categories}
+                    groupSlots={groupSlots}
                     onPick={(id) => {
                       // Bulk-clearing to Uncategorized is not offered: the
                       // palette's clear row only appears for a single row's

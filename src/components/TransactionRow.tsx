@@ -23,8 +23,13 @@ export function TransactionRow({
   onConfirm,
   pending,
   repeatsDate,
+  groupSlot,
+  groupSlots,
 }: {
+  groupSlots?: Record<string, number>;
   txn: VTransaction;
+  /** The category's group palette slot: its colour everywhere (V10). */
+  groupSlot?: number | null;
   categories: CategoryWithGroup[];
   selected: boolean;
   /** The row above shares this date, so printing it again says nothing. */
@@ -80,7 +85,9 @@ export function TransactionRow({
   // A machine chose it and no human has confirmed. NOT amber — amber is
   // reserved for "a human changed this" (CLAUDE.md), and this is the opposite:
   // nobody has touched it yet.
+  // A voided row is out of the ledger; there is nothing to confirm about it.
   const isGuess =
+    !voided &&
     !txn.category_locked &&
     txn.category_id !== null &&
     GUESS_SOURCES.includes(txn.category_source);
@@ -179,6 +186,13 @@ export function TransactionRow({
           onClick={() => setExpanded(true)}
           className="flex min-w-0 items-center gap-2 text-left text-sm text-ink-dim transition-colors hover:text-ink"
         >
+          {txn.category_id && (
+            <span
+              aria-hidden
+              className="swatch"
+              style={{ background: groupSlot ? `var(--color-group-${groupSlot})` : 'var(--color-chart-strong)' }}
+            />
+          )}
           <span className="truncate">{txn.category_name ?? 'Uncategorized'}</span>
         </button>
 
@@ -282,6 +296,7 @@ export function TransactionRow({
           <RowEditor
             txn={txn}
             categories={categories}
+            groupSlots={groupSlots}
             onPatch={onPatch}
             onClose={() => setExpanded(false)}
           />

@@ -54,6 +54,10 @@ export function PeriodPicker({
   const go = useCallback((key: string) => {
     const next = new URLSearchParams(params.toString());
     next.set('period', key);
+    // Explicit dates from a figure's link win over the period, so picking a
+    // period has to drop them or it would change nothing.
+    next.delete('from');
+    next.delete('to');
     router.push(`${pathname}?${next.toString()}`);
     setOpen(null);
   }, [router, pathname, params]);
