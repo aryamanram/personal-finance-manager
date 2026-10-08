@@ -247,7 +247,7 @@ These hold for every change below. Each gets a test.
   Cashflow category list and the Flow drilldown are replaced by the table
   view.
 - **More colour against V9.** One hue per category cannot work — the seeded
-  taxonomy alone has thirty spending categories, and past eight hues no
+  taxonomy alone has twenty-eight spending categories, and past eight hues no
   colour can be told apart. Colouring by group gives six to eight
   hues, each meaning something. Making the buckets neutral is what lets the
   group colours carry without the two systems competing.
