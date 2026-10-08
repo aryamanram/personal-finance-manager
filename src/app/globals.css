@@ -76,6 +76,30 @@
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
 
+/* How much of a ribbon's colour shows — the one value light-dark() cannot
+   carry, because it is not a colour. A translucent colour on a dark ground
+   reads darker than on a light one, so the dark theme shows more of it. */
+:root {
+  --ribbon: 0.42;
+  --ribbon-lit: 0.72;
+  --ribbon-neutral: 0.16;
+  --ribbon-neutral-lit: 0.36;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ribbon: 0.6;
+    --ribbon-lit: 0.88;
+    --ribbon-neutral: 0.2;
+    --ribbon-neutral-lit: 0.42;
+  }
+}
+:root[data-theme="dark"] {
+  --ribbon: 0.6;
+  --ribbon-lit: 0.88;
+  --ribbon-neutral: 0.2;
+  --ribbon-neutral-lit: 0.42;
+}
+
 html, body {
   background: var(--color-ground);
   color: var(--color-ink);
@@ -132,6 +156,27 @@ html, body {
   border-radius: 1px;
   flex-shrink: 0;
 }
+
+/* The Flow pours in, left to right, once — money arriving and splitting into
+   what it became. The only motion on the page; reduced motion skips it. */
+@keyframes flow-reveal {
+  from { clip-path: inset(0 100% 0 0); }
+  to   { clip-path: inset(0 0 0 0); }
+}
+.flow-reveal { animation: flow-reveal 720ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+
+/* A label over the ribbons keeps a ground-coloured halo, so it stays
+   readable whatever passes beneath it. */
+.flow-label {
+  paint-order: stroke;
+  stroke: var(--color-ground);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+/* SVG groups take no outline of their own shape; the chart draws a ring. */
+.flow-node:focus-visible { outline: none; }
+.flow-focus { visibility: hidden; }
+.flow-node:focus-visible .flow-focus { visibility: visible; }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: var(--color-ground); }

@@ -567,3 +567,59 @@ export function categoryGraph(
 
   return { nodes, links };
 }
+
+// ---------------------------------------------------------------------------
+// What can be looked inside
+// ---------------------------------------------------------------------------
+
+/** A category or subcategory that spent this period, for the picker. */
+export interface InsideOption {
+  id: string;
+  name: string;
+  group: string;
+  slot: number | null;
+  /** Across both buckets: a category spent in two is one choice. */
+  cents: number;
+  /** The parent, for a subcategory. */
+  parentId?: string;
+  parentName?: string;
+  /** Whether it has subcategories that spent this period. */
+  split?: boolean;
+}
+
+/**
+ * Every category and subcategory that spent this period, in palette order:
+ * by group, then by amount, each parent followed by its subcategories.
+ */
+export function insideOptions(m: FlowModel | null): InsideOption[] {
+  const cats = new Map<string, InsideOption & { kids: Map<string, InsideOption> }>();
+  for (const b of m?.buckets ?? []) {
+    for (const c of b.categories) {
+      if (!c.id) continue;
+      const opt = cats.get(c.id) ?? { id: c.id, name: c.name, group: c.group, slot: c.slot, cents: 0, kids: new Map() };
+      opt.cents += c.cents;
+      for (const k of c.children) {
+        if (k.general || !k.id) continue;
+        const kid = opt.kids.get(k.id) ?? {
+          id: k.id, name: k.name, group: c.group, slot: c.slot, cents: 0, parentId: c.id, parentName: c.name,
+        };
+        kid.cents += k.cents;
+        opt.kids.set(k.id, kid);
+      }
+      cats.set(c.id, opt);
+    }
+  }
+  return [...cats.values()]
+    .sort((a, b) => (a.slot ?? 99) - (b.slot ?? 99) || a.group.localeCompare(b.group) || byCents(a, b))
+    .flatMap(({ kids, ...c }) => [{ ...c, split: kids.size > 0 }, ...[...kids.values()].sort(byCents)]);
+}
+
+/**
+ * What to show inside when nothing has been chosen: the largest category
+ * that splits into subcategories, since that is the view this level exists
+ * for; failing that, the largest category.
+ */
+export function defaultInside(options: InsideOption[]): InsideOption | undefined {
+  const top = options.filter((o) => !o.parentId).sort(byCents);
+  return top.find((o) => o.split) ?? top[0];
+}
