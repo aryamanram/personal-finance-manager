@@ -33,7 +33,7 @@ export function NavLinks({ items, period }: { items: readonly NavItem[]; period:
   const pathname = usePathname();
 
   return (
-    <nav className="flex items-center gap-6">
+    <nav className="-mx-6 flex w-[calc(100%+3rem)] items-center gap-6 overflow-x-auto px-6 sm:mx-0 sm:w-auto sm:overflow-visible sm:px-0">
       {items.map((item) => {
         // The Flow answers at / and at its old address. /categories/[id] is a
         // drill-down of the register and has no nav entry of its own, so it
@@ -53,7 +53,7 @@ export function NavLinks({ items, period }: { items: readonly NavItem[]; period:
             href={href}
             aria-current={active ? 'page' : undefined}
             className={clsx(
-              'flex items-baseline gap-1.5 text-sm transition-colors',
+              'flex shrink-0 items-baseline gap-1.5 text-sm transition-colors',
               active ? 'font-medium text-ink' : 'text-ink-faint hover:text-ink',
             )}
           >

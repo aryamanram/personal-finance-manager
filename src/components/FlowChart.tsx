@@ -256,9 +256,15 @@ export function FlowChart({
                 className={clsx('outline-none', interactive && 'cursor-pointer', 'flow-node')}
                 style={{ opacity: dim ? 0.35 : 1 }}
               >
-                {/* A hit area taller than a thin node, so a $4 category is
-                    still something you can point at. */}
-                <rect x={x0 - 4} y={y0 + h / 2 - 9} width={x1 - x0 + 8} height={Math.max(18, h)} fill="transparent" />
+                {/* A hit area taller than a thin node and as wide as its
+                    label, so a $4 category is still something you can point
+                    at, and the gap inside a label is not a miss. */}
+                {(() => {
+                  const lw = n.label ? labelWidth(n) + LABEL_GAP : 0;
+                  const hx = left ? x0 - lw - 4 : x0 - 4;
+                  const hy = h >= 18 ? y0 : y0 + h / 2 - 9;
+                  return <rect x={hx} y={hy} width={x1 - x0 + lw + 8} height={Math.max(18, h)} fill="transparent" />;
+                })()}
                 <rect x={x0} y={y0} width={x1 - x0} height={h} fill={fill(n.tone, hatch)} rx={1.5} />
                 {n.tone.kind === 'hatch' && (
                   <rect x={x0 + 0.5} y={y0 + 0.5} width={x1 - x0 - 1} height={Math.max(0, h - 1)} fill="none"

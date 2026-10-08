@@ -32,7 +32,7 @@ const PLOT_W = W - PAD_L - PAD_R;
 const PLOT_H = H - PAD_T - PAD_B;
 
 /** Share of each slot taken by the bar; the rest is the gap between months. */
-const BAR_SHARE = 0.56;
+const BAR_SHARE = 0.38;
 /** A gap so stacked segments never touch, and the boundary stays readable. */
 const SEAM = 2;
 
@@ -74,11 +74,13 @@ export function CostMixChart({ data }: { data: MonthlyCashflow[] }) {
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(max * f));
 
   const slot = PLOT_W / rows.length;
-  const barW = Math.min(slot * BAR_SHARE, 64);
+  const barW = Math.min(slot * BAR_SHARE, 40);
   const y = (cents: number) => PAD_T + PLOT_H - (cents / max) * PLOT_H;
 
   return (
-    <figure className="w-full">
+    // At most its own drawing size: scaled up, its axis labels grew past the
+    // page's type size.
+    <figure className="w-full max-w-[960px]">
       <svg
         viewBox={`0 0 ${W} ${H}`}
         className="h-auto w-full"

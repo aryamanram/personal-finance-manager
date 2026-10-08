@@ -197,6 +197,13 @@ export function ReviewInbox({
                   <span className="figure text-xs text-ink-faint">{formatRegisterDate(r.eff_posted_date)}</span>
                   <span className="min-w-0">
                     <span className="block truncate text-sm text-ink">{r.eff_description}</span>
+                    {/* The category has no column of its own on a phone. */}
+                    <span className="mt-0.5 flex items-center gap-1.5 text-xs text-ink-dim sm:hidden">
+                      {r.category_id && (
+                        <span aria-hidden className="swatch" style={{ background: slot ? `var(--color-group-${slot})` : 'var(--color-chart-strong)' }} />
+                      )}
+                      {r.category_name ?? 'Uncategorized'}
+                    </span>
                     {selected && (
                       <span className="mt-0.5 block truncate text-xs text-ink-faint">
                         {r.account_name}

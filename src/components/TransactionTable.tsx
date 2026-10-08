@@ -205,7 +205,7 @@ export function TransactionTable({
             and the fact that the view is truncated, which only matters when
             it actually is. Gross, with credits beside it, so it is the same
             figure the Flow draws for this filter. */}
-        <div className="text-xs text-ink-faint">
+        <div className="text-xs text-ink-faint" data-totals>
           {(totals.spent_cents !== 0 || totals.credit_cents !== 0
             || (totals.income_cents === 0 && totals.invested_cents === 0)) && (
             <>Spent <Figure cents={-totals.spent_cents} tone="neutral" /></>

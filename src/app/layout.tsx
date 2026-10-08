@@ -66,14 +66,18 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="min-h-screen bg-ground" suppressHydrationWarning>
         <Providers>
           <header className="rule-b sticky top-0 z-30 bg-ground/95 backdrop-blur">
-            <div className="mx-auto flex max-w-[1400px] items-center gap-8 px-6 py-3">
+            {/* On a phone the nav takes a row of its own and scrolls sideways,
+                rather than pushing the whole page wider than the screen. */}
+            <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-8 gap-y-2 px-6 py-3">
               <span className="figure text-sm font-semibold tracking-tight text-ink">ledger</span>
               {/* The nav reads the URL's period, which suspends on the server.
                   The fallback is the same links without it, so the header
                   never paints empty while the boundary resolves. */}
-              <Suspense fallback={<NavLinks items={nav} period={null} />}>
-                <Nav items={nav} />
-              </Suspense>
+              <div className="order-last w-full sm:order-none sm:w-auto">
+                <Suspense fallback={<NavLinks items={nav} period={null} />}>
+                  <Nav items={nav} />
+                </Suspense>
+              </div>
               <div className="ml-auto">
                 <ThemeSwitch initial={theme} />
               </div>

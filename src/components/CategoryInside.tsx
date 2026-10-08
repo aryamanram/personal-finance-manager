@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import clsx from 'clsx';
 import { FlowChart } from './FlowChart';
+import { useNarrow } from '@/lib/use-narrow';
 import { Figure } from './Figure';
 import { Segmented } from './FlowView';
 import { categoryGraph, type CategoryFlowModel, type InsideOption } from '@/lib/flow';
@@ -32,7 +33,11 @@ export function CategoryInside({
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const [view, setView] = useState<'chart' | 'table'>('chart');
+  // Five columns do not fit a phone: there the table comes first, and the
+  // chart is a tap away, scrolling sideways.
+  const narrow = useNarrow();
+  const [chosen, setView] = useState<'chart' | 'table' | null>(null);
+  const view = chosen ?? (narrow ? 'table' : 'chart');
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   // A new category starts folded again.
   useEffect(() => { setExpanded(new Set()); }, [detail?.id]);
