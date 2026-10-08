@@ -40,28 +40,47 @@ export function fontFamilies(layout: string): Map<string, string> {
 /**
  * Every custom property in the @theme block, with the comment that explains
  * it. A comment describes the declarations after it, up to the next blank
- * line or comment — which is how globals.css is written.
+ * line or comment — which is how globals.css is written — except one on the
+ * same line AFTER a declaration, which describes that declaration.
+ *
+ * Read as a sequence of comments, declarations and blank lines rather than
+ * line by line, so a declaration that shares a line with a comment is not
+ * skipped. Anything else in the block stops the build.
  */
 export function themeDeclarations(css: string): { name: string; value: string; description?: string }[] {
   const block = /@theme\s*\{([\s\S]*?)\n\}/.exec(css);
   if (!block) throw new Error('globals.css has no @theme block');
+  const body = block[1];
 
   const out: { name: string; value: string; description?: string }[] = [];
   let comment: string | undefined;
-  const lines = block[1].split('\n');
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (line === '') { comment = undefined; continue; }
-    if (line.startsWith('/*')) {
-      const parts = [line];
-      while (!parts[parts.length - 1].includes('*/')) parts.push(lines[++i].trim());
-      comment = parts.join(' ').replace(/^\/\*|\*\/$/g, '').replace(/\s+/g, ' ').trim();
-      continue;
+  let lastDeclarationEnd = -1;
+  let at = 0;
+  const unreadable = (text: string) => {
+    if (text.trim() !== '') throw new Error(`Unreadable text in @theme: ${text.trim()}`);
+  };
+
+  for (const m of body.matchAll(/\/\*([\s\S]*?)\*\/|(--[a-z0-9-]+)\s*:\s*([^;]+);|\n[ \t]*\n/g)) {
+    unreadable(body.slice(at, m.index));
+    at = m.index + m[0].length;
+
+    if (m[1] !== undefined) {
+      const text = m[1].replace(/\s+/g, ' ').trim();
+      const sameLine = lastDeclarationEnd >= 0 && !body.slice(lastDeclarationEnd, m.index).includes('\n');
+      if (sameLine) {
+        const d = out[out.length - 1];
+        d.description = d.description ? `${d.description} ${text}` : text;
+      } else {
+        comment = text;
+      }
+    } else if (m[2] !== undefined) {
+      out.push({ name: m[2], value: m[3].trim(), description: comment });
+      lastDeclarationEnd = at;
+    } else {
+      comment = undefined; // a blank line ends a comment's reach
     }
-    const decl = /^(--[a-z0-9-]+)\s*:\s*([^;]+);$/.exec(line);
-    if (!decl) throw new Error(`Unreadable line in @theme: ${line}`);
-    out.push({ name: decl[1], value: decl[2].trim(), description: comment });
   }
+  unreadable(body.slice(at));
   return out;
 }
 

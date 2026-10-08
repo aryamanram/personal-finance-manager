@@ -38,13 +38,15 @@ describe('docs/design/tokens.json is globals.css, for Figma', () => {
   });
 
   it('carries every @theme custom property', () => {
-    const declared = [...css.matchAll(/^\s*(--(?:color|font)-[a-z0-9-]+)\s*:/gm)].map((m) => m[1]);
+    // Counted without the generator's parser: comments stripped, then every
+    // declaration anywhere in the block, including one sharing a comment's line.
+    const theme = /@theme\s*\{([\s\S]*?)\n\}/.exec(css)![1].replace(/\/\*[\s\S]*?\*\//g, '');
+    const declared = [...theme.matchAll(/(--(?:color|font)-[a-z0-9-]+)\s*:/g)].map((m) => m[1]);
     const tokens = [
       ...Object.keys(committed[SET].color).map((n) => `--color-${n}`),
       ...Object.keys(committed[SET].font).map((n) => `--font-${n}`),
     ];
     expect(tokens.sort()).toEqual([...new Set(declared)].sort());
-    expect(Object.keys(committed[SET].color).length).toBe(20);
   });
 
   it('is a file Tokens Studio can load', () => {
@@ -72,11 +74,26 @@ describe('docs/design/tokens.json is globals.css, for Figma', () => {
     expect(committed[SET].color.edited.$description).toMatch(/Reserved for human edits/);
   });
 
+  it('reads a declaration that shares a line with a comment', () => {
+    const theme = (body: string) => `@theme {\n${body}\n}\n`;
+    const t = buildTokens(theme([
+      '  /* before */ --color-a: #111111;',
+      '  --color-b: #222222; /* after b */',
+      '  --color-c: #333333;',
+    ].join('\n')), layout).ledger.color;
+    expect(Object.keys(t)).toEqual(['a', 'b', 'c']);
+    expect(t.a.$description).toBe('before');
+    // "after b" describes b, and "before" still reaches c — no blank line between.
+    expect(t.b.$description).toBe('before after b');
+    expect(t.c.$description).toBe('before');
+  });
+
   it('refuses what it cannot translate rather than guessing', () => {
     const theme = (body: string) => `@theme {\n${body}\n}\n`;
     expect(() => buildTokens(theme('  --color-x: oklch(70% 0.1 200);'), layout)).toThrow(/not a #rrggbb/);
     expect(() => buildTokens(theme('  --font-x: var(--font-unknown), serif;'), layout)).toThrow(/cannot resolve/);
     expect(() => buildTokens(theme('  --radius-x: 4px;'), layout)).toThrow(/no token type/);
+    expect(() => buildTokens(theme('  --color-x #123456;'), layout)).toThrow(/Unreadable/);
   });
 });
 
