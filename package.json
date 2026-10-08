@@ -4,12 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev -H 127.0.0.1",
+    "dev": "next dev -H 127.0.0.1 -p 3000",
     "dev:demo": "tsx scripts/demo-db.ts dev",
     "build": "next build",
-    "start": "next start -H 127.0.0.1",
+    "start": "next start -H 127.0.0.1 -p 3000",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:visual": "playwright test screens",
+    "test:visual:update": "playwright test screens --update-snapshots",
+    "test:a11y": "playwright test a11y",
     "test:watch": "vitest",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
@@ -19,6 +22,7 @@
     "db:rotate-password": "tsx scripts/rotate-db-password.ts",
     "seed": "tsx scripts/seed-demo.ts",
     "demo:setup": "tsx scripts/demo-db.ts setup",
+    "demo:reseed": "tsx scripts/demo-db.ts reseed",
     "sync": "tsx scripts/sync.ts",
     "sync:schedule": "bash scripts/sync-schedule.sh",
     "import": "tsx scripts/import-csv.ts",
@@ -48,7 +52,9 @@
     "zod": "^4.6.4"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@mermaid-js/mermaid-cli": "^11.12.0",
+    "@playwright/test": "1.64.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/d3-sankey": "^0.12.5",
     "@types/node": "^26.5.1",
@@ -62,5 +68,8 @@
     "tsx": "^4.23.13",
     "typescript": "^7.0.2",
     "vitest": "^5.0.0"
+  },
+  "overrides": {
+    "playwright-core": "1.64.0"
   }
 }

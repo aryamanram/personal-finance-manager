@@ -223,12 +223,41 @@ the machine — some into this public repo.
 ```bash
 npm run demo:setup   # (re)create finance_demo beside the real database, seeded
 npm run dev:demo     # the app on http://127.0.0.1:3001, reading finance_demo
+npm run demo:reseed  # back to the seeded state, keeping the schema
 ```
 
 The demo database lives in the same Postgres as the real one, under its own
 name, and is rebuilt from `scripts/seed-demo.ts` every time — pinned to a
 fixed date, so it renders identically run to run. The demo app builds into
-`.next-demo/` on port 3001, so it runs alongside `npm run dev`.
+`.next-demo/` on port 3001, so it runs alongside `npm run dev` (which is
+pinned to :3000 — unpinned, Next would fall back to :3001 when :3000 is
+busy, and the real ledger would sit where the design tools expect the demo).
+
+`demo:setup` drops and re-applies the schema, which leaves a running
+`dev:demo` holding stale type OIDs — restart it afterwards. `demo:reseed`
+only truncates and refills, so it is safe with the server up.
+
+### Visual and accessibility tests
+
+```bash
+npm run test:visual          # every page, desktop and phone, against its baseline
+npm run test:visual:update   # accept the current rendering as the new baseline
+npm run test:a11y            # axe, WCAG 2.1 A and AA
+```
+
+Playwright starts `dev:demo` (or reuses one already running), reseeds the
+demo, and refuses to run unless :3001 is showing the synthetic ledger.
+Baselines live in `tests/visual/__screenshots__/`, per platform, and are
+committed — they are pictures of invented data, never the real ledger. A
+failed comparison leaves the expected, actual and diff images in
+`test-results/`; `npx playwright show-report` shows them side by side.
+
+`test:a11y` holds the violations axe finds today in a list in
+`tests/visual/a11y.spec.ts`. The comparison is exact: a new violation fails,
+and so does fixing a listed one until its line is deleted.
+
+Neither suite is part of `prepush`. During a redesign the baselines are
+meant to change; run them deliberately, look at the diffs, then update.
 
 ### Agent tooling
 

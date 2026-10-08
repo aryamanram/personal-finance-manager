@@ -106,8 +106,14 @@ async function main() {
     RETURNING id`;
 
   const txns: CanonicalTxn[] = [];
-  const add = (t: Partial<CanonicalTxn> & Pick<CanonicalTxn, 'accountId' | 'amountCents' | 'postedDate' | 'rawDescription'>) =>
+  // The ledger ends today. Whole months are generated, so without this the
+  // rest of the current one would post in advance — a paycheck on the 30th
+  // in a ledger that ends on the 28th.
+  const todayIso = iso(today);
+  const add = (t: Partial<CanonicalTxn> & Pick<CanonicalTxn, 'accountId' | 'amountCents' | 'postedDate' | 'rawDescription'>) => {
+    if (t.postedDate > todayIso) return;
     txns.push({ status: 'posted', source: 'simplefin', externalId: null, ...t });
+  };
 
   let extId = 0;
   const sf = () => `demo-sf-${++extId}`;
@@ -126,7 +132,10 @@ async function main() {
     const month = new Date(today.getFullYear(), today.getMonth() - m, 1);
     const y = month.getFullYear();
     const mo = month.getMonth();
-    const day = (d: number) => iso(new Date(y, mo, d));
+    // Clamped to the month, so "the 30th" in February is its last day rather
+    // than rolling over to March 2nd.
+    const lastDay = new Date(y, mo + 1, 0).getDate();
+    const day = (d: number) => iso(new Date(y, mo, Math.min(d, lastDay)));
 
     // --- Income: semi-monthly payroll ------------------------------------
     for (const d of [15, 30]) {
@@ -236,7 +245,7 @@ async function main() {
     RETURNING id`;
   await sql`
     UPDATE transactions
-    SET voided_at = now(), void_reason = 'Duplicate — bank posted this twice'
+    SET voided_at = ${today}, void_reason = 'Duplicate — bank posted this twice'
     WHERE id = ${dup.id}`;
 
   console.log('· rules');
@@ -318,8 +327,10 @@ async function main() {
   console.log('· brokerage snapshots');
   let value = 8_000_000;   // $80,000 opening position, predating tracking
   for (let m = MONTHS; m >= 0; m--) {
-    const d = new Date(today.getFullYear(), today.getMonth() - m + 1, 0);
-    if (m < MONTHS) value += 200000;                    // the contribution
+    // Month-end valuations; the current month's is today's, not its last day.
+    const monthEnd = new Date(today.getFullYear(), today.getMonth() - m + 1, 0);
+    const d = monthEnd > today ? today : monthEnd;
+    if (m < MONTHS) value += 200000;                  // the contribution
     value = Math.round(value * (1 + (rand() - 0.42) * 0.04));  // market drift
     await sql`
       INSERT INTO balance_snapshots (account_id, as_of, balance_cents, source)
@@ -332,7 +343,7 @@ async function main() {
   // reconciliation banner that never fires is untested UI.
   console.log('· reconciling account balances');
   await sql`
-    UPDATE accounts a SET balance_cents = led.total, balance_as_of = now()
+    UPDATE accounts a SET balance_cents = led.total, balance_as_of = ${today}
     FROM (
       SELECT account_id, COALESCE(SUM(amount_cents), 0)::bigint AS total
       FROM transactions WHERE voided_at IS NULL AND superseded_by_id IS NULL

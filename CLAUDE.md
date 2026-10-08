@@ -119,6 +119,8 @@ For visual work, these are available and worth using rather than improvising:
 npm run dev              # app on :3000
 npm test                 # the whole suite
 npm run prepush          # privacy + typecheck + tests + diagrams
+npm run test:visual      # screenshot regression against the demo ledger
+npm run test:a11y        # axe against the demo ledger
 npm run sync             # pull from SimpleFIN, categorise, match transfers
 npm run recategorize     # re-run rules over a date range, after editing them
 npm run import <file>    # a statement the feed cannot reach
