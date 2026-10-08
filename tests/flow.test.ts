@@ -44,6 +44,11 @@ beforeAll(async () => {
   process.env.DATABASE_URL = db.url;
   q = await import('@/lib/queries');
 
+  // A subcategory, so a parent's own rows and its rolled-up total differ.
+  await sql`
+    INSERT INTO categories (group_id, name, parent_id, default_cost_type, default_necessity)
+    SELECT group_id, 'Groceries Bulk', id, default_cost_type, default_necessity
+    FROM categories WHERE name = 'Groceries'`;
   for (const { id, name } of await sql<{ id: string; name: string }[]>`SELECT id, name FROM categories`) cat[name] = id;
   const [inst] = await sql<{ id: string }[]>`INSERT INTO institutions (name, source) VALUES ('Bank', 'simplefin') RETURNING id`;
   [{ id: accountId }] = await sql<{ id: string }[]>`
@@ -56,6 +61,9 @@ beforeAll(async () => {
   await insert({ description: 'GROCER', amountCents: -30000, postedDate: '2026-05-03', category: 'Groceries' });
   await insert({ description: 'GROCER REFUND', amountCents: 2000, postedDate: '2026-05-09', category: 'Groceries' });
   await insert({ description: 'BISTRO', amountCents: -15000, postedDate: '2026-05-06', category: 'Restaurants' });
+  // One grocery run filed as discretionary: Groceries now sits in two buckets.
+  await insert({ description: 'GROCER PARTY', amountCents: -5000, postedDate: '2026-05-20', category: 'Groceries', necessityOverride: 'discretionary' });
+  await insert({ description: 'WAREHOUSE CLUB', amountCents: -7000, postedDate: '2026-05-21', category: 'Groceries Bulk' });
   // Daily Cash: a credit filed against discretionary spending, nothing else in it.
   await insert({ description: 'DAILY CASH', amountCents: 222, postedDate: '2026-05-18', category: 'Reimbursement', necessityOverride: 'discretionary' });
   await insert({ description: 'BROKERAGE', amountCents: -100000, postedDate: '2026-05-16', category: 'Brokerage Contribution' });
@@ -111,12 +119,14 @@ describe('the Flow balances to the cent (V1)', () => {
     const { data, model } = await flowFor(MONTHS.may);
     expect(data.creditsCents).toBe(2000 + 222);
     // Reimbursement only took money back: nothing to draw, credit counted once.
-    expect(data.categories.map((c) => [c.category_name, c.total_cents, c.credit_cents])).toEqual([
-      ['Rent', 200000, 0], ['Groceries', 30000, 2000], ['Restaurants', 15000, 0],
+    expect(data.categories.map((c) => [c.category_name, c.necessity, c.total_cents, c.credit_cents])).toEqual([
+      ['Rent', 'required', 200000, 0], ['Groceries', 'required', 30000, 2000],
+      ['Restaurants', 'discretionary', 15000, 0], ['Groceries Bulk', 'required', 7000, 0],
+      ['Groceries', 'discretionary', 5000, 0],
     ]);
     expect(shape(model!)).toEqual({
       sources: { income: 500000, credits: 2222 },
-      buckets: { required: 230000, discretionary: 15000, invested: 100000, leftover: 157222 },
+      buckets: { required: 237000, discretionary: 20000, invested: 100000, leftover: 145222 },
       total: 502222,
     });
     expectBalanced(model!);
@@ -176,12 +186,24 @@ describe('gross minus credits is what the app already reports', () => {
 });
 
 describe('a category opens to the same number (V2)', () => {
-  it("gives each May category's register the Flow's figures", async () => {
+  it("opens each of May's Flow rows on exactly its figures", async () => {
     const { data } = await flowFor(MONTHS.may);
     for (const c of data.categories) {
-      const totals = await q.getTransactionTotals({ categoryIds: [c.category_id!], from: MONTHS.may[0], to: MONTHS.may[1] });
-      expect(totals, c.category_name).toEqual({ spent_cents: c.total_cents, credit_cents: c.credit_cents });
+      // What registerHref carries and the register page maps: the category
+      // itself (not its subcategories) and the bucket's necessity.
+      const totals = await q.getTransactionTotals({
+        leafCategoryIds: [c.category_id!], necessity: [c.necessity], from: MONTHS.may[0], to: MONTHS.may[1],
+      });
+      expect(totals, `${c.category_name} (${c.necessity})`).toEqual({ spent_cents: c.total_cents, credit_cents: c.credit_cents });
     }
+  });
+
+  it('needs both: the category alone, or with its subcategories, is a different number', async () => {
+    const may = { from: MONTHS.may[0], to: MONTHS.may[1] };
+    // Groceries' required figure in the Flow is 300.00; the looser filters are not.
+    expect((await q.getTransactionTotals({ ...may, leafCategoryIds: [cat.Groceries], necessity: ['required'] })).spent_cents).toBe(30000);
+    expect((await q.getTransactionTotals({ ...may, leafCategoryIds: [cat.Groceries] })).spent_cents).toBe(35000);
+    expect((await q.getTransactionTotals({ ...may, categoryIds: [cat.Groceries] })).spent_cents).toBe(42000);
   });
 
   it('totals every matching row, not just the page the register loads', async () => {
@@ -189,7 +211,9 @@ describe('a category opens to the same number (V2)', () => {
     const page = await q.getTransactions({ ...all, limit: 2 });
     expect(page.length).toBe(2);
     expect(await q.getTransactionTotals({ ...all, limit: 2 })).toEqual(await q.getTransactionTotals(all));
-    expect((await q.getTransactionTotals(all)).spent_cents).toBe(200000 + 30000 + 15000 + 200000 + 5000 + 4000 + 20000);
+    expect((await q.getTransactionTotals(all)).spent_cents).toBe(
+      200000 + 30000 + 15000 + 5000 + 7000 // May
+      + 200000 + 5000 + 4000 + 20000);     // June, July, August
   });
 
   it('counts the same rows it lists, whatever the filter', async () => {

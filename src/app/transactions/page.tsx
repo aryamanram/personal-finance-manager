@@ -7,7 +7,7 @@ import { FilterChips } from '@/components/FilterChips';
 import { PeriodPicker } from '@/components/PeriodPicker';
 import { buildPeriods } from '@/lib/periods';
 import { CategoryFilter } from '@/components/CategoryFilter';
-import type { CategoryWithGroup } from '@/lib/types';
+import { NECESSITIES, type CategoryWithGroup } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,7 +48,17 @@ export default async function TransactionsPage({
     .filter((c) => c.name === 'Credit Card Payment')
     .map((c) => c.id);
   const hideParam = one('hide');
-  const hiddenCategoryIds = resolveHidden(hideParam, allCategories, defaultHiddenIds);
+
+  // Opened from a figure (registerHref): exactly that category's rows, and
+  // its necessity when the figure was one bucket's share of a category.
+  // Validated rather than passed through — a malformed id would otherwise
+  // reach the query as a uuid cast and fail the whole page.
+  const linkedCategory = allCategories.find((c) => c.id === one('category'));
+  const linkedNecessity = NECESSITIES.find((n) => n === one('necessity'));
+  // A category asked for by name is shown even if it is hidden by default.
+  const hiddenCategoryIds = linkedCategory && !hideParam
+    ? []
+    : resolveHidden(hideParam, allCategories, defaultHiddenIds);
 
   const filters = {
     // An explicit from/to still wins, so a link with a hand-built range works.
@@ -56,6 +66,8 @@ export default async function TransactionsPage({
     to: one('to') ?? period?.to,
     accountIds: one('account') ? [one('account')!] : undefined,
     excludeCategoryIds: hiddenCategoryIds,
+    leafCategoryIds: linkedCategory ? [linkedCategory.id] : undefined,
+    necessity: linkedNecessity ? [linkedNecessity] : undefined,
     search: one('q'),
     uncategorizedOnly: one('uncategorized') === '1',
     needsReviewOnly: one('review') === '1',
@@ -101,6 +113,7 @@ export default async function TransactionsPage({
                 a search would silently un-hide everything. */}
             {passthrough(params, [
               'uncategorized', 'review', 'voided', 'from', 'to', 'period', 'hide',
+              'category', 'necessity',
             ])}
             <input
               name="q"
@@ -151,6 +164,20 @@ export default async function TransactionsPage({
           }}
           hasFilters={Object.keys(params).length > 0}
         />
+
+        {/* Said out loud, because the category filter's own control cannot
+            express "this one category" and the page would otherwise be
+            silently narrower than it looks. */}
+        {linkedCategory && (
+          <p className="text-xs text-paper-faint">
+            Only <span className="text-paper">{linkedCategory.name}</span>
+            {linkedNecessity && <> · {linkedNecessity}</>}
+            {' · '}
+            <a href={withoutParams(params, ['category', 'necessity'])} className="underline decoration-ink-500 underline-offset-4 hover:text-paper">
+              show every category
+            </a>
+          </p>
+        )}
       </header>
 
       <TransactionTable
@@ -193,6 +220,17 @@ export function resolveHidden(
     return categories.filter((c) => !shown.has(c.id)).map((c) => c.id);
   }
   return param.split(',').filter(Boolean);
+}
+
+/** This page's URL with some parameters dropped. */
+function withoutParams(params: Record<string, string | string[] | undefined>, drop: string[]): string {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (drop.includes(k) || v === undefined) continue;
+    for (const one of Array.isArray(v) ? v : [v]) p.append(k, one);
+  }
+  const q = p.toString();
+  return q ? `/transactions?${q}` : '/transactions';
 }
 
 /** Re-emits the chip filters as hidden inputs so the search form keeps them. */

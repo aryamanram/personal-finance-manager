@@ -5,6 +5,7 @@ import Link from 'next/link';
 import clsx from 'clsx';
 import { Figure } from './Figure';
 import type { CategoryBreakdownRow } from '@/lib/queries';
+import { registerHref } from '@/lib/register-link';
 
 /**
  * What sits under one band of the Sankey (wireframe 43:2).
@@ -109,11 +110,7 @@ export function FlowDrilldown({
             className="rule-b grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[180px_minmax(0,1fr)_100px_110px]"
           >
             <Link
-              href={
-                r.category_id
-                  ? `/transactions?category=${r.category_id}&from=${from}&to=${to}`
-                  : `/transactions?uncategorized=1&from=${from}&to=${to}`
-              }
+              href={registerHref({ categoryId: r.category_id, necessity: r.necessity, from, to })}
               className="truncate text-sm text-paper-dim transition-colors hover:text-paper"
             >
               {r.category_name}

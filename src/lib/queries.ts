@@ -25,6 +25,14 @@ export interface TransactionFilters {
    * Hiding a PARENT hides its subcategories with it, via rollup_category_id.
    */
   excludeCategoryIds?: string[];
+  /**
+   * These categories ONLY — not their subcategories, which categoryIds
+   * includes through rollup_category_id. The Flow and the category lists
+   * group by the category a row is filed under, so a link from one of their
+   * figures must count exactly those rows, or a parent's total in the
+   * register would include its children's and disagree with the figure (V2).
+   */
+  leafCategoryIds?: string[];
   necessity?: string[];
   costType?: string[];
   search?: string;
@@ -67,6 +75,7 @@ function transactionWhere(f: TransactionFilters) {
                    OR (NOT category_id = ANY(${f.excludeCategoryIds}::uuid[])
                        AND NOT rollup_category_id = ANY(${f.excludeCategoryIds}::uuid[])))`
         : sql``}
+      ${f.leafCategoryIds?.length ? sql`AND category_id = ANY(${f.leafCategoryIds}::uuid[])` : sql``}
       ${f.necessity?.length ? sql`AND eff_necessity::text = ANY(${f.necessity})` : sql``}
       ${f.costType?.length ? sql`AND eff_cost_type::text = ANY(${f.costType})` : sql``}
       ${f.uncategorizedOnly

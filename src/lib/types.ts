@@ -13,7 +13,8 @@ export type CategorySource =
  */
 export const GUESS_SOURCES: readonly CategorySource[] = ['rule', 'history', 'import'];
 export type CostType = 'fixed' | 'variable';
-export type Necessity = 'required' | 'discretionary' | 'income' | 'transfer' | 'investment';
+export const NECESSITIES = ['required', 'discretionary', 'income', 'transfer', 'investment'] as const;
+export type Necessity = (typeof NECESSITIES)[number];
 export type IngestSource = 'simplefin' | 'plaid' | 'csv' | 'ofx' | 'manual';
 
 export interface Account {
