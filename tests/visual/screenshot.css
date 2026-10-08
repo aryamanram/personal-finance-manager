@@ -1,0 +1,5 @@
+/* Injected into every toHaveScreenshot. Next's dev-mode badge and overlays
+   live in this element; they are tooling, not the app. */
+nextjs-portal {
+  display: none !important;
+}

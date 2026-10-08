@@ -2,6 +2,7 @@
  * A second, synthetic ledger to design against.
  *
  *   npm run demo:setup   # (re)create finance_demo and seed it — synthetic only
+ *   npm run demo:reseed  # back to the seeded state, keeping the schema
  *   npm run dev:demo     # the app on 127.0.0.1:3001, reading finance_demo
  *
  * Design work produces screenshots, Figma pushes, visual-test baselines and
@@ -19,14 +20,10 @@
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import postgres from 'postgres';
+import { DEMO_DB, DEMO_PORT, SEED_TODAY } from './demo-config.js';
 import { loadEnv } from './env.js';
 
 loadEnv();
-
-const DEMO_DB = 'finance_demo';
-const DEMO_PORT = '3001';
-/** The date the demo ledger ends on. Fixed, so screenshots are comparable. */
-const SEED_TODAY = '2026-09-28';
 
 function urls() {
   const real = process.env.DATABASE_URL;
@@ -95,23 +92,47 @@ async function setup() {
     await sql.end();
   }
 
+  await seed(demo);
+  // New schema, new type OIDs: a dev:demo already running holds the old ones
+  // and fails every query until it is restarted.
+  console.log(`\n✓ ${DEMO_DB} is ready — synthetic data ending ${SEED_TODAY}. Run (or restart): npm run dev:demo`);
+}
+
+/** seed-demo.ts TRUNCATEs and refills; it refuses if any row is not demo data. */
+async function seed(demo: string) {
   const code = await run('npx', ['tsx', 'scripts/seed-demo.ts'], {
     ...process.env, DATABASE_URL: demo, SEED_TODAY,
   });
   if (code !== 0) throw new Error(`seeding ${DEMO_DB} failed`);
-  console.log(`\n✓ ${DEMO_DB} is ready — synthetic data ending ${SEED_TODAY}. Run: npm run dev:demo`);
 }
 
-async function dev() {
-  const { demo } = urls();
-  // The demo app is what the design tools are allowed to see; check it is
-  // not about to serve the real ledger.
+async function checkDemo(demo: string) {
   const sql = postgres(demo, { max: 1, onnotice: () => {} });
   try {
     await assertDemo(sql);
   } finally {
     await sql.end();
   }
+}
+
+/**
+ * Back to the seeded state without touching the schema. Safe under a running
+ * dev:demo, which setup() is not: dropping the schema gives every enum a new
+ * OID, and the server's connections keep the old ones ("cache lookup failed
+ * for type"). After editing db/schema.sql, use setup and restart instead.
+ */
+async function reseed() {
+  const { demo } = urls();
+  await checkDemo(demo);
+  await seed(demo);
+  console.log(`✓ ${DEMO_DB} reseeded — synthetic data ending ${SEED_TODAY}`);
+}
+
+async function dev() {
+  const { demo } = urls();
+  // The demo app is what the design tools are allowed to see; check it is
+  // not about to serve the real ledger.
+  await checkDemo(demo);
   console.log(`· demo app on http://127.0.0.1:${DEMO_PORT}, reading ${DEMO_DB}`);
   // LEDGER_DEMO=1 is read by next.config.mjs: its own build directory, and
   // the only dev server that answers Next's MCP endpoint.
@@ -121,6 +142,7 @@ async function dev() {
   process.exitCode = code;
 }
 
-const cmd = process.argv[2];
-(cmd === 'setup' ? setup() : cmd === 'dev' ? dev() : Promise.reject(new Error('usage: demo-db.ts setup | dev')))
+const commands: Record<string, () => Promise<void>> = { setup, reseed, dev };
+const cmd = commands[process.argv[2]];
+(cmd ? cmd() : Promise.reject(new Error('usage: demo-db.ts setup | reseed | dev')))
   .catch((e) => { console.error(e instanceof Error ? e.message : e); process.exitCode = 1; });

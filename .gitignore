@@ -75,3 +75,7 @@ CLAUDE.local.md
 # Playwright MCP writes page snapshots and console logs here — a snapshot is
 # the page's text, so one taken of the real app would be real data.
 .playwright-mcp/
+
+# Playwright test output: reports and the actual/diff images of a failed run
+playwright-report/
+test-results/
