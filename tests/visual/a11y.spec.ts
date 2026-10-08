@@ -25,16 +25,16 @@ const KNOWN: Known[] = [
   { rule: 'color-contrast', element: 'span "▼ 50.0%"', pages: ['cashflow'] },
   { rule: 'color-contrast', element: 'span "▼ 75.5%"', pages: ['cashflow'] },
   { rule: 'color-contrast', element: 'a[aria-pressed=true][href=/transactions?from&to] "All"', pages: ['register'] },
-  { rule: 'color-contrast', element: 'a[aria-pressed=true][href=/transactions?category&from&to] "All"', pages: ['register-filtered'] },
+  { rule: 'color-contrast', element: 'a[aria-pressed=true][href=/transactions?category&from&necessity&to] "All"', pages: ['register-filtered'] },
   // Invest violet: 4.39:1.
   { rule: 'color-contrast', element: 'span "$2,000" in "Where it went"', pages: ['cashflow'] },
   // FilterChips are links carrying aria-pressed, which links do not allow.
   { rule: 'aria-allowed-attr', element: 'a[aria-pressed=true][href=/transactions?from&to] "All"', pages: ['register'] },
   { rule: 'aria-allowed-attr', element: 'a[aria-pressed=false][href=/transactions?from&review&to] "Needs review · 35"', pages: ['register'] },
   { rule: 'aria-allowed-attr', element: 'a[aria-pressed=false][href=/transactions?from&to&voided] "Voided"', pages: ['register'] },
-  { rule: 'aria-allowed-attr', element: 'a[aria-pressed=true][href=/transactions?category&from&to] "All"', pages: ['register-filtered'] },
-  { rule: 'aria-allowed-attr', element: 'a[aria-pressed=false][href=/transactions?category&from&review&to] "Needs review · 35"', pages: ['register-filtered'] },
-  { rule: 'aria-allowed-attr', element: 'a[aria-pressed=false][href=/transactions?category&from&to&voided] "Voided"', pages: ['register-filtered'] },
+  { rule: 'aria-allowed-attr', element: 'a[aria-pressed=true][href=/transactions?category&from&necessity&to] "All"', pages: ['register-filtered'] },
+  { rule: 'aria-allowed-attr', element: 'a[aria-pressed=false][href=/transactions?category&from&necessity&review&to] "Needs review · 35"', pages: ['register-filtered'] },
+  { rule: 'aria-allowed-attr', element: 'a[aria-pressed=false][href=/transactions?category&from&necessity&to&voided] "Voided"', pages: ['register-filtered'] },
   // The register's account filter has no accessible name.
   { rule: 'select-name', element: 'select[name=account] "All accountsChase Total Checking"', pages: REGISTER },
   // The accounts page: the statement import's account <select>, and the date
@@ -42,7 +42,7 @@ const KNOWN: Known[] = [
   { rule: 'select-name', element: 'select "Apple CardChase United Explorer" in "Import a statement"', pages: ['accounts'] },
   { rule: 'label', element: 'input[type=date] in "Morgan Stanley Brokerage"', pages: ['accounts'] },
   // The Sankey scrolls sideways on a phone but cannot be reached by keyboard.
-  { rule: 'scrollable-region-focusable', element: 'figure "Income → Available $5,400.00From"', pages: ['flow'], projects: ['mobile'] },
+  { rule: 'scrollable-region-focusable', element: 'figure "Income → Available $5,400.00Cred"', pages: ['flow'], projects: ['mobile'] },
 ];
 
 /**

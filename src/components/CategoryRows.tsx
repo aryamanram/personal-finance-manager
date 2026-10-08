@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Figure } from './Figure';
 import type { CategoryBreakdownRow } from '@/lib/queries';
+import { registerHref } from '@/lib/register-link';
 
 /**
  * Where the money went, as a ruled list (wireframe 40:3).
@@ -41,11 +42,7 @@ export function CategoryRows({
         >
           <div className="min-w-0">
             <Link
-              href={
-                r.category_id
-                  ? `/transactions?category=${r.category_id}&from=${from}&to=${to}`
-                  : `/transactions?uncategorized=1&from=${from}&to=${to}`
-              }
+              href={registerHref({ categoryId: r.category_id, necessity: r.necessity, from, to })}
               className="block truncate text-sm text-paper transition-colors hover:text-paper-dim"
             >
               {r.category_name}

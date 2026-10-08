@@ -5,6 +5,7 @@
  * amount or account here — this file is public.
  */
 import type { CategoryBreakdownRow } from '@/lib/queries';
+import type { FlowInput } from '@/lib/flow';
 import { buildPeriods } from '@/lib/periods';
 import type {
   CategoryWithGroup, CostType, MonthlyCashflow, Necessity, VTransaction,
@@ -87,12 +88,10 @@ export const september = cashflow[cashflow.length - 1];
 
 // --- Spending by category --------------------------------------------------
 //
-// What the app's own getCategoryBreakdownRange returns on the demo for each
-// month. September's discretionary rows sum to 222 cents MORE than its
-// discretionary total: getPeriodTotals nets the Daily Cash credit into the
-// bucket, while the breakdown drops any category whose net is a credit
-// (HAVING SUM > 0). The Flow page draws the same gap, so the stories keep it
-// rather than paper over it. August has the same shape (243 cents).
+// What the app's own getFlow returns on the demo for each month: gross money
+// out per category. The month's Daily Cash is not in any of these — it is a
+// credit, counted once as the Flow's Credits source (222 cents in September,
+// 243 in August), which is what makes the diagram balance.
 
 const row = (name: string, cents: number, count: number): CategoryBreakdownRow => {
   const c = category(name);
@@ -137,6 +136,17 @@ export const augustBreakdown: CategoryBreakdownRow[] = [
 ];
 
 export const SEPTEMBER = { from: '2026-09-01', to: '2026-09-30' };
+
+const flow = (totals: MonthlyCashflow, rows: CategoryBreakdownRow[], creditsCents: number): FlowInput => ({
+  incomeCents: totals.income_cents ?? 0,
+  investedCents: totals.invested_cents ?? 0,
+  creditsCents,
+  categories: rows.map((r) => ({ ...r, credit_cents: 0 })),
+});
+
+/** getFlow for each month, as the Flow page passes it to the Sankey. */
+export const septemberFlow = flow(cashflow[cashflow.length - 1], breakdown, 222);
+export const augustFlow = flow(cashflow[cashflow.length - 2], augustBreakdown, 243);
 
 // --- The period picker, built by the app's own code -------------------------
 

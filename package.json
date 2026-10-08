@@ -10,7 +10,7 @@
     "start": "next start -H 127.0.0.1 -p 3000",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:visual": "playwright test screens",
+    "test:visual": "playwright test screens links",
     "test:visual:update": "playwright test screens --update-snapshots",
     "test:a11y": "playwright test a11y",
     "storybook": "storybook dev -p 6006 --host 127.0.0.1 --no-open",
