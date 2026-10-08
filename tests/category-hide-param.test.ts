@@ -8,7 +8,7 @@
  * not written as fifty-five uuids.
  */
 import { describe, it, expect } from 'vitest';
-import { resolveHidden } from '@/app/transactions/page';
+import { resolveHidden } from '@/lib/register-filters';
 import type { CategoryWithGroup } from '@/lib/types';
 
 const cat = (id: string): CategoryWithGroup => ({

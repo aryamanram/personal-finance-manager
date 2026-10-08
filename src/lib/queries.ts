@@ -33,6 +33,13 @@ export interface TransactionFilters {
    * register would include its children's and disagree with the figure (V2).
    */
   leafCategoryIds?: string[];
+  /** These merchants' rows — a merchant figure in a category's own Flow. */
+  merchantIds?: string[];
+  /**
+   * Only money coming back on spending rows — refunds, Daily Cash. The
+   * Flow's Credits source opens to exactly these.
+   */
+  creditsOnly?: boolean;
   necessity?: string[];
   costType?: string[];
   search?: string;
@@ -76,6 +83,8 @@ function transactionWhere(f: TransactionFilters) {
                        AND NOT rollup_category_id = ANY(${f.excludeCategoryIds}::uuid[])))`
         : sql``}
       ${f.leafCategoryIds?.length ? sql`AND category_id = ANY(${f.leafCategoryIds}::uuid[])` : sql``}
+      ${f.merchantIds?.length ? sql`AND merchant_id = ANY(${f.merchantIds}::uuid[])` : sql``}
+      ${f.creditsOnly ? sql`AND counts_as_spending AND eff_amount_cents > 0` : sql``}
       ${f.necessity?.length ? sql`AND eff_necessity::text = ANY(${f.necessity})` : sql``}
       ${f.costType?.length ? sql`AND eff_cost_type::text = ANY(${f.costType})` : sql``}
       ${f.uncategorizedOnly
@@ -111,6 +120,10 @@ export interface TransactionTotals {
   spent_cents: number;
   /** Money back on spending rows — refunds, Daily Cash — as a positive number. */
   credit_cents: number;
+  /** Income received, as the Flow's Income source counts it. */
+  income_cents: number;
+  /** Net money into investments, as the Flow's Invested bucket counts it. */
+  invested_cents: number;
 }
 
 /**
@@ -127,7 +140,13 @@ export async function getTransactionTotals(f: TransactionFilters = {}): Promise<
       COALESCE(-SUM(eff_amount_cents) FILTER (
         WHERE counts_as_spending AND eff_amount_cents < 0), 0)::bigint AS spent_cents,
       COALESCE(SUM(eff_amount_cents) FILTER (
-        WHERE counts_as_spending AND eff_amount_cents > 0), 0)::bigint AS credit_cents
+        WHERE counts_as_spending AND eff_amount_cents > 0), 0)::bigint AS credit_cents,
+      -- The same predicates as getPeriodTotals, so a Flow figure for income
+      -- or investing lands on a register that prints the same number.
+      COALESCE(SUM(eff_amount_cents) FILTER (
+        WHERE eff_necessity = 'income'), 0)::bigint AS income_cents,
+      COALESCE(-SUM(eff_amount_cents) FILTER (
+        WHERE eff_necessity = 'investment'), 0)::bigint AS invested_cents
     FROM v_transactions
     ${transactionWhere(f)}`;
   return row;
@@ -216,6 +235,9 @@ export async function getPeriodTotals(from: string, to: string): Promise<PeriodT
 export interface FlowCategory extends CategoryBreakdownRow {
   /** Money back in this category over the range, positive; not in total_cents. */
   credit_cents: number;
+  /** The parent, for a subcategory; NULL for a top-level category. */
+  parent_id: string | null;
+  parent_name: string | null;
 }
 
 /** What the Flow draws for a range. Shaped for lib/flow.ts's buildFlow. */
@@ -248,6 +270,10 @@ export async function getFlow(from: string, to: string): Promise<FlowData> {
           category_id,
           COALESCE(category_name, 'Uncategorized')   AS category_name,
           COALESCE(category_group_name, 'Other')     AS category_group_name,
+          -- The view's rollup is the parent for a subcategory and the
+          -- category itself otherwise, so this is the parent or nothing.
+          CASE WHEN is_subcategory THEN rollup_category_id END   AS parent_id,
+          CASE WHEN is_subcategory THEN rollup_category_name END AS parent_name,
           eff_necessity::text                        AS necessity,
           eff_cost_type::text                        AS cost_type,
           COALESCE(-SUM(eff_amount_cents) FILTER (WHERE eff_amount_cents < 0), 0)::bigint AS spent,
@@ -256,19 +282,21 @@ export async function getFlow(from: string, to: string): Promise<FlowData> {
         FROM v_transactions
         WHERE counts_as_spending
           AND eff_posted_date >= ${from}::date AND eff_posted_date <= ${to}::date
-        GROUP BY 1,2,3,4,5
+        GROUP BY 1,2,3,4,5,6,7
       )
       SELECT
         category_id,
         category_name,
         category_group_name,
+        parent_id,
+        parent_name,
         necessity,
         (ARRAY_AGG(cost_type ORDER BY spent DESC))[1] AS cost_type,
         SUM(spent)::bigint                            AS total_cents,
         SUM(credit)::bigint                           AS credit_cents,
         SUM(txn_count)::int                           AS txn_count
       FROM per_axis
-      GROUP BY 1,2,3,4
+      GROUP BY 1,2,3,4,5,6
       ORDER BY total_cents DESC, category_name`,
   ]);
 
@@ -280,6 +308,72 @@ export async function getFlow(from: string, to: string): Promise<FlowData> {
     // is already in creditsCents.
     categories: categories.filter((c) => c.total_cents > 0),
   };
+}
+
+/**
+ * Each spending group's slot in the chart palette (globals.css, group-1..8),
+ * by group name.
+ *
+ * A slot is the group's position among the groups that hold spending
+ * categories, in the taxonomy's own order — so it moves only when the
+ * taxonomy does, never with a month's data (V10). Income and transfer groups
+ * hold no spending and take no slot. A ninth spending group gets none, and is
+ * drawn in neutral ink rather than in a generated colour.
+ */
+export async function getGroupSlots(): Promise<Record<string, number>> {
+  const rows = await sql<{ name: string; slot: number }[]>`
+    SELECT g.name, row_number() OVER (ORDER BY g.sort_order, g.name)::int AS slot
+    FROM category_groups g
+    WHERE EXISTS (
+      SELECT 1 FROM categories c
+      WHERE c.group_id = g.id AND NOT c.is_archived
+        AND c.default_necessity IN ('required', 'discretionary'))
+    ORDER BY slot`;
+  return Object.fromEntries(rows.filter((r) => r.slot <= GROUP_SLOTS).map((r) => [r.name, r.slot]));
+}
+
+/** How many colours the group palette has. */
+export const GROUP_SLOTS = 8;
+
+/** One merchant's spending under one category, for a category's own Flow. */
+export interface CategoryFlowRow {
+  category_id: string;
+  category_name: string;
+  necessity: string;
+  /** NULL when the rows have no merchant; merchant_name is then their description. */
+  merchant_id: string | null;
+  merchant_name: string;
+  total_cents: number;
+  credit_cents: number;
+  txn_count: number;
+}
+
+/**
+ * Everything spent in one category over a range — the category itself and
+ * every subcategory under it — down to the merchant.
+ *
+ * Gross, like getFlow, so the category's total here is the figure the main
+ * Flow drew for it. Rows with no merchant are grouped by their description,
+ * which is what the register would show for them.
+ */
+export async function getCategoryFlow(categoryId: string, from: string, to: string): Promise<CategoryFlowRow[]> {
+  return sql<CategoryFlowRow[]>`
+    SELECT
+      v.category_id,
+      v.category_name,
+      v.eff_necessity::text                                        AS necessity,
+      v.merchant_id,
+      COALESCE(m.display_name, v.eff_description)                  AS merchant_name,
+      COALESCE(-SUM(v.eff_amount_cents) FILTER (WHERE v.eff_amount_cents < 0), 0)::bigint AS total_cents,
+      COALESCE(SUM(v.eff_amount_cents) FILTER (WHERE v.eff_amount_cents > 0), 0)::bigint  AS credit_cents,
+      count(*)::int                                                AS txn_count
+    FROM v_transactions v
+    LEFT JOIN merchants m ON m.id = v.merchant_id
+    WHERE v.counts_as_spending
+      AND (v.category_id = ${categoryId} OR v.rollup_category_id = ${categoryId})
+      AND v.eff_posted_date >= ${from}::date AND v.eff_posted_date <= ${to}::date
+    GROUP BY 1,2,3,4,5
+    ORDER BY total_cents DESC, merchant_name`;
 }
 
 /** Category breakdown over an arbitrary range. */

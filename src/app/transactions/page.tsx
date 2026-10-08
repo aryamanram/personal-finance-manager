@@ -7,7 +7,7 @@ import { FilterChips } from '@/components/FilterChips';
 import { PeriodPicker } from '@/components/PeriodPicker';
 import { buildPeriods } from '@/lib/periods';
 import { CategoryFilter } from '@/components/CategoryFilter';
-import { NECESSITIES, type CategoryWithGroup } from '@/lib/types';
+import { registerView } from '@/lib/register-filters';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,45 +35,15 @@ export default async function TransactionsPage({
 
   const allCategories = await getCategories();
 
-  /**
-   * Categories hidden from the register.
-   *
-   * The URL carries what is HIDDEN, not what is shown, because the default is
-   * not "everything" — Credit Card Payment starts off. An absent param has to
-   * mean the default, so encoding the shown set would make a fresh load and a
-   * deliberately-empty selection look identical. `hide=none` is the explicit
-   * "show everything", which an absent param cannot express.
-   */
-  const defaultHiddenIds = allCategories
-    .filter((c) => c.name === 'Credit Card Payment')
-    .map((c) => c.id);
-  const hideParam = one('hide');
-
-  // Opened from a figure (registerHref): exactly that category's rows, and
-  // its necessity when the figure was one bucket's share of a category.
-  // Validated rather than passed through — a malformed id would otherwise
-  // reach the query as a uuid cast and fail the whole page.
-  const linkedCategory = allCategories.find((c) => c.id === one('category'));
-  const linkedNecessity = NECESSITIES.find((n) => n === one('necessity'));
-  // A category asked for by name is shown even if it is hidden by default.
-  const hiddenCategoryIds = linkedCategory && !hideParam
-    ? []
-    : resolveHidden(hideParam, allCategories, defaultHiddenIds);
-
-  const filters = {
-    // An explicit from/to still wins, so a link with a hand-built range works.
-    from: one('from') ?? period?.from,
-    to: one('to') ?? period?.to,
-    accountIds: one('account') ? [one('account')!] : undefined,
-    excludeCategoryIds: hiddenCategoryIds,
-    leafCategoryIds: linkedCategory ? [linkedCategory.id] : undefined,
-    necessity: linkedNecessity ? [linkedNecessity] : undefined,
-    search: one('q'),
-    uncategorizedOnly: one('uncategorized') === '1',
-    needsReviewOnly: one('review') === '1',
-    includeVoided: one('voided') === '1',
-    limit: 300,
-  };
+  // Read by the same function the tests open the Flow's links with (V2).
+  // `category` and `necessity` arrive from a figure (registerHref): exactly
+  // that category's rows — with its subcategories when `sub=1` — and its
+  // necessity when the figure was one bucket's share of a category.
+  const {
+    filters: view, linkedCategory, withSubcategories, linkedNecessity,
+    hiddenCategoryIds, defaultHiddenIds,
+  } = registerView(one, allCategories, period);
+  const filters = { ...view, limit: 300 };
 
   const categories = allCategories;
   const [transactions, total, totals, accounts, review] = await Promise.all([
@@ -113,7 +83,7 @@ export default async function TransactionsPage({
                 a search would silently un-hide everything. */}
             {passthrough(params, [
               'uncategorized', 'review', 'voided', 'from', 'to', 'period', 'hide',
-              'category', 'necessity',
+              'category', 'necessity', 'sub', 'merchant', 'credits',
             ])}
             <input
               name="q"
@@ -171,9 +141,10 @@ export default async function TransactionsPage({
         {linkedCategory && (
           <p className="text-xs text-ink-faint">
             Only <span className="text-ink">{linkedCategory.name}</span>
+            {withSubcategories && <> and its subcategories</>}
             {linkedNecessity && <> · {linkedNecessity}</>}
             {' · '}
-            <a href={withoutParams(params, ['category', 'necessity'])} className="underline decoration-ink-faint underline-offset-4 hover:text-ink">
+            <a href={withoutParams(params, ['category', 'necessity', 'sub'])} className="underline decoration-ink-faint underline-offset-4 hover:text-ink">
               show every category
             </a>
           </p>
@@ -192,34 +163,6 @@ export default async function TransactionsPage({
       />
     </div>
   );
-}
-
-/**
- * Which categories the register hides, from the `hide` param.
- *
- * Four forms, because the param has to distinguish "nothing was said" from
- * "nothing is hidden", and because naming 55 uuids to hide is a worse URL than
- * naming the 3 to show:
- *
- *   absent            the default (Credit Card Payment)
- *   none              hide nothing
- *   all               hide everything
- *   only:<a>,<b>      show ONLY these
- *   <a>,<b>           hide these
- */
-export function resolveHidden(
-  param: string | undefined,
-  categories: CategoryWithGroup[],
-  fallback: string[],
-): string[] {
-  if (!param) return fallback;
-  if (param === 'none') return [];
-  if (param === 'all') return categories.map((c) => c.id);
-  if (param.startsWith('only:')) {
-    const shown = new Set(param.slice('only:'.length).split(',').filter(Boolean));
-    return categories.filter((c) => !shown.has(c.id)).map((c) => c.id);
-  }
-  return param.split(',').filter(Boolean);
 }
 
 /** This page's URL with some parameters dropped. */

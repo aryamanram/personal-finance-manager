@@ -196,6 +196,15 @@ export function TransactionTable({
             it actually is. Gross, with credits beside it, so it is the same
             figure the Flow draws for this filter. */}
         <div className="text-xs text-ink-faint">
+          {/* Income and investing are not spending, so a register opened on
+              either from the Flow says what it holds in the Flow's own words:
+              the figure clicked is on this line (V2). */}
+          {totals.income_cents !== 0 && (
+            <>Received <Figure cents={totals.income_cents} tone="neutral" signed />{' · '}</>
+          )}
+          {totals.invested_cents !== 0 && (
+            <>Invested <Figure cents={totals.invested_cents} tone="neutral" />{' · '}</>
+          )}
           Spent <Figure cents={-totals.spent_cents} tone="neutral" />
           {/* With credits the net is printed too: the Flow links here with a
               gross figure and Cashflow with a net one, and whichever was

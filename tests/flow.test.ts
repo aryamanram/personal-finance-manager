@@ -14,7 +14,12 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { Sql } from 'postgres';
 import { createTestDb } from './helpers/db';
 import { fingerprint } from '@/ingest/fingerprint';
-import { buildFlow, type FlowModel } from '@/lib/flow';
+import {
+  buildFlow, buildCategoryFlow, flowGraph, categoryGraph, MAX_CATEGORIES,
+  type FlowModel, type FlowGraph, type FlowInput,
+} from '@/lib/flow';
+import { registerView } from '@/lib/register-filters';
+import type { CategoryWithGroup } from '@/lib/types';
 
 let sql: Sql;
 let drop: () => Promise<void>;
@@ -82,6 +87,11 @@ beforeAll(async () => {
   // August: money came OUT of investments.
   await insert({ description: 'BROKERAGE WITHDRAWAL', amountCents: 50000, postedDate: '2026-08-10', category: 'Brokerage Contribution' });
   await insert({ description: 'GROCER', amountCents: -20000, postedDate: '2026-08-12', category: 'Groceries' });
+
+  // The grocer is a known merchant; the rest are only descriptions.
+  const [grocer] = await sql<{ id: string }[]>`
+    INSERT INTO merchants (normalized_name, display_name) VALUES ('grocer', 'Grocer') RETURNING id`;
+  await sql`UPDATE transactions SET merchant_id = ${grocer.id} WHERE raw_description LIKE 'GROCER%'`;
 });
 
 afterAll(async () => { await drop(); });
@@ -92,7 +102,7 @@ const MONTHS = {
 } as const;
 
 async function flowFor(range: readonly [string, string]) {
-  const data = await q.getFlow(range[0], range[1]);
+  const data = { ...(await q.getFlow(range[0], range[1])), groupSlots: await q.getGroupSlots() };
   return { data, model: buildFlow(data) };
 }
 
@@ -104,7 +114,25 @@ function expectBalanced(m: FlowModel) {
   expect(buckets).toBe(m.totalCents);
   for (const b of m.buckets) {
     if (b.categories.length) expect(b.categories.reduce((a, c) => a + c.cents, 0)).toBe(b.cents);
-    for (const c of b.categories) expect(Number.isInteger(c.cents)).toBe(true);
+    for (const c of b.categories) {
+      expect(Number.isInteger(c.cents)).toBe(true);
+      // A category with subcategories is exactly its subcategories and General.
+      if (c.children.length) expect(c.children.reduce((a, k) => a + k.cents, 0), c.name).toBe(c.cents);
+    }
+  }
+}
+
+/**
+ * V1 for what is drawn: every node's ribbons in and out carry its amount, so
+ * folding into "+N more" or splitting into subcategories loses nothing.
+ */
+function expectGraphBalanced(g: FlowGraph) {
+  for (const n of g.nodes) {
+    const into = g.links.filter((l) => l.target === n.key).reduce((a, l) => a + l.cents, 0);
+    const out = g.links.filter((l) => l.source === n.key).reduce((a, l) => a + l.cents, 0);
+    if (into > 0) expect(into, `${n.key} in`).toBe(n.cents);
+    if (out > 0) expect(out, `${n.key} out`).toBe(n.cents);
+    expect(into > 0 || out > 0, `${n.key} is connected`).toBe(true);
   }
 }
 
@@ -194,7 +222,7 @@ describe('a category opens to the same number (V2)', () => {
       const totals = await q.getTransactionTotals({
         leafCategoryIds: [c.category_id!], necessity: [c.necessity], from: MONTHS.may[0], to: MONTHS.may[1],
       });
-      expect(totals, `${c.category_name} (${c.necessity})`).toEqual({ spent_cents: c.total_cents, credit_cents: c.credit_cents });
+      expect(totals, `${c.category_name} (${c.necessity})`).toMatchObject({ spent_cents: c.total_cents, credit_cents: c.credit_cents });
     }
   });
 
@@ -239,5 +267,141 @@ describe('a category opens to the same number (V2)', () => {
       const rows = await q.getTransactions({ ...f, limit: 1000 });
       expect(await q.countTransactions(f), JSON.stringify(f)).toBe(rows.length);
     }
+  });
+});
+
+describe('subcategories, at every level (V1)', () => {
+  it('splits a parent into its subcategories and General', async () => {
+    const { model } = await flowFor(MONTHS.may);
+    const required = model!.buckets.find((b) => b.key === 'required')!;
+    const groceries = required.categories.find((c) => c.name === 'Groceries')!;
+    expect(groceries.cents).toBe(30000 + 7000);
+    expect(groceries.children.map((k) => [k.name, k.general, k.cents])).toEqual([
+      ['Groceries Bulk', false, 7000], ['General', true, 30000],
+    ]);
+    // In the other bucket the parent has only its own rows: nothing to split.
+    const party = model!.buckets.find((b) => b.key === 'discretionary')!.categories.find((c) => c.name === 'Groceries')!;
+    expect(party.children).toEqual([]);
+    for (const month of Object.values(MONTHS)) {
+      const { model: m } = await flowFor(month);
+      if (m) { expectBalanced(m); expectGraphBalanced(flowGraph(m, { from: month[0], to: month[1] })); }
+    }
+  });
+
+  it('colours a category by its group, in the taxonomy\'s order', async () => {
+    // The seeded groups that hold spending, in sort order; income and
+    // transfers take no slot.
+    expect(await q.getGroupSlots()).toEqual({
+      Housing: 1, Transportation: 2, Food: 3, Health: 4, Lifestyle: 5, Financial: 6,
+    });
+    const { model } = await flowFor(MONTHS.may);
+    const slot = (name: string) => model!.buckets.flatMap((b) => b.categories).find((c) => c.name === name)!.slot;
+    expect([slot('Rent'), slot('Groceries'), slot('Restaurants')]).toEqual([1, 3, 3]);
+  });
+});
+
+describe('every node opens its own rows (V2)', () => {
+  let categories: CategoryWithGroup[];
+  beforeAll(async () => { categories = await q.getCategories(); });
+
+  /** Opens a link the way the register page does, and totals what it selects. */
+  async function open(href: string) {
+    const params = new URL(href, 'http://ledger').searchParams;
+    const { filters } = registerView((k) => params.get(k) ?? undefined, categories);
+    return q.getTransactionTotals(filters);
+  }
+
+  /** The figure a node shows, in the register's own terms. */
+  async function expectLanding(g: FlowGraph) {
+    let checked = 0;
+    for (const n of g.nodes) {
+      const href = n.rows ?? (n.action?.type === 'rows' ? n.action.href : undefined);
+      if (!href) continue;
+      const t = await open(href);
+      const landed = n.key === 'source:income' ? t.income_cents
+        : n.key === 'source:credits' ? t.credit_cents
+        : n.key === 'source:investments' ? -t.invested_cents
+        : n.key === 'bucket:invested' ? t.invested_cents
+        : t.spent_cents;
+      expect(landed, `${n.key} → ${href}`).toBe(n.cents);
+      checked++;
+    }
+    return checked;
+  }
+
+  it('in the main Flow, for every month', async () => {
+    for (const month of Object.values(MONTHS)) {
+      const { model } = await flowFor(month);
+      const g = flowGraph(model!, { from: month[0], to: month[1] }, new Set(['bucket:required', 'bucket:discretionary']));
+      expect(await expectLanding(g)).toBeGreaterThan(0);
+    }
+  });
+
+  it("in a category's own Flow, down to the merchant", async () => {
+    const rows = await q.getCategoryFlow(cat.Groceries, ...MONTHS.may);
+    const c = buildCategoryFlow({ id: cat.Groceries, name: 'Groceries', group: 'Food', slot: 3 }, rows)!;
+    expect(c.cents).toBe(30000 + 5000 + 7000);
+    expect(c.buckets.map((b) => [b.key, b.cents])).toEqual([['required', 37000], ['discretionary', 5000]]);
+    expect(c.leaves.map((l) => [l.name, l.cents])).toEqual([['Groceries Bulk', 7000], ['General', 35000]]);
+    // The grocer is one merchant across both buckets, and its refund is one
+    // of its three transactions — counted, but not in the gross.
+    expect(c.leaves[1].merchants.map((m) => [m.name, m.cents, m.creditCents, m.txnCount]))
+      .toEqual([['Grocer', 35000, 2000, 3]]);
+    const g = categoryGraph(c, { from: MONTHS.may[0], to: MONTHS.may[1] });
+    expectGraphBalanced(g);
+    expect(await expectLanding(g)).toBe(g.nodes.length);
+  });
+
+  it('a subcategory looks inside itself, straight to merchants', async () => {
+    const rows = await q.getCategoryFlow(cat['Groceries Bulk'], ...MONTHS.may);
+    const c = buildCategoryFlow({ id: cat['Groceries Bulk'], name: 'Groceries Bulk', group: 'Food', slot: 3 }, rows)!;
+    expect(c.split).toBe(false);
+    expect(c.leaves.map((l) => [l.name, l.merchants.map((m) => m.name)])).toEqual([['Groceries Bulk', ['WAREHOUSE CLUB']]]);
+    expectGraphBalanced(categoryGraph(c, { from: MONTHS.may[0], to: MONTHS.may[1] }));
+  });
+});
+
+describe('folding and ordering what is drawn', () => {
+  /** Ten categories across three groups in one bucket, and one parent with six subcategories. */
+  const wide: FlowInput = {
+    incomeCents: 1_000_000, investedCents: 0, creditsCents: 0,
+    groupSlots: { Housing: 1, Food: 3, Lifestyle: 5 },
+    categories: [
+      ...Array.from({ length: 10 }, (_, i) => ({
+        category_id: `c${i}`, category_name: `Cat ${i}`, category_group_name: ['Housing', 'Food', 'Lifestyle'][i % 3],
+        necessity: 'discretionary', total_cents: (10 - i) * 1000, credit_cents: 0, txn_count: 1,
+      })),
+      ...Array.from({ length: 6 }, (_, i) => ({
+        category_id: `s${i}`, category_name: `Sub ${i}`, category_group_name: 'Food', parent_id: 'p', parent_name: 'Parent',
+        necessity: 'required', total_cents: (i + 1) * 500, credit_cents: 0, txn_count: 1,
+      })),
+    ],
+  };
+  const period = { from: '2026-05-01', to: '2026-05-31' };
+
+  it('folds the smallest categories into one node that keeps their total', () => {
+    const g = flowGraph(buildFlow(wide)!, period);
+    const disc = g.nodes.filter((n) => n.column === 3 && g.links.some((l) => l.source === 'bucket:discretionary' && l.target === n.key));
+    expect(disc.length).toBe(MAX_CATEGORIES + 1);
+    const more = disc.find((n) => n.kind === 'more')!;
+    expect(more.cents).toBe(4000 + 3000 + 2000 + 1000);
+    expect(more.action).toEqual({ type: 'expand', key: 'bucket:discretionary' });
+    expectGraphBalanced(g);
+  });
+
+  it('unfolds a bucket, and a category, on request', () => {
+    const g = flowGraph(buildFlow(wide)!, period, new Set(['bucket:discretionary', 'cat:required:p']));
+    expect(g.nodes.filter((n) => n.kind === 'more')).toEqual([]);
+    expect(g.nodes.filter((n) => n.kind === 'subcategory').length).toBe(6);
+    expectGraphBalanced(g);
+  });
+
+  it('runs each bucket by group, then by amount, so colours band together', () => {
+    const g = flowGraph(buildFlow(wide)!, period, new Set(['bucket:discretionary']));
+    const disc = g.nodes.filter((n) => n.column === 3 && n.key.startsWith('cat:discretionary'))
+      .sort((a, b) => a.order - b.order);
+    const slots = disc.map((n) => (n.tone.kind === 'group' ? n.tone.slot : null));
+    expect(slots).toEqual([...slots].sort((a, b) => (a ?? 99) - (b ?? 99)));
+    expect(disc.map((n) => n.name)).toEqual(['Cat 0', 'Cat 3', 'Cat 6', 'Cat 9', 'Cat 1', 'Cat 4', 'Cat 7', 'Cat 2', 'Cat 5', 'Cat 8']);
   });
 });
