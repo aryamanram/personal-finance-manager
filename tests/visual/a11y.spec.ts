@@ -27,7 +27,7 @@ const KNOWN: Known[] = [
   { rule: 'color-contrast', element: 'a[aria-pressed=true][href=/transactions?from&to] "All"', pages: ['register'] },
   { rule: 'color-contrast', element: 'a[aria-pressed=true][href=/transactions?category&from&to] "All"', pages: ['register-filtered'] },
   // Invest violet: 4.39:1.
-  { rule: 'color-contrast', element: 'span "$2,000"', pages: ['cashflow'] },
+  { rule: 'color-contrast', element: 'span "$2,000" in "Where it went"', pages: ['cashflow'] },
   // FilterChips are links carrying aria-pressed, which links do not allow.
   { rule: 'aria-allowed-attr', element: 'a[aria-pressed=true][href=/transactions?from&to] "All"', pages: ['register'] },
   { rule: 'aria-allowed-attr', element: 'a[aria-pressed=false][href=/transactions?from&review&to] "Needs review · 35"', pages: ['register'] },
@@ -37,18 +37,21 @@ const KNOWN: Known[] = [
   { rule: 'aria-allowed-attr', element: 'a[aria-pressed=false][href=/transactions?category&from&to&voided] "Voided"', pages: ['register-filtered'] },
   // The register's account filter has no accessible name.
   { rule: 'select-name', element: 'select[name=account] "All accountsChase Total Checking"', pages: REGISTER },
-  // The accounts page: the snapshot form's account <select> and date input.
-  { rule: 'select-name', element: 'select "Apple CardChase United Explorer"', pages: ['accounts'] },
-  { rule: 'label', element: 'input[type=date]', pages: ['accounts'] },
+  // The accounts page: the statement import's account <select>, and the date
+  // input of each investment account's balance form.
+  { rule: 'select-name', element: 'select "Apple CardChase United Explorer" in "Import a statement"', pages: ['accounts'] },
+  { rule: 'label', element: 'input[type=date] in "Morgan Stanley Brokerage"', pages: ['accounts'] },
   // The Sankey scrolls sideways on a phone but cannot be reached by keyboard.
   { rule: 'scrollable-region-focusable', element: 'figure "Income → Available $5,400.00From"', pages: ['flow'], projects: ['mobile'] },
 ];
 
 /**
  * Names an element by what it is, not where it sits: its tag, the attributes
- * that identify it, and the start of its text. Classes are left out, so a
- * restyle does not churn this list; ids and dates in an href are reduced to
- * the query's keys, since the demo's category ids are random per seed.
+ * that identify it, the start of its text, and the heading of the section it
+ * is in — so the same control repeated per account (the balance form) is told
+ * apart by the account's name. Classes are left out, so a restyle does not
+ * churn this list; ids and dates in an href are reduced to the query's keys,
+ * since the demo's category ids are random per seed.
  */
 async function signature(page: Page, selector: string): Promise<string> {
   return page.evaluate((sel) => {
@@ -63,8 +66,11 @@ async function signature(page: Page, selector: string): Promise<string> {
         const keys = [...new Set(u.searchParams.keys())].sort();
         return `href=${u.pathname}${keys.length ? `?${keys.join('&')}` : ''}`;
       });
-    const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 32);
-    return `${el.tagName.toLowerCase()}${attrs.map((a) => `[${a}]`).join('')}${text ? ` "${text}"` : ''}`;
+    const clip = (s: string | null | undefined) => (s ?? '').replace(/\s+/g, ' ').trim().slice(0, 32);
+    const text = clip(el.textContent);
+    const section = clip(el.closest('section')?.querySelector('h1, h2, h3')?.textContent);
+    return `${el.tagName.toLowerCase()}${attrs.map((a) => `[${a}]`).join('')}${text ? ` "${text}"` : ''}`
+      + (section ? ` in "${section}"` : '');
   }, selector);
 }
 
