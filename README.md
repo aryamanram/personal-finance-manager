@@ -246,15 +246,21 @@ npm run test:a11y            # axe, WCAG 2.1 A and AA
 ```
 
 Playwright starts `dev:demo` (or reuses one already running), reseeds the
-demo, and refuses to run unless :3001 is showing the synthetic ledger.
+demo, and refuses to run unless the server on :3001 proves it is the demo:
+`GET /api/demo` — which exists only under `dev:demo` and is a 404 on the
+real app — must report `finance_demo` from the server's own database
+connection, and its register must show the seed's synthetic payroll.
+Redirects are refused rather than followed.
 Baselines live in `tests/visual/__screenshots__/`, per platform, and are
 committed — they are pictures of invented data, never the real ledger. A
 failed comparison leaves the expected, actual and diff images in
 `test-results/`; `npx playwright show-report` shows them side by side.
 
 `test:a11y` holds the violations axe finds today in a list in
-`tests/visual/a11y.spec.ts`. The comparison is exact: a new violation fails,
-and so does fixing a listed one until its line is deleted.
+`tests/visual/a11y.spec.ts`, one line per failing element — named by tag,
+identifying attributes and text, not by class, so a restyle does not churn
+it. The comparison is exact: a new violation fails, a fixed one fails until
+its line is deleted, and trading one failing element for another does too.
 
 Neither suite is part of `prepush`. During a redesign the baselines are
 meant to change; run them deliberately, look at the diffs, then update.
