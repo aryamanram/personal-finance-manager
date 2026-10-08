@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
+import { Suspense } from 'react';
+import { cookies } from 'next/headers';
 import { Inter_Tight, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
 import { Nav } from '@/components/Nav';
+import { ThemeSwitch, type ThemeChoice } from '@/components/ThemeSwitch';
 
 // Fetched once at build time and served from this app. A stylesheet link to
 // fonts.googleapis.com told Google the viewer's IP and when the ledger was
@@ -16,29 +18,46 @@ export const metadata: Metadata = {
   description: 'Personal finance tracker',
 };
 
+/**
+ * Flow first: where the month's money went is the question this ledger is
+ * opened to answer. The wordmark is NOT a link — it and the first tab both
+ * opened `/`, so the app read as two names for one page.
+ */
 const NAV = [
-  { href: '/', label: 'Cashflow' },
-  { href: '/flow', label: 'Flow' },
+  { href: '/', label: 'Flow' },
   { href: '/transactions', label: 'Register' },
   { href: '/accounts', label: 'Accounts' },
 ] as const;
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Pinned by the theme switch; absent means follow the system.
+  const stored = (await cookies()).get('theme')?.value;
+  const theme: ThemeChoice = stored === 'light' || stored === 'dark' ? stored : 'system';
+
   return (
-    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
+    <html
+      lang="en"
+      className={`${sans.variable} ${mono.variable}`}
+      data-theme={theme === 'system' ? undefined : theme}
+    >
       {/* suppressHydrationWarning covers THIS element's attributes only, not
           its subtree, so a real mismatch anywhere inside still reports.
           Browser extensions inject attributes on <body> before React
           hydrates — cz-shortcut-listen, grammarly-*, data-lt-* — and each one
           logs a hydration error that no change to this app can prevent. */}
-      <body className="min-h-screen bg-ink-900" suppressHydrationWarning>
+      <body className="min-h-screen bg-ground" suppressHydrationWarning>
         <Providers>
-          <header className="rule-b sticky top-0 z-30 bg-ink-900/95 backdrop-blur">
-            <div className="mx-auto flex max-w-[1400px] items-baseline gap-8 px-6 py-4">
-              <Link href="/" className="figure text-sm font-semibold tracking-tight text-paper">
-                ledger
-              </Link>
-              <Nav items={NAV} />
+          <header className="rule-b sticky top-0 z-30 bg-ground/95 backdrop-blur">
+            <div className="mx-auto flex max-w-[1400px] items-center gap-8 px-6 py-3">
+              <span className="figure text-sm font-semibold tracking-tight text-ink">ledger</span>
+              {/* The nav reads the URL's period; Suspense keeps a page that
+                  renders statically (not-found) from failing the build. */}
+              <Suspense fallback={null}>
+                <Nav items={NAV} />
+              </Suspense>
+              <div className="ml-auto">
+                <ThemeSwitch initial={theme} />
+              </div>
             </div>
           </header>
           <main className="mx-auto max-w-[1400px] px-6 py-8">{children}</main>

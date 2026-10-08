@@ -79,7 +79,7 @@ export function FlowDrilldown({
               aria-pressed={on}
               className={clsx(
                 'eyebrow transition-colors',
-                on ? 'text-paper' : 'hover:text-paper-dim',
+                on ? 'text-ink' : 'hover:text-ink-dim',
               )}
             >
               <span
@@ -92,11 +92,11 @@ export function FlowDrilldown({
           );
         })}
         {available.length > 1 && (
-          <span className="eyebrow text-paper-faint">· pick one</span>
+          <span className="eyebrow text-ink-faint">· pick one</span>
         )}
       </div>
 
-      <p className="mt-3 text-xs text-paper-faint">
+      <p className="mt-3 text-xs text-ink-faint">
         {rows.length === 1
           ? 'One category carries all of it.'
           : `${rows.length} categories carry ${money(total)}.`}{' '}
@@ -111,14 +111,14 @@ export function FlowDrilldown({
           >
             <Link
               href={registerHref({ categoryId: r.category_id, necessity: r.necessity, from, to })}
-              className="truncate text-sm text-paper-dim transition-colors hover:text-paper"
+              className="truncate text-sm text-ink-dim transition-colors hover:text-ink"
             >
               {r.category_name}
             </Link>
 
             {/* The bar is hidden on narrow screens, where the figure alone
                 carries the comparison. */}
-            <div className="hidden h-[6px] rounded-[1px] bg-ink-700 sm:block" aria-hidden>
+            <div className="hidden h-[6px] rounded-[1px] bg-well sm:block" aria-hidden>
               <div
                 className="h-full rounded-[1px]"
                 style={{
@@ -134,14 +134,14 @@ export function FlowDrilldown({
               showCents={false}
               className="text-right text-sm"
             />
-            <span className="hidden text-right text-xs text-paper-faint sm:block">
+            <span className="hidden text-right text-xs text-ink-faint sm:block">
               {r.txn_count} {r.txn_count === 1 ? 'transaction' : 'transactions'}
             </span>
           </li>
         ))}
       </ul>
 
-      <p className="mt-4 text-xs text-paper-faint">
+      <p className="mt-4 text-xs text-ink-faint">
         Each row opens the register filtered to that category and period.
       </p>
     </section>

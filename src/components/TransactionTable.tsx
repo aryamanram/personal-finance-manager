@@ -195,7 +195,7 @@ export function TransactionTable({
             and the fact that the view is truncated, which only matters when
             it actually is. Gross, with credits beside it, so it is the same
             figure the Flow draws for this filter. */}
-        <div className="text-xs text-paper-faint">
+        <div className="text-xs text-ink-faint">
           Spent <Figure cents={-totals.spent_cents} tone="neutral" />
           {/* With credits the net is printed too: the Flow links here with a
               gross figure and Cashflow with a net one, and whichever was
@@ -211,9 +211,9 @@ export function TransactionTable({
           {rows.length < total && (
             <>
               {' · showing the latest '}
-              <span className="figure text-paper-dim">{rows.length}</span>
+              <span className="figure text-ink-dim">{rows.length}</span>
               {' of '}
-              <span className="figure text-paper-dim">{total}</span>
+              <span className="figure text-ink-dim">{total}</span>
             </>
           )}
         </div>
@@ -221,7 +221,7 @@ export function TransactionTable({
       </div>
 
       {patch.isError && (
-        <p className="mt-2 text-xs text-out">{(patch.error as Error).message}</p>
+        <p className="mt-2 text-xs text-alert">{(patch.error as Error).message}</p>
       )}
 
       {/* Six fixed-width columns together need more than a phone's width.
@@ -242,7 +242,7 @@ export function TransactionTable({
                 }}
                 onChange={(e) => toggleAll(e.target.checked)}
                 aria-label="Select every transaction shown"
-                className="accent-edited"
+                className="accent-ink"
               />
             </th>
             <th className="eyebrow w-24 py-2 text-left">Date</th>
@@ -275,7 +275,7 @@ export function TransactionTable({
       </div>
 
       {rows.length === 0 && (
-        <p className="py-12 text-center text-sm text-paper-faint">
+        <p className="py-12 text-center text-sm text-ink-faint">
           {/* "Hide all" is the first half of picking a few categories, so
               this state is reached ON PURPOSE. Saying nothing matched would
               blame the data for a choice the user just made. */}
@@ -292,9 +292,9 @@ export function TransactionTable({
           A bar that follows the viewport is in reach from any scroll
           position, and it only exists while something is selected. */}
       {selected.size > 0 && (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-600 bg-ink-850/95 backdrop-blur">
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-rule-strong bg-raised/95 backdrop-blur">
           <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-end gap-3 px-6 py-3 text-xs">
-            <span className="mr-auto text-paper-dim">
+            <span className="mr-auto text-ink-dim">
               <span className="figure">{selected.size}</span> selected
             </span>
 
@@ -306,7 +306,7 @@ export function TransactionTable({
               <button
                 onClick={() => setBulkOpen((o) => !o)}
                 aria-expanded={bulkOpen}
-                className="rounded-sm border border-ink-500 px-3 py-1.5 text-paper transition-colors hover:border-paper-faint"
+                className="rounded-sm border border-ink-faint px-3 py-1.5 text-ink transition-colors hover:border-ink-faint"
               >
                 Set category <span aria-hidden>▾</span>
               </button>
@@ -332,7 +332,7 @@ export function TransactionTable({
 
             <button
               onClick={() => { setSelected(new Set()); anchorRef.current = null; }}
-              className="px-2 text-paper-faint transition-colors hover:text-paper"
+              className="px-2 text-ink-faint transition-colors hover:text-ink"
             >
               Clear
             </button>

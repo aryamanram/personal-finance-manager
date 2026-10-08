@@ -83,7 +83,7 @@ export function CsvImport({ accounts }: { accounts: Account[] }) {
           <select
             value={accountId}
             onChange={(e) => setAccountId(e.target.value)}
-            className="rounded-sm border border-ink-600 bg-ink-800 px-2 py-1 text-xs"
+            className="rounded-sm border border-rule-strong bg-well px-2 py-1 text-xs"
           >
             {csvAccounts.map((a) => (
               <option key={a.id} value={a.id}>{a.name}</option>
@@ -103,7 +103,7 @@ export function CsvImport({ accounts }: { accounts: Account[] }) {
           }}
           onClick={() => inputRef.current?.click()}
           className={`mt-4 cursor-pointer border border-dashed px-6 py-10 text-center transition-colors ${
-            dragging ? 'border-edited bg-ink-850' : 'border-ink-600 hover:border-ink-500'
+            dragging ? 'border-ink bg-raised' : 'border-rule-strong hover:border-ink-faint'
           }`}
         >
           <input
@@ -113,21 +113,21 @@ export function CsvImport({ accounts }: { accounts: Account[] }) {
             hidden
             onChange={(e) => choose(e.target.files?.[0])}
           />
-          <p className="text-sm text-paper-dim">
+          <p className="text-sm text-ink-dim">
             {busy ? 'Reading…' : 'Drop an Apple Card CSV here, or click to choose'}
           </p>
-          <p className="mt-2 text-xs leading-relaxed text-paper-faint">
+          <p className="mt-2 text-xs leading-relaxed text-ink-faint">
             Wallet → Apple Card → card balance → the monthly statement →
             Export Transactions. Nothing is written until you confirm.
           </p>
         </div>
       )}
 
-      {error && <p className="mt-4 text-sm text-out">{error}</p>}
+      {error && <p className="mt-4 text-sm text-alert">{error}</p>}
       {result && (
-        <p className="mt-4 text-sm text-in">
+        <p className="mt-4 text-sm text-ink">
           {result}{' '}
-          <a href="/transactions" className="ml-2 border-b border-paper-faint text-paper">
+          <a href="/transactions" className="ml-2 border-b border-ink-faint text-ink">
             Open the register →
           </a>
         </p>
@@ -155,7 +155,7 @@ export function CsvImport({ accounts }: { accounts: Account[] }) {
           </dl>
 
           {preview.alreadyImported && (
-            <p className="text-xs text-edited">
+            <p className="text-xs text-ink-dim">
               This exact file was imported on{' '}
               {formatTimestampShort(preview.alreadyImported.at)}. Importing again
               is safe — duplicate rows are counted, not re-inserted.
@@ -163,14 +163,14 @@ export function CsvImport({ accounts }: { accounts: Account[] }) {
           )}
 
           {preview.warnings.length > 0 && (
-            <ul className="space-y-1 text-xs text-edited">
+            <ul className="space-y-1 text-xs text-alert">
               {preview.warnings.slice(0, 6).map((w, i) => <li key={i}>{w}</li>)}
             </ul>
           )}
 
           <div className="max-h-72 overflow-y-auto">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-ink-900">
+              <thead className="sticky top-0 bg-ground">
                 <tr className="rule-b">
                   <th className="eyebrow py-1.5 text-left">Date</th>
                   <th className="eyebrow py-1.5 text-left">Description</th>
@@ -180,8 +180,8 @@ export function CsvImport({ accounts }: { accounts: Account[] }) {
               <tbody>
                 {preview.rows.map((r, i) => (
                   <tr key={i} className="rule-b">
-                    <td className="figure py-1.5 text-xs text-paper-faint">{r.postedDate}</td>
-                    <td className="truncate py-1.5 pr-4 text-paper-dim">{r.rawDescription}</td>
+                    <td className="figure py-1.5 text-xs text-ink-faint">{r.postedDate}</td>
+                    <td className="truncate py-1.5 pr-4 text-ink-dim">{r.rawDescription}</td>
                     <td className="py-1.5 text-right">
                       <Figure cents={r.amountCents} className="text-xs" />
                     </td>
@@ -190,7 +190,7 @@ export function CsvImport({ accounts }: { accounts: Account[] }) {
               </tbody>
             </table>
             {preview.rowCount > preview.rows.length && (
-              <p className="py-2 text-xs text-paper-faint">
+              <p className="py-2 text-xs text-ink-faint">
                 …and {preview.rowCount - preview.rows.length} more
               </p>
             )}
@@ -200,13 +200,13 @@ export function CsvImport({ accounts }: { accounts: Account[] }) {
             <button
               disabled={busy}
               onClick={() => void send(file, true)}
-              className="rounded-sm border border-paper-faint px-4 py-2 text-sm text-paper transition-colors hover:bg-ink-800 disabled:opacity-50"
+              className="rounded-sm border border-ink-faint px-4 py-2 text-sm text-ink transition-colors hover:bg-well disabled:opacity-50"
             >
               {busy ? 'Importing…' : `Import ${preview.rowCount} rows`}
             </button>
             <button
               onClick={() => { setPreview(null); setFile(null); }}
-              className="px-3 py-2 text-sm text-paper-faint transition-colors hover:text-paper"
+              className="px-3 py-2 text-sm text-ink-faint transition-colors hover:text-ink"
             >
               Cancel
             </button>
@@ -221,7 +221,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <dt className="eyebrow">{label}</dt>
-      <dd className="figure mt-1 text-sm text-paper">{value}</dd>
+      <dd className="figure mt-1 text-sm text-ink">{value}</dd>
     </div>
   );
 }

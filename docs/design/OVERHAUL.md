@@ -187,8 +187,9 @@ on Well.
 **Reserved meanings.** Amber means a human changed this, and nothing else
 (V4) — it survives the new scheme unchanged in meaning. Green text means
 money earned. Alert red is for errors and differences that need a person,
-always beside words that say what is wrong. None of these appear in the
-chart palette.
+always beside words that say what is wrong. These three are text and marks
+and never chart colours; the group palette is fills and swatches and never
+text. The two meet only as a swatch beside a category's name.
 
 **The group palette.** Eight slots in a fixed order. A category takes its
 group's slot; the slot is the group's position among the groups that hold
@@ -251,8 +252,9 @@ These hold for every change below. Each gets a test.
   colour can be told apart. Colouring by group gives six to eight
   hues, each meaning something. Making the buckets neutral is what lets the
   group colours carry without the two systems competing.
-- **More colour against amber.** Amber stays reserved (V4); the palette was
-  searched with amber, earned green and alert red held out of it.
+- **More colour against amber.** Amber stays reserved (V4). The palette has
+  no amber slot, and a group's colour is never used for text, so the two
+  cannot be mistaken for each other where they meet in the register.
 - **The multi-Sankey against "top few, expand on click".** The main Flow
   folds — the top categories per bucket, the top subcategories per
   category — and expands in place. A category's own Flow never folds

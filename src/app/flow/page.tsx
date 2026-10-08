@@ -57,17 +57,17 @@ function EmptyState() {
   return (
     <div className="rule-t mx-auto mt-24 max-w-md pt-8 text-center">
       <h1 className="text-lg font-medium">Nothing to diagram yet</h1>
-      <p className="mt-3 text-sm leading-relaxed text-paper-dim">
+      <p className="mt-3 text-sm leading-relaxed text-ink-dim">
         The flow diagram needs a month of transactions to draw.
       </p>
       <div className="mt-6 flex justify-center gap-6 text-sm">
         <Link
           href="/transactions"
-          className="border-b border-paper-faint pb-0.5 text-paper hover:border-paper"
+          className="border-b border-ink-faint pb-0.5 text-ink hover:border-ink"
         >
           Import a statement
         </Link>
-        <code className="figure text-xs text-paper-faint">npm run sync</code>
+        <code className="figure text-xs text-ink-faint">npm run sync</code>
       </div>
     </div>
   );

@@ -143,7 +143,7 @@ export function PeriodPicker({
     <div ref={root} className={clsx('flex flex-col gap-2', edge)}>
       <div className="flex items-center gap-1">
         <Arrow dir="older" onClick={() => older && go(older.key)} disabled={!older} />
-        <h1 className="min-w-[13ch] px-1 text-center text-2xl font-semibold tracking-tight text-paper">
+        <h1 className="min-w-[13ch] px-1 text-center text-2xl font-semibold tracking-tight text-ink">
           {describePeriod(current)}
         </h1>
         <Arrow dir="newer" onClick={() => newer && go(newer.key)} disabled={!newer} />
@@ -160,7 +160,7 @@ export function PeriodPicker({
 
         {segments.map((seg) => (
           <span key={seg.scope} className="flex items-center gap-0.5">
-            <span className="px-0.5 text-ink-500" aria-hidden>›</span>
+            <span className="px-0.5 text-ink-faint" aria-hidden>›</span>
             <div className="relative">
               <Segment
                 label={seg.label}
@@ -174,7 +174,7 @@ export function PeriodPicker({
                 <div
                   className={clsx(
                     'absolute top-full z-30 mt-1 max-h-[280px] w-max overflow-y-auto rounded-sm',
-                    'border border-ink-600 bg-ink-800 p-1 shadow-2xl shadow-black/50',
+                    'border border-rule-strong bg-raised p-1 shadow-xl shadow-black/20',
                     // A 1fr grid track has no content floor, and an absolutely
                     // positioned box has no width to distribute, so grid-cols-3
                     // collapsed every month to 12px against 29px of text.
@@ -194,8 +194,8 @@ export function PeriodPicker({
                         'figure whitespace-nowrap rounded-sm px-2 py-1 text-xs transition-colors',
                         seg.scope === 'month' ? 'text-center' : 'text-left',
                         o.key === current.key
-                          ? 'bg-ink-700 text-paper'
-                          : 'text-paper-dim hover:bg-ink-700 hover:text-paper',
+                          ? 'bg-well text-ink'
+                          : 'text-ink-dim hover:bg-well hover:text-ink',
                       )}
                     >
                       {seg.scope === 'month' ? o.label.replace(/\s+\d{2}$/, '') : o.label}
@@ -234,14 +234,14 @@ function Segment({
       className={clsx(
         'figure rounded-sm border px-2 py-0.5 transition-colors',
         on
-          ? 'border-ink-500 bg-ink-700 text-paper'
+          ? 'border-ink-faint bg-well text-ink'
           : muted
-            ? 'border-transparent text-paper-faint hover:border-ink-600 hover:text-paper-dim'
-            : 'border-ink-700 text-paper-dim hover:border-ink-500 hover:text-paper',
+            ? 'border-transparent text-ink-faint hover:border-rule-strong hover:text-ink-dim'
+            : 'border-rule text-ink-dim hover:border-ink-faint hover:text-ink',
       )}
     >
       {label}
-      {caret && <span className="ml-1 text-ink-500" aria-hidden>▾</span>}
+      {caret && <span className="ml-1 text-ink-faint" aria-hidden>▾</span>}
     </button>
   );
 }
@@ -264,8 +264,8 @@ function Arrow({
       className={clsx(
         'rounded-sm px-2 py-1 text-xl leading-none transition-colors',
         disabled
-          ? 'cursor-default text-ink-700'
-          : 'text-paper-faint hover:bg-ink-800 hover:text-paper',
+          ? 'cursor-default text-rule-strong'
+          : 'text-ink-faint hover:bg-well hover:text-ink',
       )}
     >
       {dir === 'older' ? '‹' : '›'}

@@ -62,7 +62,7 @@ export function CostMixChart({ data }: { data: MonthlyCashflow[] }) {
 
   if (rows.length === 0) {
     return (
-      <p className="py-12 text-center text-sm text-paper-faint">
+      <p className="py-12 text-center text-sm text-ink-faint">
         No months to chart yet.
       </p>
     );
@@ -102,7 +102,7 @@ export function CostMixChart({ data }: { data: MonthlyCashflow[] }) {
               x2={W - PAD_R}
               y1={y(t)}
               y2={y(t)}
-              stroke="var(--color-ink-700)"
+              stroke="var(--color-rule)"
               strokeWidth={1}
             />
             <text
@@ -110,7 +110,7 @@ export function CostMixChart({ data }: { data: MonthlyCashflow[] }) {
               y={y(t)}
               dy="0.32em"
               textAnchor="end"
-              className="fill-paper-faint"
+              className="fill-ink-faint"
               style={{ fontSize: 11, fontFamily: 'var(--font-mono)' }}
             >
               {formatCentsCompact(t)}
@@ -153,7 +153,7 @@ export function CostMixChart({ data }: { data: MonthlyCashflow[] }) {
                     y={fixedY}
                     width={barW}
                     height={Math.max(1, fixedH)}
-                    fill="var(--color-out)"
+                    fill="var(--color-chart-strong)"
                   />
                 )}
                 {r.variable > 0 && (
@@ -164,7 +164,7 @@ export function CostMixChart({ data }: { data: MonthlyCashflow[] }) {
                     // The seam comes out of the upper segment, so the two
                     // fills never share an edge.
                     height={Math.max(1, varH - (r.fixed > 0 ? SEAM : 0))}
-                    fill="var(--color-out-lift)"
+                    fill="var(--color-chart-mid)"
                     rx={2}
                   />
                 )}
@@ -182,7 +182,7 @@ export function CostMixChart({ data }: { data: MonthlyCashflow[] }) {
           x2={W - PAD_R}
           y1={PAD_T + PLOT_H}
           y2={PAD_T + PLOT_H}
-          stroke="var(--color-ink-600)"
+          stroke="var(--color-rule-strong)"
           strokeWidth={1}
         />
 
@@ -192,7 +192,7 @@ export function CostMixChart({ data }: { data: MonthlyCashflow[] }) {
             x={PAD_L + slot * i + slot / 2}
             y={H - 8}
             textAnchor="middle"
-            className={hover === i ? 'fill-paper' : 'fill-paper-faint'}
+            className={hover === i ? 'fill-ink' : 'fill-ink-faint'}
             style={{ fontSize: 11, fontFamily: 'var(--font-mono)' }}
           >
             {r.month}
@@ -200,12 +200,12 @@ export function CostMixChart({ data }: { data: MonthlyCashflow[] }) {
         ))}
       </svg>
 
-      <figcaption className="mt-3 flex flex-wrap items-center gap-4 text-xs text-paper-dim">
+      <figcaption className="mt-3 flex flex-wrap items-center gap-4 text-xs text-ink-dim">
         <span className="flex items-center gap-1.5">
           <span
             aria-hidden
             className="inline-block h-2.5 w-2.5 rounded-[1px]"
-            style={{ background: 'var(--color-out)' }}
+            style={{ background: 'var(--color-chart-strong)' }}
           />
           Fixed
         </span>
@@ -213,12 +213,12 @@ export function CostMixChart({ data }: { data: MonthlyCashflow[] }) {
           <span
             aria-hidden
             className="inline-block h-2.5 w-2.5 rounded-[1px]"
-            style={{ background: 'var(--color-out-lift)' }}
+            style={{ background: 'var(--color-chart-mid)' }}
           />
           Variable
         </span>
         {hover !== null && rows[hover] && (
-          <span className="figure text-paper-faint">
+          <span className="figure text-ink-faint">
             {rows[hover]!.full} · {formatCents(rows[hover]!.total)}
           </span>
         )}

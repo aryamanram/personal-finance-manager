@@ -13,20 +13,36 @@
  * `$type`, `$description` — colours as hex strings, which Tokens Studio reads
  * and the 2025.10 DTCG colour objects are not. Set the plugin's token format
  * to "W3C DTCG".
+ *
+ * Two sets, one per theme. Every colour in globals.css is written
+ * `light-dark(<light>, <dark>)`; the light half goes to the `light` set with
+ * the fonts, the dark half to `dark`. The Dark theme reads `light` as its
+ * source and `dark` over it, so a font (or anything not themed) has one home.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 export const TOKENS_PATH = 'docs/design/tokens.json';
-/** The one token set; Figma variables come out as color/ink-900, font/sans. */
-export const SET = 'ledger';
+/** The two token sets; Figma variables come out as color/ground, font/sans. */
+export const SETS = ['light', 'dark'] as const;
 
 interface Token { $value: string; $type: 'color' | 'fontFamily'; $description?: string }
+interface Theme {
+  id: string;
+  name: string;
+  selectedTokenSets: Record<string, 'enabled' | 'source'>;
+}
 export type TokenFile = {
-  [SET]: { color: Record<string, Token>; font: Record<string, Token> };
-  $themes: [];
+  light: { color: Record<string, Token>; font: Record<string, Token> };
+  dark: { color: Record<string, Token> };
+  $themes: Theme[];
   $metadata: { tokenSetOrder: string[] };
 };
+
+const THEMES: Theme[] = [
+  { id: 'light', name: 'Light', selectedTokenSets: { light: 'enabled' } },
+  { id: 'dark', name: 'Dark', selectedTokenSets: { light: 'source', dark: 'enabled' } },
+];
 
 /** next/font loaders in the root layout: `Inter_Tight({ … variable: '--font-inter-tight' })`. */
 export function fontFamilies(layout: string): Map<string, string> {
@@ -51,7 +67,7 @@ export function themeDeclarations(source: string): { name: string; value: string
   // Windows line endings would hide every blank line from the scan below,
   // letting a comment describe declarations it was never meant to reach.
   const css = source.replace(/\r\n?/g, '\n');
-  const block = /@theme\s*\{([\s\S]*?)\n\}/.exec(css);
+  const block = /@theme(?:\s+static)?\s*\{([\s\S]*?)\n\}/.exec(css);
   if (!block) throw new Error('globals.css has no @theme block');
   const body = block[1];
 
@@ -87,18 +103,31 @@ export function themeDeclarations(source: string): { name: string; value: string
   return out;
 }
 
+const HEX = '#[0-9a-fA-F]{6}';
+const THEMED = new RegExp(`^light-dark\\(\\s*(${HEX})\\s*,\\s*(${HEX})\\s*\\)$`);
+
 export function buildTokens(css: string, layout: string): TokenFile {
   const families = fontFamilies(layout);
-  const color: Record<string, Token> = {};
+  const light: Record<string, Token> = {};
+  const dark: Record<string, Token> = {};
   const font: Record<string, Token> = {};
 
   for (const { name, value, description } of themeDeclarations(css)) {
     const desc = description ? { $description: description } : {};
     if (name.startsWith('--color-')) {
-      // Hex only. Anything else (oklch, a var()) is a decision about how
-      // Figma should see it, so it stops the build rather than guessing.
-      if (!/^#[0-9a-fA-F]{6}$/.test(value)) throw new Error(`${name}: ${value} is not a #rrggbb colour`);
-      color[name.slice('--color-'.length)] = { $value: value.toLowerCase(), $type: 'color', ...desc };
+      // light-dark() of two hexes, or one hex for a colour both themes share.
+      // Anything else (oklch, a var()) is a decision about how Figma should
+      // see it, so it stops the build rather than guessing.
+      const key = name.slice('--color-'.length);
+      const themed = THEMED.exec(value);
+      if (themed) {
+        light[key] = { $value: themed[1].toLowerCase(), $type: 'color', ...desc };
+        dark[key] = { $value: themed[2].toLowerCase(), $type: 'color', ...desc };
+      } else if (new RegExp(`^${HEX}$`).test(value)) {
+        light[key] = { $value: value.toLowerCase(), $type: 'color', ...desc };
+      } else {
+        throw new Error(`${name}: ${value} is not a #rrggbb colour or light-dark() of two`);
+      }
     } else if (name.startsWith('--font-')) {
       // `var(--font-inter-tight), ui-sans-serif, …` — Figma needs the family
       // name the app actually loads, which next/font defines in the layout.
@@ -111,7 +140,12 @@ export function buildTokens(css: string, layout: string): TokenFile {
     }
   }
 
-  return { [SET]: { color, font }, $themes: [], $metadata: { tokenSetOrder: [SET] } };
+  return {
+    light: { color: light, font },
+    dark: { color: dark },
+    $themes: THEMES,
+    $metadata: { tokenSetOrder: [...SETS] },
+  };
 }
 
 export function renderTokens(): string {

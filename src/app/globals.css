@@ -1,57 +1,68 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------------------
-   A ledger, not a dashboard.
-   Ink ground, paper figures, columns that align to the digit. The palette is
-   deliberately cool throughout — this is a tool for sitting with your spending,
-   not an alarm panel. Inflow is a bright aqua, outflow a deep ocean blue: they
-   are separated by LIGHTNESS (3.50:1), not hue, so the distinction survives
-   red-green colourblindness. Amber is the only warm colour on the page and is
-   reserved, everywhere and only, for "a human changed this" — it earns its
-   warmth by being the one thing you must not miss.
+   A ledger, not a dashboard — and since 2026-10-08, a ledger in colour.
+
+   The chrome is ink on paper: neutral grounds, neutral inks, columns that
+   align to the digit. Colour is spent in one place, on the chart, where it
+   says what KIND of thing money was spent on (its category group). Everything
+   else stays neutral so that colour keeps meaning something.
+
+   Two themes, each chosen rather than flipped: every role below is written
+   light-dark(<light>, <dark>), and the dark value was picked and checked for
+   the dark ground (docs/design/OVERHAUL.md, "Colour"). Which one shows is
+   `color-scheme` — the system's setting, unless the theme switch pins it.
+
+   Three hues are reserved and appear in no chart: amber for "a human changed
+   this", green for money earned, red for something a person must look at.
    --------------------------------------------------------------------------- */
 
-@theme {
-  --color-ink-900: #0b0f14;
-  --color-ink-850: #0f141b;
-  --color-ink-800: #131922;
-  --color-ink-700: #1b2430;
-  --color-ink-600: #25303e;
-  --color-ink-500: #34424f;
+@theme static {
+  /* The page, and the surfaces that sit on it. Raised is lighter than the
+     ground in the light theme and lighter again in the dark one: menus and
+     the row editor come forward. Well is for things set INTO the page —
+     inputs, bar tracks. */
+  --color-ground: light-dark(#f3f3ef, #151716);
+  --color-raised: light-dark(#fbfbf8, #1d201e);
+  --color-well: light-dark(#e8e8e2, #252826);
+  /* Hairlines between rows, and the stronger edge of an input or a chip. */
+  --color-rule: light-dark(#dadad3, #2d312e);
+  --color-rule-strong: light-dark(#bebeb5, #424741);
 
-  --color-paper:     #e6eaec;
-  --color-paper-dim: #a5b0b7;
-  /* Used at 11-14px for eyebrows and metadata, which is below the large-text
-     threshold, so it needs 4.5:1. 5.95:1 on the page ground. */
-  --color-paper-faint: #84919a;
-
-  --color-in:    #6ee7c0;
-  --color-in-dim:#2f8a72;
-  --color-out:   #3a6ea5;
-  /* Darker than --color-out, not lighter. "Dim" is used for the recessive half
-     of a two-tone pair (the fixed band in a stacked bar, an unfilled track),
-     so inverting the relationship makes those read backwards. */
-  --color-out-dim:#2f5f8f;
-  /* The cost-mix chart stacks fixed under variable. Both used to be outflow
-     tones one step apart, which was legible when outflow was orange and is not
-     now that it is blue — this is the light end of the same hue, far enough
-     above --color-out to read as a separate band. */
-  --color-out-lift:#8ccdf0;
+  /* Text. Faint is used at 11-14px for eyebrows and metadata, below the
+     large-text threshold, so all three clear 4.5:1 on the ground, on Raised
+     and on Well, in both themes. */
+  --color-ink: light-dark(#1b1d1a, #ecede8);
+  --color-ink-dim: light-dark(#474a45, #b6b9b2);
+  --color-ink-faint: light-dark(#62655f, #8f938c);
 
   /* Reserved for human edits. Never use for anything else. */
-  --color-edited: #d9a441;
+  --color-edited: light-dark(#915b02, #efb146);
+  /* Money earned: income amounts. Not "a positive number" — a card payment
+     is positive on the card and is not earned. */
+  --color-earned: light-dark(#137738, #62d286);
+  /* Something a person has to look at: an error, a difference from the bank.
+     Always beside words that say what is wrong. */
+  --color-alert: light-dark(#ba2b28, #f47c70);
 
-  --color-invest: #7c6bc9;
+  /* The chart's two neutral inks: the Flow's sources and buckets, and fixed
+     against variable. At least 3:1 apart and each 3:1 against the ground, so
+     two touching bands read as two. */
+  --color-chart-strong: light-dark(#3b3e39, #dfe1db);
+  --color-chart-mid: light-dark(#8a8d85, #777b74);
 
-  /* The Sankey's four buckets. A single "outflow" colour was enough when
-     outflow was orange against a green inflow; in an all-cool palette every
-     ribbon collapses into the same blue. These alternate light/dark down the
-     stack so adjacent ribbons always separate by lightness, and differ in hue
-     for the pairs that never touch. tests/design-tokens.test.ts pins both. */
-  --color-flow-required:      #3a6ea5;
-  --color-flow-discretionary: #5bbfe0;
-  --color-flow-invest:        #6a5cb8;
-  --color-flow-leftover:      #6ee7c0;
+  /* The group palette. A category is drawn in its group's slot, everywhere
+     (V10); the slot is the group's position among groups that hold spending.
+     The ORDER is part of the palette: adjacent slots are what the validator
+     passed (normal-vision ΔE ≥ 15, CVD ΔE ≥ 8), so never reorder or insert. */
+  --color-group-1: light-dark(#145ec1, #4385e4);
+  --color-group-2: light-dark(#079390, #16a7a3);
+  --color-group-3: light-dark(#d6612f, #e27033);
+  --color-group-4: light-dark(#6b3baa, #8557c8);
+  --color-group-5: light-dark(#b82d67, #da4786);
+  --color-group-6: light-dark(#61911c, #71a428);
+  --color-group-7: light-dark(#027eb1, #3096cb);
+  --color-group-8: light-dark(#d15a63, #c74a51);
 
   /* Self-hosted by next/font in app/layout.tsx, which defines both variables
      on <html>. */
@@ -59,15 +70,21 @@
   --font-mono: var(--font-jetbrains-mono), ui-monospace, "SF Mono", Menlo, monospace;
 }
 
-:root {
-  color-scheme: dark;
-}
+/* The system decides, unless the theme switch has pinned one (layout.tsx
+   writes data-theme from a cookie, so the first paint is already right). */
+:root { color-scheme: light dark; }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 
 html, body {
-  background: var(--color-ink-900);
-  color: var(--color-paper);
+  background: var(--color-ground);
+  color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-ink) 18%, transparent);
 }
 
 /* Every monetary figure. Tabular figures are the whole point: a column of
@@ -98,21 +115,32 @@ html, body {
   font-size: 0.6875rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--color-paper-faint);
+  color: var(--color-ink-faint);
 }
 
 /* A ruled register: hairlines between rows, nothing around them. */
-.rule    { border-color: var(--color-ink-700); }
-.rule-t  { border-top: 1px solid var(--color-ink-700); }
-.rule-b  { border-bottom: 1px solid var(--color-ink-700); }
+.rule    { border-color: var(--color-rule); }
+.rule-t  { border-top: 1px solid var(--color-rule); }
+.rule-b  { border-bottom: 1px solid var(--color-rule); }
+
+/* Names a category's group: a small square, never a diamond — the diamond is
+   the edit marker's shape. */
+.swatch {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: var(--color-ink-900); }
-::-webkit-scrollbar-thumb { background: var(--color-ink-600); border-radius: 5px; }
-::-webkit-scrollbar-thumb:hover { background: var(--color-ink-500); }
+::-webkit-scrollbar-track { background: var(--color-ground); }
+::-webkit-scrollbar-thumb { background: var(--color-rule-strong); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-ink-faint); }
 
+/* Ink, not a hue: the focus ring is chrome, and amber is not chrome. */
 :focus-visible {
-  outline: 2px solid var(--color-edited);
+  outline: 2px solid var(--color-ink);
   outline-offset: 2px;
   border-radius: 2px;
 }

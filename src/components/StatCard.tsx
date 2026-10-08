@@ -31,7 +31,7 @@ export function StatCard({
     <div
       className={clsx(
         'rule-t pt-4',
-        emphasis && 'border-t-2 border-t-paper-dim',
+        emphasis && 'border-t-2 border-t-ink-dim',
       )}
     >
       <div className="eyebrow">{label}</div>
@@ -46,20 +46,21 @@ export function StatCard({
       <div className="mt-2 flex items-baseline gap-2 text-xs">
         {delta != null && (
           <span
-            className={clsx(
-              'figure',
-              deltaIsGood ? 'text-in' : 'text-out',
-            )}
+            // Direction is in the arrow and the sign. Colouring "spent more"
+            // red would turn the page into an alarm panel, and "good" green
+            // would spend the earned-money colour on something else.
+            className="figure text-ink-dim"
+            title={deltaIsGood ? 'Better than the previous period' : 'Worse than the previous period'}
           >
             {delta > 0 ? '▲' : '▼'} {Math.abs(delta).toFixed(1)}%
           </span>
         )}
         {previousCents != null && (
-          <span className="text-paper-faint">
+          <span className="text-ink-faint">
             from {formatCents(previousCents, { cents: false })}
           </span>
         )}
-        {hint && <span className="text-paper-faint">{hint}</span>}
+        {hint && <span className="text-ink-faint">{hint}</span>}
       </div>
     </div>
   );

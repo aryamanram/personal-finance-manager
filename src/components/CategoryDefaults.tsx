@@ -74,7 +74,7 @@ export function CategoryDefaults({
         disabled={saving}
         onChange={(v) => { setNeed(v); void save({ default_necessity: v }); }}
       />
-      {error && <p className="text-xs text-out">{error}</p>}
+      {error && <p className="text-xs text-alert">{error}</p>}
     </div>
   );
 }
@@ -96,7 +96,7 @@ function Group({
           <label
             key={o.value}
             className={`flex cursor-pointer items-baseline gap-2 text-sm transition-colors ${
-              value === o.value ? 'text-paper' : 'text-paper-faint hover:text-paper-dim'
+              value === o.value ? 'text-ink' : 'text-ink-faint hover:text-ink-dim'
             }`}
           >
             <input
@@ -104,10 +104,10 @@ function Group({
               name={label}
               checked={value === o.value}
               onChange={() => onChange(o.value)}
-              className="accent-edited"
+              className="accent-ink"
             />
             {o.label}
-            <span className="text-xs text-paper-faint">{o.hint}</span>
+            <span className="text-xs text-ink-faint">{o.hint}</span>
           </label>
         ))}
       </div>

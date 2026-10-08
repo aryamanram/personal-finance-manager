@@ -49,7 +49,7 @@ export function BalanceSnapshotForm({ accountId }: { accountId: string }) {
           type="date"
           value={asOf}
           onChange={(e) => setAsOf(e.target.value)}
-          className="figure rounded-sm border border-ink-600 bg-ink-800 px-2 py-1.5 text-sm"
+          className="figure rounded-sm border border-rule-strong bg-well px-2 py-1.5 text-sm"
         />
         <input
           type="text"
@@ -58,18 +58,18 @@ export function BalanceSnapshotForm({ accountId }: { accountId: string }) {
           onChange={(e) => setAmount(e.target.value)}
           placeholder="87,200.00"
           required
-          className="figure w-40 rounded-sm border border-ink-600 bg-ink-800 px-2 py-1.5 text-sm placeholder:text-paper-faint"
+          className="figure w-40 rounded-sm border border-rule-strong bg-well px-2 py-1.5 text-sm placeholder:text-ink-faint"
         />
         <button
           type="submit"
           disabled={busy}
-          className="rounded-sm border border-ink-500 px-3 py-1.5 text-sm transition-colors hover:border-paper-faint disabled:opacity-50"
+          className="rounded-sm border border-ink-faint px-3 py-1.5 text-sm transition-colors hover:border-ink-faint disabled:opacity-50"
         >
           {busy ? 'Saving…' : 'Save'}
         </button>
       </div>
       {state.message && (
-        <p className={`mt-2 text-xs ${state.kind === 'ok' ? 'text-in' : 'text-out'}`}>
+        <p className={`mt-2 text-xs ${state.kind === 'ok' ? 'text-ink-dim' : 'text-alert'}`}>
           {state.message}
         </p>
       )}

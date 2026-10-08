@@ -44,7 +44,7 @@ const TONE = {
   discretionary: 'var(--color-flow-discretionary)',
   invest: 'var(--color-flow-invest)',
   leftover: 'var(--color-flow-leftover)',
-  left: 'var(--color-paper-dim)',
+  left: 'var(--color-ink-dim)',
   credit: 'var(--color-in-dim)',
 } as const;
 
@@ -179,7 +179,7 @@ export function Sankey({ data }: { data: SankeyInput }) {
 
   if (!graph) {
     return (
-      <div className="flex h-[300px] items-center justify-center text-sm text-paper-faint">
+      <div className="flex h-[300px] items-center justify-center text-sm text-ink-faint">
         No money moved in this period.
       </div>
     );
@@ -211,7 +211,7 @@ export function Sankey({ data }: { data: SankeyInput }) {
                 <path
                   d={path(link) ?? undefined}
                   fill="none"
-                  stroke="var(--color-ink-900)"
+                  stroke="var(--color-ground)"
                   strokeWidth={Math.max(1, link.width ?? 1) + 1.5}
                   aria-hidden
                 />
@@ -260,12 +260,12 @@ export function Sankey({ data }: { data: SankeyInput }) {
                     y={y0 + height / 2}
                     dy="0.34em"
                     textAnchor={toLeft ? 'end' : 'start'}
-                    className="fill-paper-dim"
+                    className="fill-ink-dim"
                     style={{ fontSize: 11 }}
                   >
                     {node.name}
                     <tspan
-                      className="fill-paper-faint"
+                      className="fill-ink-faint"
                       style={{ fontFamily: 'var(--font-mono)', fontSize: 10 }}
                     >
                       {'  '}{formatCentsCompact(node.cents)}

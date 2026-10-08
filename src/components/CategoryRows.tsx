@@ -28,7 +28,7 @@ export function CategoryRows({
   const largest = shown[0]?.total_cents ?? 0;
 
   if (shown.length === 0) {
-    return <p className="py-6 text-sm text-paper-faint">Nothing spent in this period.</p>;
+    return <p className="py-6 text-sm text-ink-faint">Nothing spent in this period.</p>;
   }
 
   return (
@@ -43,16 +43,16 @@ export function CategoryRows({
           <div className="min-w-0">
             <Link
               href={registerHref({ categoryId: r.category_id, necessity: r.necessity, from, to })}
-              className="block truncate text-sm text-paper transition-colors hover:text-paper-dim"
+              className="block truncate text-sm text-ink transition-colors hover:text-ink-dim"
             >
               {r.category_name}
             </Link>
-            <div className="mt-0.5 truncate text-xs text-paper-faint">
+            <div className="mt-0.5 truncate text-xs text-ink-faint">
               {r.category_group_name} · {r.cost_type} · {r.necessity}
             </div>
           </div>
 
-          <div className="hidden h-[6px] rounded-[1px] bg-ink-700 sm:block" aria-hidden>
+          <div className="hidden h-[6px] rounded-[1px] bg-well sm:block" aria-hidden>
             <div
               className="h-full rounded-[1px]"
               style={{

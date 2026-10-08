@@ -69,11 +69,11 @@ export default async function DashboardPage({
           <div className="eyebrow mb-1">Cashflow</div>
           <PeriodPicker options={periods} active={period.key} align="start" />
         </div>
-        <div className="flex items-center gap-6 text-xs text-paper-faint">
+        <div className="flex items-center gap-6 text-xs text-ink-faint">
           {lastSync?.finished_at && (
             <span>
               Last sync{' '}
-              <span className="figure text-paper-dim">
+              <span className="figure text-ink-dim">
                 {formatTimestampShort(lastSync.finished_at)}
               </span>
               {lastSync.status !== 'ok' && (
@@ -96,12 +96,12 @@ export default async function DashboardPage({
       <CardSettlementLine cards={cards} />
 
       {drift.length > 0 && (
-        <div className="rule-t border-t-edited/40 pt-3 text-xs text-paper-dim">
+        <div className="rule-t border-t-edited/40 pt-3 text-xs text-ink-dim">
           <span className="text-edited">Reconciliation</span>{' '}
           {drift.map((d) => (
             <span key={d.name} className="ml-3">
               {d.name} differs from the bank by{' '}
-              <span className="figure text-paper">{formatCents(d.drift_cents)}</span>
+              <span className="figure text-ink">{formatCents(d.drift_cents)}</span>
             </span>
           ))}
         </div>
@@ -128,7 +128,7 @@ export default async function DashboardPage({
             Fixed vs variable · last {Math.min(cashflow.length, 12)} months
           </h2>
         </div>
-        <p className="mt-2 mb-6 max-w-lg text-xs leading-relaxed text-paper-faint">
+        <p className="mt-2 mb-6 max-w-lg text-xs leading-relaxed text-ink-faint">
           Fixed costs are the part of next month you already know. The taller
           the dark band, the more predictable the month.
         </p>
@@ -138,11 +138,11 @@ export default async function DashboardPage({
       <section>
         <div className="rule-b flex flex-wrap items-baseline justify-between gap-2 pb-2">
           <h2 className="eyebrow">Where it went</h2>
-          <span className="text-xs text-paper-faint">
+          <span className="text-xs text-ink-faint">
             Invested{' '}
             <Figure cents={invested} tone="invest" showCents={false} />
             {' · '}
-            <Link href="/flow" className="transition-colors hover:text-paper">
+            <Link href="/flow" className="transition-colors hover:text-ink">
               see the flow →
             </Link>
           </span>
@@ -159,14 +159,14 @@ function EmptyState() {
   return (
     <div className="rule-t mx-auto mt-24 max-w-md pt-8 text-center">
       <h1 className="text-lg font-medium">No transactions yet</h1>
-      <p className="mt-3 text-sm leading-relaxed text-paper-dim">
+      <p className="mt-3 text-sm leading-relaxed text-ink-dim">
         Import an Apple Card statement or run a SimpleFIN sync to get started.
       </p>
       <div className="mt-6 flex justify-center gap-6 text-sm">
-        <Link href="/transactions" className="border-b border-paper-faint pb-0.5 text-paper hover:border-paper">
+        <Link href="/transactions" className="border-b border-ink-faint pb-0.5 text-ink hover:border-ink">
           Import a statement
         </Link>
-        <code className="figure text-xs text-paper-faint">npm run seed</code>
+        <code className="figure text-xs text-ink-faint">npm run seed</code>
       </div>
     </div>
   );
@@ -190,13 +190,13 @@ function CardSettlementLine({ cards }: { cards: CardSettlement[] }) {
   const clearing = cards.filter((c) => c.clearing_cents > 0);
 
   return (
-    <div className="rule-t pt-3 text-xs text-paper-dim">
-      <span className={off.length > 0 ? 'text-edited' : 'text-paper-faint'}>Cards</span>
+    <div className="rule-t pt-3 text-xs text-ink-dim">
+      <span className={off.length > 0 ? 'text-edited' : 'text-ink-faint'}>Cards</span>
       {off.length === 0 ? (
         <span className="ml-3">
           every charge is settled or still owed — the ledger and the issuers agree
           {clearing.map((c) => (
-            <span key={c.name} className="ml-2 text-paper-faint">
+            <span key={c.name} className="ml-2 text-ink-faint">
               ({c.name}:{' '}
               <span className="figure">{formatCents(c.clearing_cents)}</span> clearing)
             </span>
@@ -206,7 +206,7 @@ function CardSettlementLine({ cards }: { cards: CardSettlement[] }) {
         off.map((c) => (
           <span key={c.name} className="ml-3">
             {c.name} is{' '}
-            <span className="figure text-paper">{formatCents(c.gap_cents)}</span> away from
+            <span className="figure text-ink">{formatCents(c.gap_cents)}</span> away from
             what the issuer reports
           </span>
         ))

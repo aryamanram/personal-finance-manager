@@ -29,7 +29,7 @@ export default async function AccountsPage() {
         <div className="eyebrow">Accounts</div>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight">
           <Figure cents={total} tone="neutral" showCents={false} className="text-2xl" />
-          <span className="ml-3 text-sm font-normal text-paper-faint">net worth</span>
+          <span className="ml-3 text-sm font-normal text-ink-faint">net worth</span>
         </h1>
       </header>
 
@@ -42,8 +42,8 @@ export default async function AccountsPage() {
             {netWorth.map((n) => (
               <tr key={n.account_id} className="rule-b">
                 <td className="py-3 text-sm">{n.name}</td>
-                <td className="py-3 text-xs text-paper-faint">{n.type}</td>
-                <td className="py-3 text-xs text-paper-faint">
+                <td className="py-3 text-xs text-ink-faint">{n.type}</td>
+                <td className="py-3 text-xs text-ink-faint">
                   {n.basis === 'snapshot'
                     ? `snapshot · ${n.snapshot_date}`
                     : 'from transactions'}
@@ -56,12 +56,12 @@ export default async function AccountsPage() {
           </tbody>
         </table>
         {lastSync && (
-          <p className="mt-3 text-xs text-paper-faint">
+          <p className="mt-3 text-xs text-ink-faint">
             Last sync {lastSync.finished_at
               ? formatTimestampLong(lastSync.finished_at)
               : 'in progress'}{' '}
             · {lastSync.status}
-            {lastSync.error && <span className="ml-2 text-edited">{lastSync.error}</span>}
+            {lastSync.error && <span className="ml-2 text-alert">{lastSync.error}</span>}
           </p>
         )}
       </section>
@@ -85,7 +85,7 @@ export default async function AccountsPage() {
           </div>
 
           {singleSnapshot && (
-            <p className="mt-4 max-w-lg text-sm leading-relaxed text-paper-dim">
+            <p className="mt-4 max-w-lg text-sm leading-relaxed text-ink-dim">
               Tracking starts here, at{' '}
               <Figure cents={p.current_cents} tone="neutral" showCents={false} />{' '}
               on {p.as_of}. Whatever this account earned before today belongs to
@@ -121,12 +121,12 @@ export default async function AccountsPage() {
                   <tr>
                     <td className="pb-3 text-sm">
                       Return
-                      <span className="ml-2 text-xs text-paper-faint">Modified Dietz</span>
+                      <span className="ml-2 text-xs text-ink-faint">Modified Dietz</span>
                     </td>
                     <td className="pb-3 text-right">
                       <span
                         className={`figure text-sm ${
-                          (p.return_pct ?? 0) >= 0 ? 'text-in' : 'text-out'
+                          (p.return_pct ?? 0) >= 0 ? 'text-earned' : 'text-ink'
                         }`}
                       >
                         {p.return_pct === null ? '—' : `${p.return_pct.toFixed(2)}%`}
@@ -139,7 +139,7 @@ export default async function AccountsPage() {
           </table>
 
           {!singleSnapshot && (
-            <p className="mt-3 max-w-lg text-xs leading-relaxed text-paper-faint">
+            <p className="mt-3 max-w-lg text-xs leading-relaxed text-ink-faint">
               Money in the account before tracking began is a starting position, not a gain.
               A naive {'(end − start) / start'} would read{' '}
               {p.opening_cents > 0
@@ -165,7 +165,7 @@ export default async function AccountsPage() {
             <div className="rule-b pb-2">
               <h2 className="eyebrow">{a.name}</h2>
             </div>
-            <p className="mt-3 text-sm text-paper-dim">
+            <p className="mt-3 text-sm text-ink-dim">
               No balance recorded yet. Add one to start tracking performance.
             </p>
             <div className="mt-4 max-w-lg">
@@ -186,7 +186,7 @@ function Line({ label, cents, hint }: { label: string; cents: number; hint?: str
     <tr className="rule-b">
       <td className="py-3 text-sm">
         {label}
-        {hint && <span className="ml-2 text-xs text-paper-faint">{hint}</span>}
+        {hint && <span className="ml-2 text-xs text-ink-faint">{hint}</span>}
       </td>
       <td className="py-3 text-right">
         <Figure cents={cents} tone="neutral" />

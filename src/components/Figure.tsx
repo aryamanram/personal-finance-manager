@@ -27,14 +27,15 @@ export function Figure({
   const edited = original !== null && original !== undefined && original !== cents;
 
   const toneClass =
-    tone === 'neutral' ? 'text-paper'
-    : tone === 'in' ? 'text-in'
-    : tone === 'out' ? 'text-out'
-    : tone === 'invest' ? 'text-invest'
-    : cents == null ? 'text-paper-faint'
-    : cents > 0 ? 'text-in'
-    : cents < 0 ? 'text-paper'
-    : 'text-paper-dim';
+    tone === 'neutral' ? 'text-ink'
+    : tone === 'in' ? 'text-earned'
+    // Spending and investing are not alarms: they print in ink, and the
+    // sign says which way the money went. Only earned money has a colour.
+    : tone === 'out' || tone === 'invest' ? 'text-ink'
+    : cents == null ? 'text-ink-faint'
+    : cents > 0 ? 'text-earned'
+    : cents < 0 ? 'text-ink'
+    : 'text-ink-dim';
 
   return (
     <span

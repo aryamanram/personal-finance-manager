@@ -59,7 +59,7 @@ export default async function CategoryPage({
   return (
     <div className="space-y-10">
       <header>
-        <Link href="/" className="eyebrow transition-colors hover:text-paper-dim">
+        <Link href="/" className="eyebrow transition-colors hover:text-ink-dim">
           ← {category.group_name}
         </Link>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight">{category.name}</h1>
@@ -69,7 +69,7 @@ export default async function CategoryPage({
         <div>
           <div className="rule-b flex items-baseline justify-between pb-2">
             <h2 className="eyebrow">Monthly</h2>
-            <span className="text-xs text-paper-faint">
+            <span className="text-xs text-ink-faint">
               average <Figure cents={average} tone="neutral" showCents={false} />
             </span>
           </div>
@@ -79,24 +79,24 @@ export default async function CategoryPage({
           <ul className="mt-4 space-y-1.5">
             {months.map((m) => (
               <li key={m.month} className="flex items-center gap-3 text-xs">
-                <span className="figure w-16 shrink-0 text-paper-faint">
+                <span className="figure w-16 shrink-0 text-ink-faint">
                   {formatMonthShort(m.month)}
                 </span>
-                <span className="h-4 flex-1 bg-ink-850">
+                <span className="h-4 flex-1 bg-raised">
                   <span
-                    className="block h-full bg-out-dim"
+                    className="block h-full bg-chart-mid"
                     style={{ width: `${(m.total_cents / peak) * 100}%` }}
                   />
                 </span>
-                <span className="figure w-20 shrink-0 text-right text-paper-dim">
+                <span className="figure w-20 shrink-0 text-right text-ink-dim">
                   {formatCentsCompact(m.total_cents)}
                 </span>
-                <span className="figure w-8 shrink-0 text-right text-paper-faint">{m.n}</span>
+                <span className="figure w-8 shrink-0 text-right text-ink-faint">{m.n}</span>
               </li>
             ))}
           </ul>
           {months.length === 0 && (
-            <p className="py-8 text-sm text-paper-faint">No spending in this category yet.</p>
+            <p className="py-8 text-sm text-ink-faint">No spending in this category yet.</p>
           )}
         </div>
 
@@ -104,7 +104,7 @@ export default async function CategoryPage({
           <div className="rule-b pb-2">
             <h2 className="eyebrow">Defaults</h2>
           </div>
-          <p className="mt-3 text-xs leading-relaxed text-paper-faint">
+          <p className="mt-3 text-xs leading-relaxed text-ink-faint">
             Inherited by every transaction in this category. A per-transaction
             override still wins.
           </p>

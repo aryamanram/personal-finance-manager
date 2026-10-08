@@ -91,13 +91,13 @@ export function TransactionRow({
     <tr
       className={clsx(
         'rule-b group transition-colors',
-        voided ? 'text-paper-faint' : 'hover:bg-ink-850',
+        voided ? 'text-ink-faint' : 'hover:bg-raised',
         /* Dim the row's own text, not the subtree. `opacity` on the <tr>
            composites every descendant against the page — including the
            "pending" badge, whose background and text fade together. That took
            the badge to 2.46:1, well under AA, and the badge is the one thing
            on a pending row you actually need to read. */
-        pending && !voided && 'text-paper-dim',
+        pending && !voided && 'text-ink-dim',
       )}
     >
       <td className="w-8 py-2 pl-1">
@@ -114,11 +114,11 @@ export function TransactionRow({
           }}
           onChange={(e) => onSelect(txn.id, e.target.checked)}
           aria-label={`Select ${txn.eff_description}`}
-          className="accent-edited"
+          className="accent-ink"
         />
       </td>
 
-      <td className="figure w-20 py-2 text-xs text-paper-faint">
+      <td className="figure w-20 py-2 text-xs text-ink-faint">
         {/* The register is sorted by date and averages 1.7 rows per date, so
             a repeat is the same string twice in a column. The row still knows
             its date — the title and the expanded editor both carry it. */}
@@ -159,7 +159,7 @@ export function TransactionRow({
           </span>
           {/* The bank's own string, kept visible under the rename (I2). */}
           {renamed && (
-            <span className="figure mt-0.5 block truncate text-xs text-paper-faint">
+            <span className="figure mt-0.5 block truncate text-xs text-ink-faint">
               {txn.raw_description}
             </span>
           )}
@@ -177,7 +177,7 @@ export function TransactionRow({
         <div className="flex w-full items-center gap-2">
         <button
           onClick={() => setExpanded(true)}
-          className="flex min-w-0 items-center gap-2 text-left text-sm text-paper-dim transition-colors hover:text-paper"
+          className="flex min-w-0 items-center gap-2 text-left text-sm text-ink-dim transition-colors hover:text-ink"
         >
           <span className="truncate">{txn.category_name ?? 'Uncategorized'}</span>
         </button>
@@ -196,7 +196,7 @@ export function TransactionRow({
             disabled={pending}
             title={`${txn.suggested_reason ?? `Categorised by ${txn.category_source}`} — click to confirm`}
             aria-label={`Confirm ${txn.category_name} for ${txn.eff_description}`}
-            className="eyebrow shrink-0 rounded-sm border border-ink-600 px-1.5 py-0.5 text-[9px] text-paper-faint transition-colors hover:border-edited hover:text-edited disabled:opacity-40"
+            className="eyebrow shrink-0 rounded-sm border border-rule-strong px-1.5 py-0.5 text-[9px] text-ink-faint transition-colors hover:border-ink hover:text-ink disabled:opacity-40"
           >
             accept
           </button>
@@ -241,7 +241,7 @@ export function TransactionRow({
               }
               setEditing(null);
             }}
-            className="figure w-full rounded-sm border border-ink-500 bg-ink-800 px-2 py-1 text-right text-sm"
+            className="figure w-full rounded-sm border border-ink-faint bg-well px-2 py-1 text-right text-sm"
           />
         ) : (
           <button
@@ -297,7 +297,7 @@ function Badge({ children, tone }: { children: React.ReactNode; tone: 'neutral' 
     <span
       className={clsx(
         'rounded-sm px-1 py-px text-[10px] uppercase tracking-wide',
-        tone === 'out' ? 'bg-out-dim/25 text-out' : 'bg-ink-700 text-paper-faint',
+        tone === 'out' ? 'bg-well text-ink-dim' : 'bg-well text-ink-faint',
       )}
     >
       {children}

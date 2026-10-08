@@ -97,8 +97,8 @@ export default async function TransactionsPage({
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
           <div className="flex items-baseline gap-3">
             <h1 className="text-2xl font-semibold tracking-tight">Register</h1>
-            <span className="text-xs text-paper-faint">
-              <span className="figure text-paper-dim">
+            <span className="text-xs text-ink-faint">
+              <span className="figure text-ink-dim">
                 {total.toLocaleString('en-US')}
               </span>{' '}
               {total === 1 ? 'transaction' : 'transactions'}
@@ -119,12 +119,12 @@ export default async function TransactionsPage({
               name="q"
               defaultValue={one('q') ?? ''}
               placeholder="Search descriptions"
-              className="w-56 rounded-sm border border-ink-600 bg-ink-800 px-2 py-1.5 placeholder:text-paper-faint"
+              className="w-56 rounded-sm border border-rule-strong bg-well px-2 py-1.5 placeholder:text-ink-faint"
             />
             <select
               name="account"
               defaultValue={one('account') ?? ''}
-              className="rounded-sm border border-ink-600 bg-ink-800 px-2 py-1.5"
+              className="rounded-sm border border-rule-strong bg-well px-2 py-1.5"
             >
               <option value="">All accounts</option>
               {accounts.map((a) => (
@@ -143,7 +143,7 @@ export default async function TransactionsPage({
 
             <button
               type="submit"
-              className="rounded-sm border border-ink-500 px-3 py-1.5 text-paper transition-colors hover:border-paper-faint"
+              className="rounded-sm border border-ink-faint px-3 py-1.5 text-ink transition-colors hover:border-ink-faint"
             >
               Apply
             </button>
@@ -169,11 +169,11 @@ export default async function TransactionsPage({
             express "this one category" and the page would otherwise be
             silently narrower than it looks. */}
         {linkedCategory && (
-          <p className="text-xs text-paper-faint">
-            Only <span className="text-paper">{linkedCategory.name}</span>
+          <p className="text-xs text-ink-faint">
+            Only <span className="text-ink">{linkedCategory.name}</span>
             {linkedNecessity && <> · {linkedNecessity}</>}
             {' · '}
-            <a href={withoutParams(params, ['category', 'necessity'])} className="underline decoration-ink-500 underline-offset-4 hover:text-paper">
+            <a href={withoutParams(params, ['category', 'necessity'])} className="underline decoration-ink-faint underline-offset-4 hover:text-ink">
               show every category
             </a>
           </p>

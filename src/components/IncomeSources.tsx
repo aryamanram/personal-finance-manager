@@ -75,7 +75,7 @@ export function IncomeSources({
 
   return (
     <div>
-      <p className="mt-3 max-w-lg text-sm leading-relaxed text-paper-dim">
+      <p className="mt-3 max-w-lg text-sm leading-relaxed text-ink-dim">
         Money from a payer listed here is filed automatically and skips review.
       </p>
 
@@ -86,14 +86,14 @@ export function IncomeSources({
               <tr key={s.id} className="rule-b">
                 <td className="py-3 text-sm">
                   {s.name}
-                  <span className="ml-2 text-xs text-paper-faint">
+                  <span className="ml-2 text-xs text-ink-faint">
                     {s.match_payer ? <>description contains <span className="figure">{s.match_payer}</span></> : null}
                     {s.match_payer && s.match_originator_id ? ' · ' : null}
                     {s.match_originator_id ? <>originator <span className="figure">{s.match_originator_id}</span></> : null}
                   </span>
                 </td>
-                <td className="py-3 text-xs text-paper-faint">{s.category_name}</td>
-                <td className="py-3 text-xs text-paper-faint">
+                <td className="py-3 text-xs text-ink-faint">{s.category_name}</td>
+                <td className="py-3 text-xs text-ink-faint">
                   {s.deposits === 0
                     ? 'no deposits yet'
                     : `${s.deposits} ${s.deposits === 1 ? 'deposit' : 'deposits'} · last ${s.last_date}`}
@@ -106,7 +106,7 @@ export function IncomeSources({
                     onClick={() => retire(s)}
                     disabled={busy !== null}
                     aria-label={`Remove ${s.name}`}
-                    className="text-xs text-paper-faint transition-colors hover:text-paper disabled:opacity-40"
+                    className="text-xs text-ink-faint transition-colors hover:text-ink disabled:opacity-40"
                   >
                     {busy === s.id ? 'Removing…' : 'Remove'}
                   </button>
@@ -126,7 +126,7 @@ export function IncomeSources({
             onChange={(e) => setName(e.target.value)}
             placeholder="Employer"
             required
-            className="w-36 rounded-sm border border-ink-600 bg-ink-800 px-2 py-1.5 text-sm placeholder:text-paper-faint"
+            className="w-36 rounded-sm border border-rule-strong bg-well px-2 py-1.5 text-sm placeholder:text-ink-faint"
           />
           <input
             aria-label="Description contains"
@@ -135,13 +135,13 @@ export function IncomeSources({
             placeholder="Name on the deposit"
             required
             minLength={3}
-            className="figure w-60 rounded-sm border border-ink-600 bg-ink-800 px-2 py-1.5 text-sm placeholder:text-paper-faint"
+            className="figure w-60 rounded-sm border border-rule-strong bg-well px-2 py-1.5 text-sm placeholder:text-ink-faint"
           />
           <select
             aria-label="File as"
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
-            className="rounded-sm border border-ink-600 bg-ink-800 px-2 py-1.5 text-sm"
+            className="rounded-sm border border-rule-strong bg-well px-2 py-1.5 text-sm"
           >
             {incomeCategories.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
@@ -150,16 +150,16 @@ export function IncomeSources({
           <button
             type="submit"
             disabled={busy !== null}
-            className="rounded-sm border border-ink-500 px-3 py-1.5 text-sm transition-colors hover:border-paper-faint disabled:opacity-50"
+            className="rounded-sm border border-ink-faint px-3 py-1.5 text-sm transition-colors hover:border-ink-faint disabled:opacity-50"
           >
             {busy === 'add' ? 'Adding…' : 'Add payer'}
           </button>
         </div>
-        <p className="mt-2 text-xs text-paper-faint">
+        <p className="mt-2 text-xs text-ink-faint">
           Matched on incoming money only, ignoring case and spacing.
         </p>
         {state && (
-          <p className={`mt-2 text-xs ${state.kind === 'ok' ? 'text-in' : 'text-out'}`}>{state.message}</p>
+          <p className={`mt-2 text-xs ${state.kind === 'ok' ? 'text-ink-dim' : 'text-alert'}`}>{state.message}</p>
         )}
       </form>
     </div>
