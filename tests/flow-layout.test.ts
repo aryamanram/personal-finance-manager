@@ -15,7 +15,7 @@ import {
   type FlowGraph, type FlowInput, type FlowRow,
 } from '@/lib/flow';
 import {
-  layoutFlow, pack, placeLabels, EDGE, GAP, LABEL_H, TRUNK_HEIGHT, type FlowLayout, type LayoutNode,
+  layoutFlow, pack, placeLabels, EDGE, GAP, LABEL_H, TRUNK_HEIGHT, TRUNK_SHARE, type FlowLayout, type LayoutNode,
 } from '@/lib/flow-layout';
 
 const PERIOD = { from: '2026-09-01', to: '2026-09-30' };
@@ -74,12 +74,36 @@ describe('the trunk', () => {
     expect(widths).toBeCloseTo(bottom(junction) - top(junction), 6);
   });
 
-  it('draws the whole of the money at the trunk height, from the top of the chart', () => {
+  const tall = (n: LayoutNode) => bottom(n) - top(n);
+  /** The trunk's share of everything drawn between the chart's edges. */
+  const share = (x: FlowLayout) => tall(node(x, 'junction')) / (x.height - 2 * EDGE);
+
+  it('draws the whole of the money at its usual height, from the top, when nothing sprawls', () => {
+    const folded = laid(flowGraph(model, PERIOD));
+    const j = node(folded, 'junction');
+    expect(top(j)).toBe(EDGE);
+    expect(tall(j)).toBeCloseTo(TRUNK_HEIGHT, 6);
+    expect(share(folded)).toBeGreaterThanOrEqual(TRUNK_SHARE);
+  });
+
+  it('grows the trunk to keep its share when what hangs below it sprawls', () => {
+    // Twelve thin categories shown, each needing room for its label.
     expect(top(junction)).toBe(EDGE);
-    expect(bottom(junction) - top(junction)).toBeCloseTo(TRUNK_HEIGHT, 6);
-    const taller = laid(flowGraph(model, PERIOD), 300);
-    const j = node(taller, 'junction');
-    expect(bottom(j) - top(j)).toBeCloseTo(300, 6);
+    expect(tall(junction)).toBeGreaterThan(TRUNK_HEIGHT);
+    expect(share(l)).toBeCloseTo(TRUNK_SHARE, 2);
+  });
+
+  it('grows no further than twice its usual height', () => {
+    const sprawl = buildFlow({
+      ...overspent,
+      categories: [
+        row('Rent', 'required', 90_000, 'Housing'),
+        ...Array.from({ length: 60 }, (_, i) => row(`Tiny ${i}`, 'discretionary', 100 + i)),
+      ],
+    })!;
+    const x = laid(flowGraph(sprawl, PERIOD, new Set(['bucket:discretionary'])));
+    expect(tall(node(x, 'junction'))).toBeCloseTo(2 * TRUNK_HEIGHT, 6);
+    expect(share(x)).toBeLessThan(TRUNK_SHARE);
   });
 
   it('hangs the buckets from the trunk\'s top edge, a gap apart', () => {
@@ -105,8 +129,8 @@ describe('the trunk', () => {
       }
     }
     const j = node(every, 'junction');
-    expect(bottom(j) - top(j)).toBeCloseTo(TRUNK_HEIGHT, 6);
-    expect(every.height).toBeGreaterThan(TRUNK_HEIGHT + 2 * EDGE);
+    expect(tall(j)).toBeGreaterThanOrEqual(TRUNK_HEIGHT);
+    expect(every.height).toBeGreaterThan(tall(j) + 2 * EDGE);
     expect(every.height).toBeCloseTo(Math.max(...every.nodes.map((n) => bottom(n))) + EDGE, 6);
   });
 

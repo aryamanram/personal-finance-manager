@@ -62,9 +62,10 @@ const SUBCATEGORIES: [parent: string, children: string[]][] = [
   ['Shopping', ['Clothing', 'Household']],
 ];
 
-export const categories: CategoryWithGroup[] = [
+/** The taxonomy with these parents split into these subcategories. */
+const withSubcategories = (splits: [parent: string, children: string[]][]): CategoryWithGroup[] => [
   ...top,
-  ...SUBCATEGORIES.flatMap(([parentName, children]) => {
+  ...splits.flatMap(([parentName, children]) => {
     const parent = top.find((c) => c.name === parentName)!;
     return children.map((name, i) => ({
       ...parent, id: `cat-${slug(name)}`, name, parent_id: parent.id, parent_name: parent.name, sort_order: i + 1,
@@ -72,13 +73,15 @@ export const categories: CategoryWithGroup[] = [
   }),
 ];
 
+export const categories: CategoryWithGroup[] = withSubcategories(SUBCATEGORIES);
+
 /** The palette slot of each group that holds spending, as getGroupSlots returns it. */
 export const groupSlots: Record<string, number> = {
   Housing: 1, Transportation: 2, Food: 3, Health: 4, Lifestyle: 5, Financial: 6,
 };
 
-const category = (name: string) => {
-  const c = categories.find((x) => x.name === name);
+const category = (name: string, from = categories) => {
+  const c = from.find((x) => x.name === name);
   if (!c) throw new Error(`No fixture category ${name}`);
   return c;
 };
@@ -115,8 +118,10 @@ export const september = cashflow[cashflow.length - 1];
 // its parent. Credits — the month's Daily Cash and an Amazon return — are
 // counted once, as the Flow's Credits source, which is what makes it balance.
 
-const flowRow = (name: string, necessity: string, cents: number, count: number, credit = 0): FlowRow => {
-  const c = category(name);
+const flowRow = (
+  name: string, necessity: string, cents: number, count: number, credit = 0, from = categories,
+): FlowRow => {
+  const c = category(name, from);
   return {
     category_id: c.id,
     category_name: name,
@@ -163,6 +168,73 @@ export const septemberFlow: FlowInput = {
 };
 
 export const SEPTEMBER = { from: '2026-09-01', to: '2026-09-27' };
+
+// --- A long period ----------------------------------------------------------
+//
+// Two years of a ledger whose categories have mostly been split: what an
+// "All time" Flow looks like once there is history, and what the trunk has
+// to stay larger than (docs/design/OVERHAUL.md, ask 12). Invented, like
+// everything here; the demo itself holds six months.
+
+const LONG_SPLITS: [parent: string, children: string[]][] = [
+  ['Restaurants', ['Dining out', 'Takeout']],
+  ['Shopping', ['Clothing', 'Household', 'Books', 'Garden', 'Pets', 'Toys', 'Sports gear']],
+  ['Subscriptions', ['Streaming', 'Apps & cloud', 'Music', 'News', 'Podcasts']],
+  ['Entertainment', ['Movies', 'Museums', 'Theatre', 'Bowling', 'Arcade']],
+  ['Travel', ['Hotels', 'Tours']],
+];
+export const longCategories = withSubcategories(LONG_SPLITS);
+export const longColors = categoryColors(longCategories, groupSlots);
+export const LONG_PERIOD = { from: '2024-10-01', to: '2026-09-27' };
+
+const long = (name: string, necessity: string, cents: number, count: number) =>
+  flowRow(name, necessity, cents, count, 0, longCategories);
+
+export const longPeriodFlow: FlowInput = {
+  incomeCents: 9_600_000,
+  investedCents: 1_200_000,
+  creditsCents: 31_500,
+  groupSlots,
+  colors: longColors,
+  categories: [
+    long('Rent', 'required', 6_840_000, 24),
+    long('Groceries', 'required', 1_050_000, 190),
+    long('Gas', 'required', 260_000, 60),
+    long('Renters Insurance', 'required', 204_000, 24),
+    long('Utilities', 'required', 175_000, 24),
+    long('Internet & Phone', 'required', 168_000, 24),
+    long('Pharmacy', 'required', 58_000, 14),
+    long('Parking & Tolls', 'required', 21_000, 30),
+    long('Fees & Interest', 'required', 4_500, 3),
+    long('Takeout', 'discretionary', 470_000, 120),
+    long('Dining out', 'discretionary', 160_000, 40),
+    long('Clothing', 'discretionary', 330_000, 30),
+    long('Household', 'discretionary', 210_000, 28),
+    long('Pets', 'discretionary', 120_000, 20),
+    long('Books', 'discretionary', 90_000, 25),
+    long('Sports gear', 'discretionary', 60_000, 6),
+    long('Garden', 'discretionary', 40_000, 9),
+    long('Toys', 'discretionary', 25_000, 5),
+    long('Streaming', 'discretionary', 64_000, 48),
+    long('Music', 'discretionary', 26_000, 24),
+    long('News', 'discretionary', 12_000, 12),
+    long('Apps & cloud', 'discretionary', 7_200, 24),
+    long('Podcasts', 'discretionary', 6_000, 12),
+    long('Theatre', 'discretionary', 45_000, 4),
+    long('Movies', 'discretionary', 30_000, 14),
+    long('Museums', 'discretionary', 18_000, 6),
+    long('Bowling', 'discretionary', 9_000, 3),
+    long('Arcade', 'discretionary', 4_000, 2),
+    long('Hotels', 'discretionary', 140_000, 5),
+    long('Tours', 'discretionary', 30_000, 2),
+    long('Flights', 'discretionary', 210_000, 4),
+    long('Rideshare', 'discretionary', 130_000, 70),
+    long('Fitness', 'discretionary', 108_000, 24),
+    long('Coffee', 'discretionary', 61_000, 150),
+    long('Cash Withdrawn', 'discretionary', 50_000, 8),
+    long('Gifts', 'discretionary', 40_000, 9),
+  ],
+};
 
 /** getCategoryFlow for Restaurants in September, as the page gets it. */
 export const restaurantsFlow: CategoryFlowInputRow[] = [

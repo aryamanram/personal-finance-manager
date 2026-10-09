@@ -7,7 +7,8 @@
  * one generous height from the top of the chart, and every column hangs from
  * that same top edge, each node beside the band that feeds it. Where thin
  * nodes need room for their labels the chart grows downward, rather than
- * shrinking the trunk to fit — the way Monarch's cash-flow chart reads.
+ * shrinking the trunk to fit — the way Monarch's cash-flow chart reads — and
+ * where they sprawl far below it, the trunk grows too, to keep its share.
  */
 import { sankey, type SankeyGraph, type SankeyLink, type SankeyNode } from 'd3-sankey';
 import type { FlowGraph, GraphNode, Tone } from './flow';
@@ -24,8 +25,12 @@ export const GAP = 32;
 export const LABEL_H = GAP;
 /** Above the first node and below the last: room for a label's halo. */
 export const EDGE = 16;
-/** How tall the whole of the money is drawn on the main Flow. */
+/** How tall the whole of the money is drawn on the main Flow, at least. */
 export const TRUNK_HEIGHT = 520;
+/** The least of the chart's height the trunk takes, when the rest sprawls below it. */
+export const TRUNK_SHARE = 0.6;
+/** How far past its usual height the trunk grows to keep that share. */
+const TRUNK_GROWTH = 2;
 
 export interface FlowLayout {
   nodes: LayoutNode[];
@@ -42,7 +47,10 @@ export interface FlowLayout {
 export interface LayoutOptions {
   /** The relative width of each gap between columns, left to right; even by default. */
   gaps?: number[];
-  /** How tall the whole of the money is drawn, in pixels. */
+  /**
+   * How tall the whole of the money is drawn, in pixels, at least: it grows,
+   * up to twice this, to stay TRUNK_SHARE of the chart's height.
+   */
   trunkHeight?: number;
 }
 
@@ -72,33 +80,52 @@ export function layoutFlow(
     for (const n of g.nodes) columns.set(n.column, [...(columns.get(n.column) ?? []), n]);
     for (const c of columns.values()) c.sort((a, b) => a.order - b.order);
     const last = Math.max(...columns.keys());
-
-    // The scale: the fullest column — the whole of the money — is the trunk's height.
     const fullest = Math.max(...[...columns.values()].map((c) => c.reduce((a, n) => a + (n.value ?? 0), 0)));
-    const ky = trunkHeight / fullest;
-    const size = (n: LayoutNode) => (n.value ?? 0) * ky;
-    for (const l of g.links) l.width = l.value * ky;
     // A node's ribbons leave and arrive in the order of the nodes at their
     // other end, so no two ribbons from one node cross.
     for (const n of g.nodes) {
       n.sourceLinks?.sort((a, b) => (a.target as LayoutNode).order - (b.target as LayoutNode).order);
       n.targetLinks?.sort((a, b) => (a.source as LayoutNode).order - (b.source as LayoutNode).order);
     }
-
-    // Left to right, so every node's sources are placed before it is. The
-    // first column of a trunk stacks flush; every other column keeps the gap.
     const trunk = trunkOf(g);
-    for (const col of [...columns.keys()].sort((a, b) => a - b)) {
-      const nodes = columns.get(col)!;
-      const tops = pack(
-        nodes.map((n) => ({ want: wantOf(n, size(n)), size: size(n) })),
-        col === 0 && trunk ? 0 : GAP,
-        EDGE,
-      );
-      nodes.forEach((n, i) => {
-        n.y0 = tops[i];
-        n.y1 = tops[i] + size(n);
-      });
+
+    /**
+     * Places every node with the fullest column — the whole of the money —
+     * drawn `t` tall, and returns where the lowest node ends. Left to right,
+     * so every node's sources are placed before it is; the first column of a
+     * trunk stacks flush, every other column keeps the gap.
+     */
+    let ky = 0;
+    const size = (n: LayoutNode) => (n.value ?? 0) * ky;
+    const place = (t: number): number => {
+      ky = t / fullest;
+      for (const l of g.links) l.width = l.value * ky;
+      for (const col of [...columns.keys()].sort((a, b) => a - b)) {
+        const nodes = columns.get(col)!;
+        const tops = pack(
+          nodes.map((n) => ({ want: wantOf(n, size(n)), size: size(n) })),
+          col === 0 && trunk ? 0 : GAP,
+          EDGE,
+        );
+        nodes.forEach((n, i) => {
+          n.y0 = tops[i];
+          n.y1 = tops[i] + size(n);
+        });
+      }
+      return Math.max(...g.nodes.map((n) => n.y1 ?? 0));
+    };
+
+    // The trunk keeps its share: drawn taller while what hangs below it would
+    // dwarf it. Each pass moves toward the height where the trunk is exactly
+    // its share, and the chart grows by less than the trunk does, so a few
+    // passes settle it.
+    let t = trunkHeight;
+    let lowest = place(t);
+    for (let pass = 0; pass < 12; pass++) {
+      const next = Math.min(trunkHeight * TRUNK_GROWTH, Math.max(trunkHeight, TRUNK_SHARE * (lowest - EDGE)));
+      if (Math.abs(next - t) < 0.5) break;
+      t = next;
+      lowest = place(t);
     }
     generator.update(g);
 
@@ -121,7 +148,7 @@ export function layoutFlow(
       y: (n.y0 ?? 0) + (size(stack[i]) >= size(n) ? -0.75 : 0.75),
     }));
 
-    const height = Math.max(EDGE * 2 + trunkHeight, ...g.nodes.map((n) => (n.y1 ?? 0) + EDGE));
+    const height = Math.max(EDGE * 2 + t, lowest + EDGE);
     return {
       nodes: g.nodes, links: g.links, height, trunk: trunk?.key ?? null, seams,
       labelY: placeLabels(g.nodes, height),

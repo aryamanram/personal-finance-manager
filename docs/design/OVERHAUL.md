@@ -76,6 +76,10 @@ pushed; waiting on the owner's look.
     that it basically takes up a good portion of the height, and then
     everything else splits off from it."* The trunk is drawn at a fixed,
     generous height from the top of the chart, and the rest hangs from it.
+12. *"Can we make [the trunk] larger so it doesnt look so small compared to
+    the sprawl that spreads from it"* — over a long period, the
+    subcategories hung far below a trunk of fixed height. The trunk now
+    keeps a share of the chart's height and grows with the sprawl.
 
 ## Why
 
@@ -186,6 +190,11 @@ Five columns, left to right:
   down from it, each category sits beside the band that feeds it, and where
   thin categories need room for their labels the chart grows downward
   rather than shrinking the trunk to fit.
+- **The trunk keeps its share.** That height is a floor. The trunk is
+  never less than 60% of the chart's height: where the categories and
+  subcategories sprawl further below it — a long period, every category
+  shown — the trunk is drawn taller, up to twice its usual height, so it
+  still reads as the thing everything splits from.
 - **Left over** mirrors it: the solid stream fades into the hatch as it
   reaches the bucket.
 - **Labels never collide.** Within a column, labels that would overlap are

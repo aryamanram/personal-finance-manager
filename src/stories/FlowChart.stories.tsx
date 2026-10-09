@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 import { fn } from 'storybook/test';
 import { FlowChart } from '@/components/FlowChart';
 import { buildFlow, buildCategoryFlow, flowGraph, categoryGraph, type FlowInput } from '@/lib/flow';
-import { septemberFlow, restaurantsFlow, SEPTEMBER, colors } from './fixtures';
+import { septemberFlow, restaurantsFlow, longPeriodFlow, SEPTEMBER, LONG_PERIOD, colors } from './fixtures';
 import { inTheme } from './Theme';
 
 const graphOf = (input: FlowInput, expanded: string[] = []) => {
@@ -38,6 +38,18 @@ export const AsOnThePage: Story = { args: { gaps: [1, 0.85, 1.25, 1.1] } };
 export const EveryCategory: Story = {
   args: {
     graph: graphOf(septemberFlow, ['bucket:required', 'bucket:discretionary']),
+    gaps: [1, 0.85, 1.25, 1.1],
+  },
+};
+/**
+ * Two years, most categories split: the subcategories sprawl far below, and
+ * the trunk grows to keep its share of the height rather than looking small
+ * beside them.
+ */
+export const LongPeriod: Story = {
+  args: {
+    graph: flowGraph(buildFlow(longPeriodFlow)!, LONG_PERIOD),
+    label: 'Where two years of money went',
     gaps: [1, 0.85, 1.25, 1.1],
   },
 };
