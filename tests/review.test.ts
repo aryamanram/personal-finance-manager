@@ -108,3 +108,29 @@ describe("Review's inbox holds what its badge counts (V3)", () => {
     expect(inbox.map((r) => r.raw_description)).not.toContain('GROCER');
   });
 });
+
+describe('the register pages through a day without repeating or skipping a row', () => {
+  it('orders rows from one batch, and pages them exactly once each', async () => {
+    // One transaction, so every row has the same created_at — as a sync's
+    // batch does — and inserted backwards, so insertion order is not the answer.
+    const names = ['FERRY', 'EMPORIUM', 'DELI', 'CINEMA', 'BAKERY', 'ARCADE', 'GARAGE'].sort().reverse();
+    await sql.begin(async (tx) => {
+      for (const [i, name] of names.entries()) {
+        await tx`
+          INSERT INTO transactions
+            (account_id, raw_description, amount_cents, posted_date, status, source, fingerprint,
+             category_id, category_source)
+          VALUES (${accountId}, ${name}, ${-(100 + i)}, '2026-07-15', 'posted', 'simplefin',
+                  ${fingerprint({ accountId, postedDate: '2026-07-15', amountCents: -(100 + i), rawDescription: name })},
+                  ${cat.Groceries}, 'manual')`;
+      }
+    });
+    const day = { from: '2026-07-15', to: '2026-07-15' };
+    const pages = [];
+    for (let offset = 0; offset < names.length; offset += 3) {
+      pages.push(...(await q.getTransactions({ ...day, limit: 3, offset })));
+    }
+    expect(pages.map((r) => r.raw_description)).toEqual([...names].sort());
+    expect(new Set(pages.map((r) => r.id)).size).toBe(names.length);
+  });
+});

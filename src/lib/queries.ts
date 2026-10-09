@@ -100,11 +100,19 @@ function transactionWhere(f: TransactionFilters) {
         : sql``}`;
 }
 
+/**
+ * The register's order: newest first, then a full tie-break. A sync inserts
+ * a whole batch with one created_at, so date and created_at alone leave
+ * same-day rows in no particular order — which a page boundary can then
+ * show twice or not at all. The id makes the order total.
+ */
+const newestFirst = () => sql`eff_posted_date DESC, created_at DESC, eff_description, eff_amount_cents, id`;
+
 export async function getTransactions(f: TransactionFilters = {}) {
   const rows = await sql<VTransaction[]>`
     SELECT * FROM v_transactions
     ${transactionWhere(f)}
-    ORDER BY eff_posted_date DESC, created_at DESC
+    ORDER BY ${newestFirst()}
     LIMIT ${f.limit ?? 200} OFFSET ${f.offset ?? 0}`;
   return rows;
 }
@@ -535,7 +543,7 @@ export async function getReviewQueue(range: { from?: string; to?: string } = {})
       AND ((NOT category_locked AND category_id IS NOT NULL
             AND category_source = ANY(${GUESS_SOURCES as string[]}::category_source[]))
            OR category_id IS NULL OR category_source IN ('unset','default'))
-    ORDER BY eff_posted_date DESC, created_at DESC
+    ORDER BY ${newestFirst()}
     LIMIT 1000`;
 }
 
