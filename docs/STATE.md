@@ -29,7 +29,9 @@ The owner asked for no push or PR until they say so: there will be many
 design changes. It carries the whole of `docs/design/OVERHAUL.md` — the Flow
 as the first page with a category's own Flow beneath, the light and dark
 colour scheme, Review, Setup — with V1–V10 tested and the a11y suite clean.
-The owner has not seen it yet. The working tree is left on `overhaul` so
+The owner is reviewing it in rounds and asking for changes (OVERHAUL.md "The
+asks", 1–10); the latest made the Flow's sources one trunk that splits from a
+labelled total. The working tree is left on `overhaul` so
 they can run it; it changes no sync code and no schema, so the nightly sync
 behaves as on `main`. Switch back to `main` once they are done looking.
 
@@ -232,6 +234,18 @@ handful and means something. The slot is the group's position among groups
 holding spending, in the taxonomy's sort order, so it moves only when the
 taxonomy does. Neutral sources and buckets are what let the group colours
 carry without competing (docs/design/OVERHAUL.md, "Colour").
+
+**The Flow's sources are a trunk, and the junction stays.** The owner wanted
+Monarch's "one large cut from the left" with income and savings still
+separate: the sources stack flush against the junction and blend into it, and
+the junction is a labelled total. Dropping the junction instead would make the
+chart decide which source paid for which bucket, which nothing records.
+
+**The register's order is total.** A sync inserts a batch with one
+`created_at`, so newest-first on date and `created_at` alone left same-day
+rows unordered — enough for a page boundary to repeat or skip a row, and for
+screenshot baselines to flicker on every reseed. Description, amount, then id
+break the tie.
 
 **Review opens on everything outstanding, whatever the period.** Its nav
 badge counts everything outstanding, and a count must be what its

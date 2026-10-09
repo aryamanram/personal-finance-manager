@@ -341,7 +341,7 @@ export interface GraphNode {
   /** Top to bottom within the column. */
   order: number;
   name: string;
-  /** Drawn beside the node; omitted for the junction. */
+  /** Drawn beside the node. */
   label?: string;
   kind: NodeKind;
   cents: number;
@@ -417,7 +417,12 @@ export function flowGraph(
     });
     links.push({ source: `source:${s.key}`, target: 'junction', cents: s.cents, tone: SOURCE_TONE[s.key] });
   }
-  push({ key: 'junction', column: 1, name: 'Available', kind: 'junction', cents: m.totalCents, tone: { kind: 'strong' } });
+  // The trunk's total, labelled: where the sources become one stream and
+  // the money visibly splits.
+  push({
+    key: 'junction', column: 1, name: 'Available', label: 'Available', kind: 'junction',
+    cents: m.totalCents, share: 1, tone: { kind: 'strong' },
+  });
 
   for (const b of m.buckets) {
     const bucketKey = `bucket:${b.key}`;

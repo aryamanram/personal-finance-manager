@@ -11,6 +11,7 @@ import { Figure } from './Figure';
 import { Segmented } from './FlowView';
 import { categoryGraph, type CategoryFlowModel, type InsideOption } from '@/lib/flow';
 import { registerHref } from '@/lib/register-link';
+import { formatShare } from '@/lib/share';
 import { formatCents } from '@/money';
 
 const groupColor = (slot: number | null) => (slot ? `var(--color-group-${slot})` : 'var(--color-chart-strong)');
@@ -400,7 +401,7 @@ function Picker({
 
 /** The category's own Flow as rows, each opening exactly its transactions. */
 function InsideTable({ detail, period }: { detail: CategoryFlowModel; period: { from: string; to: string } }) {
-  const of = (c: number) => (detail.cents > 0 ? `${((c / detail.cents) * 100).toFixed(1)}%` : '');
+  const of = (c: number) => (detail.cents > 0 ? formatShare(c / detail.cents) : '');
   return (
     <table className="w-full text-sm">
       <caption className="sr-only">{detail.name}, by {detail.split ? 'subcategory and ' : ''}merchant</caption>

@@ -63,6 +63,16 @@ pushed; waiting on the owner's look.
    from one node's colour to the next, labelled inside the chart with
    amount and share.
 
+**2026-10-08, evening**, after seeing that:
+
+10. *"I like the way monarch money does it where its one large cut from the
+    left, and we can still ensure that income and from savings are
+    seperate, but maybe just a gradient blend and then it splits into the
+    rest. Its also easier to follow the money 'split'."* The sources stack
+    into one bar as tall as the junction, their ribbons run straight into it
+    as one block and blend there, and the junction is a labelled total that
+    the money visibly splits from.
+
 ## Why
 
 The first round's findings still stand, and the work below fixes each one:
@@ -148,7 +158,7 @@ Five columns, left to right:
 | Column | Nodes | Colour |
 |---|---|---|
 | Sources | Income · From investments · Credits · From savings | slate |
-| Junction | one thin, unlabelled node | slate |
+| Junction | **Available**: the total, labelled, as tall as the sources together | slate |
 | Buckets | Required · Discretionary · Invested · Left over | slate |
 | Categories | the top-level categories under each bucket | the category's own shade of its group |
 | Subcategories | one level, for categories that have them | a deeper shade of the parent's |
@@ -156,6 +166,21 @@ Five columns, left to right:
 - Every flow is gross, so every node balances to the cent (V1). The junction
   is kept on purpose: without it the chart would have to decide which source
   paid for which bucket.
+- **The trunk.** The sources stack flush, one bar with a hairline seam
+  between them, exactly as tall as the junction and level with it, so their
+  ribbons run straight across and read as one solid block — one cut from the
+  left. Each ribbon fades from its source into the junction's ink, so the
+  sources are separate where they start and one stream where they arrive:
+  From savings' hatch dissolves into the solid. The junction is labelled
+  **Available** with the total, and the money splits from there. The same
+  holds in a category's own Flow, where the buckets that paid for it are the
+  trunk.
+- **Left over** mirrors it: the solid stream fades into the hatch as it
+  reaches the bucket.
+- **Labels never collide.** Within a column, labels that would overlap are
+  spread apart as a group, centred on where they want to be, and kept inside
+  the chart — which matters in the trunk, where a sliver of credits sits
+  flush against a whole paycheck.
 - **The prism.** Money arrives as one calm slate stream and splits into
   colour only where it was spent. Sources and buckets are two slate inks,
   distinguished by lightness and label; From savings and Left over are

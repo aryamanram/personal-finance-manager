@@ -9,6 +9,7 @@ import { useNarrow } from '@/lib/use-narrow';
 import { Figure } from './Figure';
 import { flowGraph, type FlowModel, type FlowCategory, type BucketKey } from '@/lib/flow';
 import { registerHref } from '@/lib/register-link';
+import { formatShare } from '@/lib/share';
 
 /**
  * Each gap holds the labels of the column to its right (or, for the first,
@@ -190,7 +191,7 @@ export function FlowTable({
   onFocus?: (id: string) => void;
 }) {
   if (!model) return <p className="py-10 text-center text-sm text-ink-faint">No money moved in this period.</p>;
-  const share = (c: number) => (model.spendingCents > 0 ? `${((c / model.spendingCents) * 100).toFixed(1)}%` : '');
+  const share = (c: number) => (model.spendingCents > 0 ? formatShare(c / model.spendingCents) : '');
   const rows = (r: Omit<Parameters<typeof registerHref>[0], 'from' | 'to'>) => registerHref({ ...r, ...period });
 
   const sourceHref: Record<string, string | undefined> = {
