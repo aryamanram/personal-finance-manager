@@ -72,7 +72,8 @@ test('a subcategory in the Flow table opens only its own rows', async ({ page })
 test('a figure opens its bucket, and the register prints the figure', async ({ page }) => {
   for (const [label, key] of [['Required', 'spent'], ['Discretionary', 'spent'], ['Income', 'received'], ['Invested', 'invested']] as const) {
     await page.goto('/');
-    const figure = page.locator('dl > div', { has: page.locator('dt', { hasText: new RegExp(`^${label}$`) }) }).getByRole('link');
+    // The whole card is the link; its first amount is the figure.
+    const figure = page.locator('a', { has: page.locator('dt', { hasText: new RegExp(`^${label}$`, 'i') }) });
     const shown = cents(await figure.innerText());
     await figure.click();
     expect((await registerTotals(page))[key], label).toBe(shown);

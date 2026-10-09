@@ -44,35 +44,42 @@ export function MonthFigures({
   ];
 
   return (
-    <dl className="grid grid-cols-2 gap-x-8 gap-y-6 sm:grid-cols-3 lg:grid-cols-5">
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
       {items.map((f) => {
         const delta = f.was !== undefined && f.was !== 0 ? pctChange(f.cents, f.was) : null;
-        const body = <Amount cents={f.cents} />;
-        return (
-          <div key={f.key} className="rule-t pt-3">
-            <dt className="eyebrow">{f.label}</dt>
-            <dd className="mt-1.5">
-              {f.href ? (
-                <Link href={f.href} className="group inline-block" title={`Open the ${f.label.toLowerCase()} transactions`}>
-                  <span className="decoration-rule-strong underline-offset-[6px] group-hover:underline">{body}</span>
-                </Link>
-              ) : body}
-            </dd>
-            <dd className="mt-1 min-h-[1rem] text-xs text-ink-faint">
+        // The label comes first for a screen reader; the number first by eye.
+        const body = (
+          <dl className="flex flex-col items-center">
+            <dt className="eyebrow order-2 mt-2">{f.label}</dt>
+            <dd className="order-1"><Amount cents={f.cents} /></dd>
+            <dd className="order-3 mt-2 min-h-[2rem] text-xs leading-snug text-ink-faint">
               {delta !== null && previousLabel ? (
-                <span title={improved(delta, f.lowerIsBetter) ? 'Better than before' : 'Worse than before'}>
-                  <span className="figure text-ink-dim">
+                <span className="block" title={improved(delta, f.lowerIsBetter) ? 'Better than before' : 'Worse than before'}>
+                  <span className="figure-display font-medium text-ink-dim">
                     {delta > 0 ? '▲' : delta < 0 ? '▼' : '•'} {Math.abs(delta).toFixed(1)}%
                   </span>{' '}
-                  from <span className="figure">{formatCents(f.was!, { cents: false })}</span> in {previousLabel}
+                  from <span className="figure-display">{formatCents(f.was!, { cents: false })}</span> in {previousLabel}
                 </span>
-              ) : f.note}
+              ) : null}
+              {f.note && <span className="block">{f.note}</span>}
             </dd>
-            {delta !== null && previousLabel && f.note && <dd className="text-xs text-ink-faint">{f.note}</dd>}
-          </div>
+          </dl>
+        );
+        // The whole card opens the rows, so the target is the size of the figure.
+        return f.href ? (
+          <Link
+            key={f.key}
+            href={f.href}
+            title={`Open the ${f.label.toLowerCase()} transactions`}
+            className="card block px-4 py-5 text-center transition-transform duration-150 hover:-translate-y-0.5"
+          >
+            {body}
+          </Link>
+        ) : (
+          <div key={f.key} className="card px-4 py-5 text-center">{body}</div>
         );
       })}
-    </dl>
+    </div>
   );
 }
 
@@ -98,9 +105,9 @@ export function Amount({ cents, className }: { cents: number; className?: string
   const text = formatCents(cents);
   const dot = text.lastIndexOf('.');
   return (
-    <span className={clsx('figure text-ink', className)}>
-      <span className="text-[1.75rem] font-medium leading-none tracking-tight">{text.slice(0, dot)}</span>
-      <span className="text-base text-ink-faint">{text.slice(dot)}</span>
+    <span className={clsx('figure-display text-ink', className)}>
+      <span className="text-[1.65rem] font-semibold leading-none tracking-tight">{text.slice(0, dot)}</span>
+      <span className="text-base font-medium text-ink-faint">{text.slice(dot)}</span>
     </span>
   );
 }

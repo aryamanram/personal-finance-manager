@@ -13,7 +13,9 @@ review round-trip per change would slow them down.
 and at phone width. V1–V10 each have a test: V1, V2 and V3 in
 `tests/flow.test.ts` and `tests/review.test.ts` against the app's own
 queries, V2 again end to end in `tests/visual/links.spec.ts`, V9 in
-`tests/design-tokens.test.ts`. The a11y suite's known list is empty. Not
+`tests/design-tokens.test.ts`, V10's shades in `tests/palette.test.ts`.
+The a11y suite's known list is empty. The later asks (7–9: the folding
+picker, shades within a group, the Monarch-like cards) are built too. Not
 pushed; waiting on the owner's look.
 
 ## The asks
@@ -44,6 +46,22 @@ pushed; waiting on the owner's look.
    today; most will.
 6. *"Use the tools you have to make as good a design as you can,"* then build
    all of it.
+
+**2026-10-08, later**, after seeing the first build:
+
+7. *"In the 'inside a category' I would like the category dropdown to have
+   internally collapsable sections"* — a group (Housing, Transportation) and
+   a parent (Shopping, Subscriptions) each fold.
+8. *"As we go one layer deep, it would be great for each category to be
+   slightly different but in the same color category… every category inside
+   shopping / subscriptions should be their own offshoots… maybe a formula
+   for a few shades darker than the parent."* Each category is its own shade
+   of its group's colour; each subcategory a deeper shade of its parent's.
+9. *"I would like the main dashboard to look a bit more like"* Monarch Money's
+   cash-flow report, *"giving an 'apple like' polished look."* Cards on a soft
+   ground, summary figures across the top, and a chart whose ribbons fade
+   from one node's colour to the next, labelled inside the chart with
+   amount and share.
 
 ## Why
 
@@ -95,19 +113,30 @@ The period travels between Flow and Register (V5).
 
 ## The Flow page, top to bottom
 
-1. **The period** is the heading, as now. Under it, one line — only when
+Everything below the heading sits on **cards**: white sheets on the soft
+ground, rounded, lifted by a shadow soft enough to read as depth rather than
+as a border (on the dark ground, a lighter sheet with a hairline). The
+reference is Monarch's cash-flow report; the aim is the calm of Apple's own
+apps — few lines, generous space, type doing the work.
+
+1. **The period** is the heading, as now. Under it, one card — only when
    something needs attention: a reconciliation difference, a card that does
    not settle, a failed sync. The all-clear versions of those lines live on
    Accounts.
-2. **The month in figures.** Income, Required, Discretionary, Invested, and
-   Left over (or From savings, when the month spent more than came in) — the
-   same numbers the Flow's nodes carry, so the page agrees with itself. Each
-   shows its change from the previous period of the same length, and each
-   opens its rows (V2).
-3. **The Flow.** Full width, the page's centrepiece. A Chart / Table switch
-   sits above it.
-4. **Inside a category.** A picker and that category's own Flow.
-5. **Fixed against variable**, twelve months, as now.
+2. **The month in figures.** Five cards: Income, Required, Discretionary,
+   Invested, and Left over (or From savings, when the month spent more than
+   came in) — the same numbers the Flow's nodes carry, so the page agrees
+   with itself. The number is the card's largest thing, dollars large and
+   cents a step down; the change from the previous period of the same
+   length sits under it. The whole card opens its rows (V2).
+3. **The Flow**, on its own card: the dates as its title, the group legend,
+   *Show every category* and a Chart / Table segmented control.
+4. **Inside a category**, on its own card: the picker and that category's own
+   Flow.
+5. **Fixed against variable**, twelve months, on its own card.
+
+Headline figures and chart labels use the sans face at tabular widths: the
+digits still align, without the typewriter voice the register keeps.
 
 The old Cashflow category list and the old Flow drilldown both become the
 Flow's table view: one list of the same numbers, not two.
@@ -118,20 +147,27 @@ Five columns, left to right:
 
 | Column | Nodes | Colour |
 |---|---|---|
-| Sources | Income · From investments · Credits · From savings | ink |
-| Junction | one thin, unlabelled node | ink |
-| Buckets | Required · Discretionary · Invested · Left over | ink |
-| Categories | the top-level categories under each bucket | the category's group |
-| Subcategories | one level, for categories that have them | the category's group |
+| Sources | Income · From investments · Credits · From savings | slate |
+| Junction | one thin, unlabelled node | slate |
+| Buckets | Required · Discretionary · Invested · Left over | slate |
+| Categories | the top-level categories under each bucket | the category's own shade of its group |
+| Subcategories | one level, for categories that have them | a deeper shade of the parent's |
 
 - Every flow is gross, so every node balances to the cent (V1). The junction
   is kept on purpose: without it the chart would have to decide which source
   paid for which bucket.
-- **The prism.** Money arrives as one ink-coloured stream and splits into
-  colour only where it was spent. Sources and buckets are neutral inks,
+- **The prism.** Money arrives as one calm slate stream and splits into
+  colour only where it was spent. Sources and buckets are two slate inks,
   distinguished by lightness and label; From savings and Left over are
   hatched — the same hatch for money moving out of or into savings, which
   can never both happen in one month. The categories carry all the colour.
+- **Ribbons fade** from the colour of the node they leave to the colour of
+  the node they reach, as soft tints, so money visibly becomes what it was
+  spent on.
+- **Labels sit inside the chart**, beside each node on the side its money
+  arrives from: two lines, the name, then the amount and its share —
+  `$1,234.56 (12.3%)`. Sources and buckets take their share of everything
+  that came in; categories and subcategories their share of spending.
 - Within a bucket, categories are ordered by group, then by amount, so each
   group reads as one band of colour and neighbouring colours are neighbours
   in the palette's validated order.
@@ -141,7 +177,6 @@ Five columns, left to right:
 - Spending filed on a parent itself, rather than on one of its
   subcategories, is a node called **General** — the word the category picker
   already uses for "the parent itself".
-- Every label is an exact amount in tabular figures: `$1,234.56`.
 - **Hover** highlights the node's path and shows its amount, its share of
   the month's spending, and its number of transactions.
 - **Click** a category or subcategory to look inside it (below). Click a
@@ -156,9 +191,14 @@ Five columns, left to right:
 The second level of Flow, below the main one.
 
 - **Picking.** A picker lists every category and subcategory that had money
-  in the period, grouped by category group with each group's colour, and the
-  amount beside each. Clicking a category in the main Flow picks it and
-  scrolls here. The choice is in the URL (`?focus=<category id>`), so it
+  in the period, as a tree: each group with its colour and total, each
+  category with its own shade and amount, subcategories under their parent.
+  A group folds away, and a parent folds its subcategories — by click, or
+  from the keyboard (→ unfolds, ← folds or steps out to the parent). Groups
+  start open and parents start folded, except the one holding the current
+  choice; what was folded is remembered in the browser between visits.
+  Typing searches through every fold. Clicking a category in the main Flow
+  picks it and scrolls here. The choice is in the URL (`?focus=<category id>`), so it
   survives a reload and the back button undoes it. With nothing picked, the
   largest category that has subcategories is shown; failing that, the
   largest category.
@@ -179,6 +219,7 @@ The whole scheme changes. Two themes, each chosen rather than flipped:
 | Role | Light | Dark |
 |---|---|---|
 | Ground | `#f3f3ef` | `#151716` |
+| Card | `#ffffff` | `#1c1e1d` |
 | Raised (menus, editor) | `#fbfbf8` | `#1d201e` |
 | Well (inputs, tracks) | `#e8e8e2` | `#252826` |
 | Rule | `#dadad3` | `#2d312e` |
@@ -189,8 +230,8 @@ The whole scheme changes. Two themes, each chosen rather than flipped:
 | Earned | `#137738` · 5.1:1 | `#62d286` · 9.5:1 |
 | Alert | `#ba2b28` · 5.5:1 | `#f47c70` · 6.8:1 |
 
-Ratios are against the ground; every text ink is also ≥ 4.5:1 on Raised and
-on Well.
+Ratios are against the ground; every text ink is also ≥ 4.5:1 on a card,
+on Raised and on Well.
 
 **Reserved meanings.** Amber means a human changed this, and nothing else
 (V4) — it survives the new scheme unchanged in meaning. Green text means
@@ -229,8 +270,37 @@ thing identifying a category: every node is labelled, touching ribbons are
 parted by a seam, and the table view carries the same numbers.
 
 The neutral chart inks — the Flow's sources and buckets, fixed against
-variable — are two steps at least 3:1 apart and each at least 3:1 against
-the ground.
+variable — are a cool slate (light `#21344c` / `#6f869e`, dark `#ccddee` /
+`#647a92`): two steps at least 3:1 apart and each at least 3:1 against the
+ground and a card. Slate rather than grey, so money not yet spent reads as
+calm rather than switched off.
+
+**Shades within a group** (`src/lib/palette.ts`). The slot gives a group its
+hue; each category takes its own shade of it, and each subcategory a shade of
+its parent's. All of it is arithmetic in OKLCH from the slot colour in
+`tokens.json`, so `globals.css` stays the one place the palette is written,
+and it depends only on the taxonomy — never on a month's numbers.
+
+- **Siblings** take evenly spaced lightnesses across a band around the
+  group's colour (±0.12 in OKLCH lightness, widened until neighbours are at
+  least 0.045 apart), the first nearest the group's own colour, the rest
+  alternating lighter and darker — the same order in both themes, so the
+  lighter of two oranges is the lighter in both. Each step also turns the
+  hue a few degrees, keeping a family recognisable: Groceries, Restaurants
+  and Coffee are three oranges.
+- **Subcategories** take the same spread on the *deeper* side of their parent
+  only — darker on the light theme, lighter on the dark one, further from
+  the page either way — starting a step past it. The deep end of each
+  group's range is kept free for them, so a parent never runs out of room.
+- **Never a reserved hue.** A turn goes whichever way — or not at all — keeps
+  clearest of amber, earned green and alert red, with amber given the widest
+  berth; no shade comes within 25° of amber's hue.
+- **Legible as marks.** Each shade clears 2.3:1 against the ground and a card.
+  That is below the 3:1 the group colours themselves clear, which the
+  dataviz relief rule allows because no shade identifies anything alone:
+  every node is labelled and the table carries the same numbers.
+
+`tests/palette.test.ts` holds each of these, in both themes.
 
 ## Invariants
 
@@ -247,7 +317,7 @@ These hold for every change below. Each gets a test.
 | **V7** | **No redirect to a URL taken from a request.** The Playwright MCP's origin allowlist depends on it (see `CLAUDE.md`). Old routes keep working by rendering. |
 | **V8** | **I1–I8 are untouched.** Review's accept is the existing confirm (it locks the category and writes `transaction_edits`); nothing about money handling changes. |
 | **V9** | **Legible and distinguishable, in both themes.** Text ≥ 4.5:1 on every ground it sits on. The group palette passes the dataviz validator on its adjacent pairs in slot order (normal-vision ΔE ≥ 15, CVD ΔE ≥ 8) and is never the only cue: labels, seams and the table carry identity too. |
-| **V10** | **Colour follows the group, everywhere.** A category's colour is its group's slot — in the main Flow, a category's own Flow, the register and the category page alike — and a period missing some groups does not repaint the rest. |
+| **V10** | **Colour follows the category, everywhere.** A category's colour is its own shade of its group's slot, a subcategory's a deeper shade of its parent's — in the main Flow, a category's own Flow, the picker, the register, Review and the category page alike — and it comes from the taxonomy alone, so a period missing some categories does not repaint the rest. |
 
 ## How the asks interact
 
@@ -276,6 +346,14 @@ These hold for every change below. Each gets a test.
   register's category column, the category picker and the category page
   (V10), as a small square — never a diamond, which is the edit marker's
   shape.
+- **Shades against the palette's validation.** The validator passes the
+  group slots, which stay as they were. Shades within a group are not meant
+  to be told apart by colour alone — the label does that — so they are held
+  to a lower bar (2.3:1, distinct from their siblings) and never to a hue
+  outside their group's family.
+- **Monarch's look against the ledger's voice.** The cards, tints and inside
+  labels come from Monarch; the exact cents, the reserved amber, the prism
+  and the register's mono columns stay the ledger's own.
 - **Two themes against the Figma tokens.** `tokens.json` carries both themes
   as two token sets, and `npm run tokens` derives both from `globals.css`.
 - **The demo has no subcategories.** Its seed gains three parents with

@@ -23,13 +23,15 @@ export function TransactionRow({
   onConfirm,
   pending,
   repeatsDate,
-  groupSlot,
+  swatch,
   groupSlots,
+  colors,
 }: {
   groupSlots?: Record<string, number>;
+  colors?: Record<string, string>;
   txn: VTransaction;
-  /** The category's group palette slot: its colour everywhere (V10). */
-  groupSlot?: number | null;
+  /** The category's colour: its own shade of its group's (V10). */
+  swatch?: string;
   categories: CategoryWithGroup[];
   selected: boolean;
   /** The row above shares this date, so printing it again says nothing. */
@@ -190,7 +192,7 @@ export function TransactionRow({
             <span
               aria-hidden
               className="swatch"
-              style={{ background: groupSlot ? `var(--color-group-${groupSlot})` : 'var(--color-chart-strong)' }}
+              style={{ background: swatch ?? 'var(--color-chart-strong)' }}
             />
           )}
           <span className="truncate">{txn.category_name ?? 'Uncategorized'}</span>
@@ -297,6 +299,7 @@ export function TransactionRow({
             txn={txn}
             categories={categories}
             groupSlots={groupSlots}
+            colors={colors}
             onPatch={onPatch}
             onClose={() => setExpanded(false)}
           />

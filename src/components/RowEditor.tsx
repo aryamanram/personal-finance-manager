@@ -18,12 +18,14 @@ export function RowEditor({
   txn,
   categories,
   groupSlots,
+  colors,
   onPatch,
   onClose,
 }: {
   txn: VTransaction;
   categories: CategoryWithGroup[];
   groupSlots?: Record<string, number>;
+  colors?: Record<string, string>;
   onPatch: (id: string, patch: Record<string, unknown>) => void;
   onClose: () => void;
 }) {
@@ -140,6 +142,7 @@ export function RowEditor({
               <CategoryPalette
                 categories={categories}
                 groupSlots={groupSlots}
+                colors={colors}
                 currentId={txn.category_id}
                 onPick={pick}
                 onClose={() => setPicking(false)}

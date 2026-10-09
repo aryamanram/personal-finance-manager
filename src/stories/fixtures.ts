@@ -5,6 +5,7 @@
  * amount or account here — this file is public.
  */
 import type { FlowInput, FlowRow, CategoryFlowInputRow } from '@/lib/flow';
+import { categoryColors } from '@/lib/palette';
 import { buildPeriods } from '@/lib/periods';
 import type {
   CategoryWithGroup, CostType, MonthlyCashflow, Necessity, VTransaction,
@@ -129,11 +130,15 @@ const flowRow = (name: string, necessity: string, cents: number, count: number, 
   };
 };
 
+/** Each category's own shade, as the pages compute it (lib/palette.ts). */
+export const colors = categoryColors(categories, groupSlots);
+
 export const septemberFlow: FlowInput = {
   incomeCents: 540000,
   investedCents: 200000,
   creditsCents: 4566,
   groupSlots,
+  colors,
   categories: [
     flowRow('Rent', 'required', 285000, 1),
     flowRow('Groceries', 'required', 44518, 4),

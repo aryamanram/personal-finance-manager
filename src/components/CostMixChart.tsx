@@ -21,7 +21,7 @@ import { formatMonthAbbrev, formatMonthLong } from '@/lib/format-date';
  */
 
 /** Plot geometry, in viewBox units. The SVG scales to its container. */
-const W = 960;
+const W = 1240;
 const H = 240;
 const PAD_L = 56;   // room for the y-axis labels
 const PAD_R = 8;
@@ -78,9 +78,7 @@ export function CostMixChart({ data }: { data: MonthlyCashflow[] }) {
   const y = (cents: number) => PAD_T + PLOT_H - (cents / max) * PLOT_H;
 
   return (
-    // At most its own drawing size: scaled up, its axis labels grew past the
-    // page's type size.
-    <figure className="w-full max-w-[960px]">
+    <figure className="w-full">
       <svg
         viewBox={`0 0 ${W} ${H}`}
         className="h-auto w-full"

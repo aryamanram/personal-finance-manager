@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import {
   getCashflow, getFlow, getGroupSlots, getCategoryFlow, getLastSync, getReconciliation,
-  getLedgerBounds, getActiveMonths, getCardSettlement,
+  getLedgerBounds, getActiveMonths, getCardSettlement, getCategories,
 } from '@/lib/queries';
+import { categoryColors } from '@/lib/palette';
 import { PeriodPicker } from '@/components/PeriodPicker';
 import { buildPeriods, describePeriod, stepPeriod, type PeriodOption } from '@/lib/periods';
 import { resolvePeriod } from '@/lib/resolve-period';
@@ -12,7 +13,7 @@ import { FlowView } from '@/components/FlowView';
 import { CategoryInside } from '@/components/CategoryInside';
 import { CostMixChart } from '@/components/CostMixChart';
 import { formatCents } from '@/money';
-import { formatTimestampShort } from '@/lib/format-date';
+import { formatTimestampShort, formatRange } from '@/lib/format-date';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,16 +51,20 @@ export default async function FlowPage({
   // time has nothing before it.
   const previous = period.scope === 'all' ? undefined : stepPeriod(periods, period, -1);
 
-  const [flow, before, groupSlots, lastSync, drift, cards] = await Promise.all([
+  const [flow, before, groupSlots, lastSync, drift, cards, categories] = await Promise.all([
     getFlow(period.from, period.to),
     previous ? getFlow(previous.from, previous.to) : null,
     getGroupSlots(),
     getLastSync(),
     getReconciliation(),
     getCardSettlement(),
+    getCategories(),
   ]);
-  const model = buildFlow({ ...flow, groupSlots });
-  const prior = before ? buildFlow({ ...before, groupSlots }) : null;
+  // Each category's own shade of its group's colour, from the taxonomy alone,
+  // so it is the same in every period and on every page (V10).
+  const colors = categoryColors(categories, groupSlots);
+  const model = buildFlow({ ...flow, groupSlots, colors });
+  const prior = before ? buildFlow({ ...before, groupSlots, colors }) : null;
 
   // Inside a category: the one in the URL if it spent this period, else the
   // largest one that splits into subcategories.
@@ -69,6 +74,7 @@ export default async function FlowPage({
     ? buildCategoryFlow(
         { id: chosen.id, name: chosen.name, group: chosen.group, slot: chosen.slot },
         await getCategoryFlow(chosen.id, period.from, period.to),
+        colors,
       )
     : null;
 
@@ -90,8 +96,8 @@ export default async function FlowPage({
   ];
 
   return (
-    <div className="space-y-12">
-      <header className="flex flex-wrap items-end justify-between gap-4">
+    <div className="space-y-6">
+      <header className="flex flex-wrap items-end justify-between gap-4 pb-2">
         {/* The picker carries the heading: the timeframe IS the title. */}
         <div>
           <div className="eyebrow mb-1">Flow</div>
@@ -99,7 +105,7 @@ export default async function FlowPage({
         </div>
         {lastSync?.finished_at && (
           <p className="text-xs text-ink-faint">
-            Synced <span className="figure text-ink-dim">{formatTimestampShort(lastSync.finished_at)}</span>
+            Synced <span className="figure-display text-ink-dim">{formatTimestampShort(lastSync.finished_at)}</span>
           </p>
         )}
       </header>
@@ -107,10 +113,13 @@ export default async function FlowPage({
       {/* Passive, per DESIGN.md §12: a line, never a block. Only when
           something is off; the all-clear lives on Accounts. */}
       {attention.length > 0 && (
-        <div role="status" className="-mt-6 flex flex-wrap items-baseline gap-x-5 gap-y-1 border-l-2 border-alert pl-3 text-xs text-ink-dim">
-          <span className="font-medium text-alert">Needs a look</span>
+        <div role="status" className="card flex flex-wrap items-baseline gap-x-5 gap-y-1 px-5 py-3 text-xs text-ink-dim">
+          <span className="flex items-center gap-2 font-semibold text-alert">
+            <span aria-hidden className="inline-block h-1.5 w-1.5 rounded-full bg-alert" />
+            Needs a look
+          </span>
           {attention}
-          <Link href="/accounts" className="text-ink-faint underline decoration-rule-strong underline-offset-4 hover:text-ink">
+          <Link href="/accounts" className="ml-auto text-ink-faint underline decoration-rule-strong underline-offset-4 hover:text-ink">
             Accounts →
           </Link>
         </div>
@@ -123,18 +132,16 @@ export default async function FlowPage({
         period={range}
       />
 
-      <FlowView model={model} period={range} label={describePeriod(period)} />
+      <FlowView model={model} period={range} label={describePeriod(period)} range={formatRange(period.from, period.to)} />
 
       <CategoryInside detail={detail} options={options} period={range} />
 
-      <section aria-labelledby="mix-heading">
-        <div className="rule-b pb-2">
-          {/* Name the span the data actually covers, not the span requested. */}
-          <h2 id="mix-heading" className="eyebrow">
-            Fixed against variable · last {Math.min(cashflow.length, 12)} months
-          </h2>
-        </div>
-        <p className="mt-2 mb-6 max-w-lg text-xs leading-relaxed text-ink-faint">
+      <section aria-labelledby="mix-heading" className="card p-6">
+        <h2 id="mix-heading" className="eyebrow">Fixed against variable</h2>
+        <p className="mt-1 text-lg font-semibold tracking-tight text-ink">
+          The last {Math.min(cashflow.length, 12)} months
+        </p>
+        <p className="mt-1 mb-6 max-w-lg text-xs leading-relaxed text-ink-faint">
           Fixed costs are the part of next month you already know. The taller
           the lower band, the more predictable the month.
         </p>

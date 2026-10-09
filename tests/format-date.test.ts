@@ -10,7 +10,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import {
   formatMonthLong, formatMonthShort, formatMonthAbbrev,
-  formatDayShort, formatRegisterDate, formatTimestampShort, formatTimestampLong,
+  formatDayShort, formatRegisterDate, formatTimestampShort, formatTimestampLong, formatRange,
 } from '@/lib/format-date';
 
 const ORIGINAL_TZ = process.env.TZ;
@@ -83,5 +83,14 @@ describe('formatRegisterDate', () => {
     // Date() west of Greenwich once moved them a day.
     expect(formatRegisterDate('2026-03-01')).toBe("Mar 1 '26");
     expect(formatRegisterDate('2026-01-01')).toBe("Jan 1 '26");
+  });
+});
+
+describe('a range is said once', () => {
+  it('names each part only as often as it changes', () => {
+    expect(formatRange('2026-09-01', '2026-09-27')).toBe('Sep 1 – 27, 2026');
+    expect(formatRange('2026-08-16', '2026-09-15')).toBe('Aug 16 – Sep 15, 2026');
+    expect(formatRange('2025-12-01', '2026-01-31')).toBe('Dec 1, 2025 – Jan 31, 2026');
+    expect(formatRange('2026-09-16', '2026-09-16')).toBe('Sep 16, 2026');
   });
 });

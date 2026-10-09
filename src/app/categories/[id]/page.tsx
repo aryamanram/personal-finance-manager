@@ -9,6 +9,7 @@ import { CategoryDefaults } from '@/components/CategoryDefaults';
 import { Figure } from '@/components/Figure';
 import { formatCentsCompact } from '@/money';
 import { formatMonthShort } from '@/lib/format-date';
+import { categoryColors } from '@/lib/palette';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,9 +51,11 @@ export default async function CategoryPage({
     getAccounts(),
     getGroupSlots(),
   ]);
-  // The group's colour, the same as in the Flow and the register (V10).
+  // Its own shade of its group's colour, the same as in the Flow and the
+  // register (V10).
+  const colors = categoryColors(categories, groupSlots);
   const slot = groupSlots[category.group_name] ?? null;
-  const colour = slot ? `var(--color-group-${slot})` : 'var(--color-chart-strong)';
+  const colour = colors[category.id] ?? (slot ? `var(--color-group-${slot})` : 'var(--color-chart-strong)');
 
   const months = [...trend].reverse();
   const peak = Math.max(...months.map((m) => m.total_cents), 1);
@@ -132,6 +135,7 @@ export default async function CategoryPage({
           total={total}
           totals={totals}
           groupSlots={groupSlots}
+          colors={colors}
         />
       </section>
     </div>

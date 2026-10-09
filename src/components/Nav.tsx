@@ -33,7 +33,7 @@ export function NavLinks({ items, period }: { items: readonly NavItem[]; period:
   const pathname = usePathname();
 
   return (
-    <nav className="-mx-6 flex w-[calc(100%+3rem)] items-center gap-6 overflow-x-auto px-6 sm:mx-0 sm:w-auto sm:overflow-visible sm:px-0">
+    <nav className="-mx-6 flex w-[calc(100%+3rem)] items-center gap-1 overflow-x-auto px-6 sm:mx-0 sm:w-auto sm:overflow-visible sm:px-0">
       {items.map((item) => {
         // The Flow answers at / and at its old address. /categories/[id] is a
         // drill-down of the register and has no nav entry of its own, so it
@@ -53,13 +53,16 @@ export function NavLinks({ items, period }: { items: readonly NavItem[]; period:
             href={href}
             aria-current={active ? 'page' : undefined}
             className={clsx(
-              'flex shrink-0 items-baseline gap-1.5 text-sm transition-colors',
-              active ? 'font-medium text-ink' : 'text-ink-faint hover:text-ink',
+              'flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors',
+              active ? 'bg-well font-medium text-ink' : 'text-ink-dim hover:bg-well/60 hover:text-ink',
             )}
           >
             {item.label}
             {item.count !== undefined && item.count > 0 && (
-              <span className="figure rounded-sm bg-well px-1.5 text-xs text-ink-dim">
+              <span className={clsx(
+                'figure-display rounded-full px-1.5 text-[11px] font-semibold leading-[1.15rem]',
+                active ? 'bg-card text-ink' : 'bg-well text-ink-dim',
+              )}>
                 {item.count}
                 <span className="sr-only"> outstanding</span>
               </span>

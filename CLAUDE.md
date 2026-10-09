@@ -87,8 +87,9 @@ in code, not in a test fixture, not in a doc, not in a commit message.
 The look and feel is deliberate, not a default theme: a **ledger**, not a
 dashboard. Ink on paper, in a light and a dark theme, each chosen rather than
 flipped; tabular figures so a column of numbers aligns on the decimal. Colour
-is spent in one place — the chart — where a category wears its **group's**
-slot of an eight-colour palette, the same everywhere it appears. Three hues
+is spent in one place — the chart — where a category wears its own shade of
+its **group's** slot in an eight-colour palette (a subcategory, a deeper shade
+of its parent's; `src/lib/palette.ts`), the same everywhere it appears. Three hues
 are reserved and never chart colours: amber exclusively for "a human changed
 this" (the dotted underline under a corrected amount, the diamond on a locked
 category), green for money earned, red for something a person must look at.

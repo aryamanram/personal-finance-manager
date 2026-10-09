@@ -185,7 +185,7 @@ describe.each(THEMES)('the $set theme', ({ P }) => {
   it('keeps every text ink above 4.5:1 on every surface it sits on', () => {
     // These carry content at 11-16px, below the large-text threshold.
     for (const ink of ['ink', 'ink-dim', 'ink-faint']) {
-      for (const ground of ['ground', 'raised', 'well']) {
+      for (const ground of ['ground', 'raised', 'well', 'card']) {
         const r = contrast(P[ink], P[ground]);
         expect(r, `${ink} on ${ground} is ${r.toFixed(2)}:1, below AA 4.5:1`).toBeGreaterThanOrEqual(4.5);
       }
@@ -196,7 +196,7 @@ describe.each(THEMES)('the $set theme', ({ P }) => {
     // Amber means "a human changed this". If it is hard to see, the one signal
     // the ledger depends on stops working. Earned and alert are text too.
     for (const token of ['edited', 'earned', 'alert']) {
-      for (const ground of ['ground', 'raised']) {
+      for (const ground of ['ground', 'raised', 'card']) {
         const r = contrast(P[token], P[ground]);
         expect(r, `${token} on ${ground} is ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
       }
@@ -220,16 +220,20 @@ describe.each(THEMES)('the $set theme', ({ P }) => {
     const pair = contrast(P['chart-strong'], P['chart-mid']);
     expect(pair, `chart-strong and chart-mid are ${pair.toFixed(2)}:1 apart`).toBeGreaterThanOrEqual(3);
     for (const t of ['chart-strong', 'chart-mid']) {
-      const r = contrast(P[t], P['ground']);
-      expect(r, `${t} on the ground is ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
+      for (const surface of ['ground', 'card']) {
+        const r = contrast(P[t], P[surface]);
+        expect(r, `${t} on the ${surface} is ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
+      }
     }
   });
 
   it('has the eight group slots, each a mark visible on the ground', () => {
     expect(GROUPS).toEqual(['group-1', 'group-2', 'group-3', 'group-4', 'group-5', 'group-6', 'group-7', 'group-8']);
     for (const g of GROUPS) {
-      const r = contrast(P[g], P['ground']);
-      expect(r, `${g} on the ground is ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
+      for (const surface of ['ground', 'card']) {
+        const r = contrast(P[g], P[surface]);
+        expect(r, `${g} on the ${surface} is ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
+      }
     }
   });
 

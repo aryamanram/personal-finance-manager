@@ -31,11 +31,14 @@ export function ReviewInbox({
   rows: initial,
   categories,
   groupSlots,
+  colors = {},
 }: {
   rows: VTransaction[];
   categories: CategoryWithGroup[];
   /** Each group's palette slot, so a guess shows its group's colour (V10). */
   groupSlots: Record<string, number>;
+  /** Each category's own shade, by id (lib/palette.ts). */
+  colors?: Record<string, string>;
 }) {
   const router = useRouter();
   // Decided here but not yet gone from the server's list: hidden at once, and
@@ -56,13 +59,15 @@ export function ReviewInbox({
   const at = Math.min(cursor, Math.max(0, rows.length - 1));
   const current = rows[at];
 
-  const slotOf = useMemo(() => {
+  const colorOf = useMemo(() => {
     const byId = new Map(categories.map((c) => [c.id, c]));
-    return (id: string | null) => {
+    return (id: string | null): string => {
+      if (id && colors[id]) return colors[id];
       const c = id ? byId.get(id) : undefined;
-      return c ? (groupSlots[c.group_name] ?? null) : null;
+      const slot = c ? groupSlots[c.group_name] : undefined;
+      return slot ? `var(--color-group-${slot})` : 'var(--color-chart-strong)';
     };
-  }, [categories, groupSlots]);
+  }, [categories, groupSlots, colors]);
 
   // What the merchant-wide accept would reach. Fetched for the selected row
   // only, since it is the only row whose actions are on screen.
@@ -182,7 +187,7 @@ export function ReviewInbox({
           {rows.map((r, i) => {
             const selected = i === at;
             const guess = isGuess(r);
-            const slot = slotOf(r.category_id);
+            const swatch = colorOf(r.category_id);
             return (
               <li
                 key={r.id}
@@ -200,7 +205,7 @@ export function ReviewInbox({
                     {/* The category has no column of its own on a phone. */}
                     <span className="mt-0.5 flex items-center gap-1.5 text-xs text-ink-dim sm:hidden">
                       {r.category_id && (
-                        <span aria-hidden className="swatch" style={{ background: slot ? `var(--color-group-${slot})` : 'var(--color-chart-strong)' }} />
+                        <span aria-hidden className="swatch" style={{ background: swatch }} />
                       )}
                       {r.category_name ?? 'Uncategorized'}
                     </span>
@@ -214,7 +219,7 @@ export function ReviewInbox({
                   <span className="hidden min-w-0 items-center gap-2 text-sm sm:flex">
                     {r.category_id ? (
                       <>
-                        <span aria-hidden className="swatch" style={{ background: slot ? `var(--color-group-${slot})` : 'var(--color-chart-strong)' }} />
+                        <span aria-hidden className="swatch" style={{ background: swatch }} />
                         <span className="truncate text-ink-dim">{r.category_name}</span>
                       </>
                     ) : (
@@ -235,6 +240,7 @@ export function ReviewInbox({
                       <CategoryPalette
                         categories={categories}
                         groupSlots={groupSlots}
+                        colors={colors}
                         currentId={r.category_id}
                         clearLabel={{ name: 'Decide later', hint: 'skip' }}
                         onPick={(id) => {

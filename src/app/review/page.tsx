@@ -2,6 +2,7 @@ import { getReviewQueue, getReviewCounts, getCategories, getGroupSlots, getActiv
 import { buildPeriods } from '@/lib/periods';
 import { PeriodPicker } from '@/components/PeriodPicker';
 import { ReviewInbox } from '@/components/ReviewInbox';
+import { categoryColors } from '@/lib/palette';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,7 +50,12 @@ export default async function ReviewPage({
         </p>
       </header>
 
-      <ReviewInbox rows={rows} categories={categories} groupSlots={groupSlots} />
+      <ReviewInbox
+        rows={rows}
+        categories={categories}
+        groupSlots={groupSlots}
+        colors={categoryColors(categories, groupSlots)}
+      />
     </div>
   );
 }

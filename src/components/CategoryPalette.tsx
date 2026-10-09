@@ -70,12 +70,15 @@ export function CategoryPalette({
   currentId,
   clearLabel = { name: 'Uncategorized', hint: 'clear' },
   groupSlots = {},
+  colors = {},
   onPick,
   onClose,
 }: {
   categories: CategoryWithGroup[];
   /** Each group's palette slot, so a group and its categories wear its colour (V10). */
   groupSlots?: Record<string, number>;
+  /** Each category's own shade, by id (lib/palette.ts). */
+  colors?: Record<string, string>;
   currentId?: string | null;
   /**
    * What picking nothing means here. Assigning a category, that is clearing
@@ -244,7 +247,7 @@ export function CategoryPalette({
                       )}
                     >
                       <span className="flex min-w-0 items-center gap-2 truncate">
-                        <Swatch slot={groupSlots[category.group_name]} />
+                        <Swatch slot={groupSlots[category.group_name]} color={colors[category.id]} />
                         {label ?? category.name}
                         {category.id === currentId && (
                           <span className="ml-2 text-xs text-ink-faint">current</span>
@@ -377,12 +380,12 @@ function matches(c: CategoryWithGroup, q: string): boolean {
 }
 
 /** The group's colour, as a small square — never the edit marker's diamond. */
-function Swatch({ slot }: { slot?: number }) {
+function Swatch({ slot, color }: { slot?: number; color?: string }) {
   return (
     <span
       aria-hidden
       className="swatch"
-      style={{ background: slot ? `var(--color-group-${slot})` : 'var(--color-chart-strong)' }}
+      style={{ background: color ?? (slot ? `var(--color-group-${slot})` : 'var(--color-chart-strong)') }}
     />
   );
 }

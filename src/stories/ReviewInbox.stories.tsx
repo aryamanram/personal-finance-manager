@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 import { ReviewInbox } from '@/components/ReviewInbox';
-import { categories, groupSlots, txn } from './fixtures';
+import { categories, colors, groupSlots, txn } from './fixtures';
 
 /**
  * Review: the guesses no human has confirmed, worked from the keyboard. Try
@@ -13,6 +13,7 @@ const meta = {
   args: {
     categories,
     groupSlots,
+    colors,
     rows: [
       txn({ raw_description: 'SQ *TACO HAUS', categoryName: 'Takeout', suggested_reason: 'your rule: Takeout' }),
       txn({ raw_description: 'TRADER JOES #447', categoryName: 'Groceries', amount_cents: -10055, posted_date: '2026-09-24' }),

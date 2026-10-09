@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 import { fn } from 'storybook/test';
 import { FlowChart } from '@/components/FlowChart';
 import { buildFlow, buildCategoryFlow, flowGraph, categoryGraph, type FlowInput } from '@/lib/flow';
-import { septemberFlow, restaurantsFlow, SEPTEMBER } from './fixtures';
+import { septemberFlow, restaurantsFlow, SEPTEMBER, colors } from './fixtures';
 import { inTheme } from './Theme';
 
 const graphOf = (input: FlowInput, expanded: string[] = []) => {
@@ -33,12 +33,12 @@ type Story = StoryObj<typeof meta>;
 /** The demo's September: a short month drawn partly from savings. */
 export const September: Story = {};
 /** The column gaps the Flow page uses, giving the room to the colour. */
-export const AsOnThePage: Story = { args: { gaps: [0.55, 0.8, 1.35, 1.15] } };
+export const AsOnThePage: Story = { args: { gaps: [1, 0.85, 1.25, 1.1] } };
 /** "+N more" opened: every category, and every subcategory. */
 export const EveryCategory: Story = {
   args: {
     graph: graphOf(septemberFlow, ['bucket:required', 'bucket:discretionary']),
-    gaps: [0.55, 0.8, 1.35, 1.15],
+    gaps: [1, 0.85, 1.25, 1.1],
   },
 };
 /** Money taken out of investments is a source, not negative investing. */
@@ -52,11 +52,11 @@ export const NothingMoved: Story = {
 export const InsideACategory: Story = {
   args: {
     graph: categoryGraph(
-      buildCategoryFlow({ id: 'cat-restaurants', name: 'Restaurants', group: 'Food', slot: 3 }, restaurantsFlow)!,
+      buildCategoryFlow({ id: 'cat-restaurants', name: 'Restaurants', group: 'Food', slot: 3 }, restaurantsFlow, colors)!,
       SEPTEMBER,
     ),
     label: 'Inside Restaurants',
   },
 };
 /** The dark theme is its own set of steps, not an inversion. */
-export const Dark: Story = { args: { gaps: [0.55, 0.8, 1.35, 1.15] }, decorators: [inTheme('dark')] };
+export const Dark: Story = { args: { gaps: [1, 0.85, 1.25, 1.1] }, decorators: [inTheme('dark')] };

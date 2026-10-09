@@ -11,13 +11,16 @@ import type { FlowGraph, GraphNode, Tone } from '@/lib/flow';
  * Draws a Flow: the main one on the Flow page, or a category's own.
  *
  * d3-sankey lays it out and the marks are hand-written SVG (DESIGN.md §4).
- * Ribbon width is the money and nothing else encodes magnitude. Colour says
- * what kind of thing the money became — the category's group — and is never
- * the only cue: every node is labelled with its exact amount, touching
- * ribbons are parted by a seam, and the page has a table of the same numbers.
+ * Ribbon width is the money and nothing else encodes magnitude. Each ribbon
+ * fades from the colour of the node it leaves to the colour of the node it
+ * reaches, so money visibly turns into what it became; colour is never the
+ * only cue — every node is labelled with its exact amount and share, and the
+ * page has a table of the same numbers.
  *
- * Laid out in real pixels at the width it is given, rather than scaled from a
- * fixed viewBox, so labels are the page's own type size at every width.
+ * Labels sit inside the drawing, on the side of each node its money arrives
+ * from: the first column labels to its right, every other column to its left,
+ * over its own incoming ribbon. Laid out in real pixels at the width it is
+ * given, so the type is the page's own size at every width.
  */
 
 type N = GraphNode;
@@ -25,42 +28,37 @@ type L = { source: string; target: string; value: number; tone: Tone };
 type SN = SankeyNode<N, L>;
 type SL = SankeyLink<N, L>;
 
-const NODE_W = 10;
-/** Vertical gap between nodes; at least a label's line, so labels never touch. */
-const GAP = 16;
+const NODE_W = 14;
+/** Vertical gap between nodes: room for a two-line label beside a thin one. */
+const GAP = 32;
 /** Height per node in the busiest column, before the money is shared out. */
-const ROW = 30;
-const MIN_HEIGHT = 300;
+const ROW = 50;
+const MIN_HEIGHT = 380;
 /** Below this the chart scrolls sideways rather than squeezing its labels. */
 export const MIN_WIDTH = 880;
-const LABEL_GAP = 8;
-/** Advance widths at the label sizes: 12px Inter Tight, 11px JetBrains Mono. */
-const NAME_PX = 6.5;
-const FIGURE_PX = 6.7;
+const LABEL_GAP = 10;
+const LINE = 8;
 
-function labelWidth(n: N): number {
-  if (!n.label) return 0;
-  return n.label.length * NAME_PX + formatCents(n.cents).length * FIGURE_PX + 10;
-}
-
-function fill(t: Tone, hatch: string): string {
-  if (t.kind === 'group') return t.slot ? `var(--color-group-${t.slot})` : 'var(--color-chart-strong)';
+/** The colour a tone paints, as CSS. */
+function paint(t: Tone, hatch: string): string {
+  if (t.kind === 'group') return t.color ?? (t.slot ? `var(--color-group-${t.slot})` : 'var(--color-chart-strong)');
   if (t.kind === 'hatch') return `url(#${hatch})`;
   return t.kind === 'strong' ? 'var(--color-chart-strong)' : 'var(--color-chart-mid)';
 }
 
-/**
- * A ribbon's opacity, resting and lit, from globals.css (it differs by theme).
- * Neutral ribbons recede so the colour is where the spending is.
- */
-const OPACITY = {
-  group: ['var(--ribbon)', 'var(--ribbon-lit)'],
-  neutral: ['var(--ribbon-neutral)', 'var(--ribbon-neutral-lit)'],
-  dim: '0.07',
-} as const;
+/** The second line of a label: the amount, and its share when it is a part. */
+function amountLine(n: N): { amount: string; share: string | null } {
+  const share = n.share !== undefined && n.share < 0.9995 ? `${(n.share * 100).toFixed(1)}%` : null;
+  return { amount: formatCents(n.cents), share };
+}
 
-/** Labels left of the node: the first column, and the buckets, whose left is calm grey. */
-const labelsLeft = (n: N) => n.column === 0 || n.kind === 'bucket';
+function labelWidth(n: N): number {
+  if (!n.label) return 0;
+  const { amount, share } = amountLine(n);
+  return Math.max(n.label.length * 6.9, (amount.length + (share ? share.length + 3 : 0)) * 7.4) + 6;
+}
+
+const labelsRight = (n: N) => n.column === 0 || n.kind === 'junction';
 
 export function FlowChart({
   graph,
@@ -82,7 +80,8 @@ export function FlowChart({
   onExpand?: (key: string) => void;
 }) {
   const router = useRouter();
-  const hatch = `hatch-${useId().replace(/:/g, '')}`;
+  const uid = useId().replace(/:/g, '');
+  const hatch = `hatch-${uid}`;
   const box = useRef<HTMLDivElement>(null);
   // The server has no width to measure, so both sides start here and the
   // client corrects it after hydration — never a mismatch, at worst a reflow.
@@ -107,11 +106,6 @@ export function FlowChart({
     const busiest = Math.max(...[...columns.values()].map((c) => c.length));
     const height = Math.max(MIN_HEIGHT, busiest * ROW);
 
-    // Gutters for the labels outside the diagram: the first column labels to
-    // its left, the last to its right. Sized to the labels actually drawn.
-    const padLeft = Math.max(60, ...(columns.get(0) ?? []).filter(labelsLeft).map(labelWidth)) + LABEL_GAP + 4;
-    const padRight = Math.max(60, ...(columns.get(last) ?? []).map(labelWidth)) + LABEL_GAP + 4;
-
     try {
       const g = sankey<N, L>()
         .nodeId((n) => n.key)
@@ -119,7 +113,7 @@ export function FlowChart({
         .nodePadding(GAP)
         .nodeAlign((n) => n.column)
         .nodeSort((a, b) => a.order - b.order)
-        .extent([[padLeft, 6], [width - padRight, height - 6]])({
+        .extent([[1, 16], [width - 1, height - 16]])({
           nodes: graph.nodes.map((n) => ({ ...n })),
           links: graph.links.map((l) => ({ source: l.source, target: l.target, value: l.cents, tone: l.tone })),
         });
@@ -127,8 +121,8 @@ export function FlowChart({
       // the nodes, so moving a node moves its ribbons with it.
       const widths = Array.from({ length: last }, (_, i) => gaps?.[i] ?? 1);
       const total = widths.reduce((a, w) => a + w, 0);
-      const span = width - padRight - padLeft - NODE_W;
-      const x = (col: number) => padLeft + (span * widths.slice(0, col).reduce((a, w) => a + w, 0)) / total;
+      const span = width - 2 - NODE_W;
+      const x = (col: number) => 1 + (span * widths.slice(0, col).reduce((a, w) => a + w, 0)) / total;
       for (const n of g.nodes) {
         n.x0 = x(n.column);
         n.x1 = n.x0 + NODE_W;
@@ -195,36 +189,45 @@ export function FlowChart({
       >
         <defs>
           {/* Savings, in either direction: money that was not this period's.
-              A texture rather than a hue, so it reads in any theme and in
-              print, and never competes with the groups. */}
-          <pattern id={hatch} width={5} height={5} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-            <rect width={5} height={5} fill="var(--color-ground)" />
-            <line x1={0} y1={0} x2={0} y2={5} stroke="var(--color-chart-mid)" strokeWidth={2.2} />
+              A texture rather than a hue, so it reads in either theme and
+              never competes with the groups. */}
+          <pattern id={hatch} width={6} height={6} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <rect width={6} height={6} style={{ fill: 'var(--chart-surface, var(--color-ground))' }} />
+            <line x1={0} y1={0} x2={0} y2={6} stroke="var(--color-chart-mid)" strokeWidth={1.25} />
           </pattern>
+          {layout.links.map((l, i) => {
+            const s = l.source as SN;
+            const t = l.target as SN;
+            if (l.tone.kind === 'hatch') return null;
+            const state = !lit ? 'rest' : lit.links.has(l) ? 'lit' : 'dim';
+            const opacity = (tone: Tone) => {
+              const neutral = tone.kind !== 'group';
+              if (state === 'dim') return '0.06';
+              if (state === 'lit') return neutral ? 'var(--ribbon-neutral-lit)' : 'var(--ribbon-lit)';
+              return neutral ? 'var(--ribbon-neutral)' : 'var(--ribbon)';
+            };
+            return (
+              <linearGradient key={i} id={`${uid}-r${i}`} gradientUnits="userSpaceOnUse" x1={s.x1} x2={t.x0}>
+                <stop offset="0%" style={{ stopColor: paint(s.tone, hatch), stopOpacity: opacity(s.tone) }} />
+                <stop offset="100%" style={{ stopColor: paint(t.tone, hatch), stopOpacity: opacity(t.tone) }} />
+              </linearGradient>
+            );
+          })}
         </defs>
 
         <g fill="none">
           {layout.links.map((l, i) => {
-            const t = l.tone;
-            const [rest, on] = t.kind === 'group' ? OPACITY.group : OPACITY.neutral;
-            const opacity = !lit ? rest : lit.links.has(l) ? on : OPACITY.dim;
             const w = Math.max(1, l.width ?? 1);
-            const d = path(l) ?? undefined;
+            const hatched = l.tone.kind === 'hatch';
             return (
-              <g key={i}>
-                {/* The seam: a ground-coloured ribbon a little wider than the
-                    real one, so touching ribbons are always parted, whatever
-                    their colours. */}
-                <path d={d} stroke="var(--color-ground)" strokeWidth={w + 1.5} />
-                <path
-                  d={d}
-                  stroke={fill(t, hatch)}
-                  strokeWidth={w}
-                  style={{ strokeOpacity: opacity }}
-                  className="transition-[stroke-opacity] duration-150"
-                  onMouseEnter={() => setActive((l.target as SN).key)}
-                />
-              </g>
+              <path
+                key={i}
+                d={path(l) ?? undefined}
+                stroke={hatched ? `url(#${hatch})` : `url(#${uid}-r${i})`}
+                strokeWidth={w}
+                style={hatched ? { strokeOpacity: lit && !lit.links.has(l) ? 0.12 : 0.5 } : undefined}
+                onMouseEnter={() => setActive((l.target as SN).key)}
+              />
             );
           })}
         </g>
@@ -234,17 +237,21 @@ export function FlowChart({
             const x0 = n.x0 ?? 0;
             const x1 = n.x1 ?? 0;
             const y0 = n.y0 ?? 0;
-            const h = Math.max(1, (n.y1 ?? 0) - y0);
-            const left = labelsLeft(n);
+            const h = Math.max(2, (n.y1 ?? 0) - y0);
+            const right = labelsRight(n);
             const dim = lit && !lit.nodes.has(n.key);
             const interactive = !!n.action;
-            const description = describe(n);
+            const junction = n.kind === 'junction';
+            const { amount, share } = amountLine(n);
+            const lw = n.label ? labelWidth(n) + LABEL_GAP : 0;
+            const cy = y0 + h / 2;
+            const tx = right ? x1 + LABEL_GAP : x0 - LABEL_GAP;
             return (
               <g
                 key={n.key}
-                role={n.kind === 'junction' ? undefined : interactive ? 'button' : 'img'}
-                tabIndex={n.kind === 'junction' ? undefined : 0}
-                aria-label={n.kind === 'junction' ? undefined : description}
+                role={junction ? undefined : interactive ? 'button' : 'img'}
+                tabIndex={junction ? undefined : 0}
+                aria-label={junction ? undefined : describe(n)}
                 onMouseEnter={() => setActive(n.key)}
                 onFocus={() => setActive(n.key)}
                 onBlur={() => setActive(null)}
@@ -253,42 +260,39 @@ export function FlowChart({
                   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); act(n); }
                   if (e.key === 'Escape') setActive(null);
                 }}
-                className={clsx('outline-none', interactive && 'cursor-pointer', 'flow-node')}
-                style={{ opacity: dim ? 0.35 : 1 }}
+                className={clsx('flow-node outline-none transition-opacity duration-150', interactive && 'cursor-pointer')}
+                style={{ opacity: dim ? 0.3 : 1 }}
               >
-                {/* A hit area taller than a thin node and as wide as its
-                    label, so a $4 category is still something you can point
-                    at, and the gap inside a label is not a miss. */}
-                {(() => {
-                  const lw = n.label ? labelWidth(n) + LABEL_GAP : 0;
-                  const hx = left ? x0 - lw - 4 : x0 - 4;
-                  const hy = h >= 18 ? y0 : y0 + h / 2 - 9;
-                  return <rect x={hx} y={hy} width={x1 - x0 + lw + 8} height={Math.max(18, h)} fill="transparent" />;
-                })()}
-                <rect x={x0} y={y0} width={x1 - x0} height={h} fill={fill(n.tone, hatch)} rx={1.5} />
+                {/* A hit area as wide as the label and taller than a thin
+                    node, so a $4 category is still something to point at. */}
+                <rect
+                  x={right ? x0 - 4 : x0 - lw - 4}
+                  y={Math.min(y0, cy - 18)}
+                  width={x1 - x0 + lw + 8}
+                  height={Math.max(36, h)}
+                  fill="transparent"
+                />
+                <rect x={x0} y={y0} width={x1 - x0} height={h} rx={3} style={{ fill: paint(n.tone, hatch) }} />
                 {n.tone.kind === 'hatch' && (
-                  <rect x={x0 + 0.5} y={y0 + 0.5} width={x1 - x0 - 1} height={Math.max(0, h - 1)} fill="none"
-                    stroke="var(--color-chart-mid)" rx={1.5} />
+                  <rect x={x0 + 0.5} y={y0 + 0.5} width={x1 - x0 - 1} height={Math.max(0, h - 1)} rx={3}
+                    fill="none" stroke="var(--color-chart-mid)" />
                 )}
                 {/* Drawn as a ring when focused: the default focus outline
                     does not follow an SVG group's shape. */}
                 <rect className="flow-focus" x={x0 - 3} y={y0 - 3} width={x1 - x0 + 6} height={h + 6}
-                  fill="none" stroke="var(--color-ink)" strokeWidth={1.5} rx={3} />
+                  fill="none" stroke="var(--color-ink)" strokeWidth={1.5} rx={5} />
                 {n.label && (
-                  <text
-                    x={left ? x0 - LABEL_GAP : x1 + LABEL_GAP}
-                    y={y0 + h / 2}
-                    dy="0.35em"
-                    textAnchor={left ? 'end' : 'start'}
-                    className="flow-label"
-                    style={{ fontSize: 12 }}
-                  >
-                    <tspan className={n.kind === 'more' ? 'fill-ink-dim' : 'fill-ink'}
-                      style={{ fontWeight: n.kind === 'bucket' || n.kind === 'source' ? 500 : 400 }}>
+                  <text y={cy} textAnchor={right ? 'start' : 'end'} className="flow-label figure-display">
+                    <tspan x={tx} dy={-LINE + 3.5}
+                      className={n.kind === 'more' ? 'fill-ink-faint' : 'fill-ink-dim'}
+                      style={{ fontSize: 12.5, fontWeight: 500 }}>
                       {n.label}
                     </tspan>
-                    <tspan className="fill-ink-faint" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-                      {'  '}{formatCents(n.cents)}
+                    <tspan x={tx} dy={LINE * 2 - 1} className="fill-ink" style={{ fontSize: 13, fontWeight: 600 }}>
+                      {amount}
+                      {share && (
+                        <tspan className="fill-ink-faint" style={{ fontWeight: 400 }}>{` (${share})`}</tspan>
+                      )}
                     </tspan>
                   </text>
                 )}
@@ -298,8 +302,8 @@ export function FlowChart({
         </g>
       </svg>
 
-      {activeNode && activeNode.kind !== 'junction' && (
-        <Tooltip node={activeNode} width={width} />
+      {activeNode && !(activeNode.kind === 'junction' && !activeNode.label) && (
+        <Tooltip node={activeNode} width={width} hatch={hatch} />
       )}
     </div>
   );
@@ -326,39 +330,38 @@ function hint(n: N): string | null {
   return null;
 }
 
-function Tooltip({ node, width }: { node: SN; width: number }) {
+function Tooltip({ node, width, hatch }: { node: SN; width: number; hatch: string }) {
   const x1 = node.x1 ?? 0;
   const x0 = node.x0 ?? 0;
   const y0 = node.y0 ?? 0;
-  // Beside the node, on whichever side has room; never over its own label.
-  const right = x1 + 220 < width && node.column !== 0;
-  const style = right
-    ? { left: x1 + 12, top: Math.max(0, y0 - 6) }
-    : { left: Math.max(0, x0 - 232), top: Math.max(0, y0 - 6) };
-  const share = node.share !== undefined && node.share < 1
-    ? `${(node.share * 100).toFixed(1)}%` : null;
+  const W = 232;
+  // Beside the node, on the side its label is not, and inside the chart.
+  const labelSide = labelsRight(node) ? 'right' : 'left';
+  const want = labelSide === 'left' ? x1 + 14 : x1 + 14 + labelWidth(node) + LABEL_GAP;
+  const left = want + W < width ? want : Math.max(0, x0 - W - 14 - (labelSide === 'left' ? labelWidth(node) + LABEL_GAP : 0));
+  const share = node.share !== undefined && node.share < 1 ? `${(node.share * 100).toFixed(1)}%` : null;
   const shareOf = node.kind === 'source' || node.kind === 'bucket' ? 'of everything this period' : 'of spending';
   const tip = hint(node);
 
   return (
     <div
       role="tooltip"
-      className="pointer-events-none absolute z-10 w-[220px] rounded-sm border border-rule bg-raised px-3 py-2.5 text-xs shadow-lg shadow-black/10"
-      style={style}
+      className="pointer-events-none absolute z-10 rounded-xl bg-card px-3.5 py-3 text-xs shadow-[0_0_0_1px_rgb(0_0_0/0.06),0_12px_32px_-8px_rgb(0_0_0/0.25)]"
+      style={{ left, top: Math.max(0, y0 - 6), width: W }}
     >
       <div className="flex items-center gap-2 font-medium text-ink">
-        {node.tone.kind === 'group' && (
-          <span aria-hidden className="swatch" style={{ background: fill(node.tone, '') }} />
+        {node.tone.kind !== 'hatch' && (
+          <span aria-hidden className="swatch" style={{ background: paint(node.tone, hatch) }} />
         )}
         <span className="truncate">{node.name}</span>
       </div>
-      <div className="figure mt-1 text-sm text-ink">{formatCents(node.cents)}</div>
-      <div className="mt-1 space-y-0.5 text-ink-faint">
+      <div className="figure-display mt-1.5 text-lg font-semibold text-ink">{formatCents(node.cents)}</div>
+      <div className="mt-0.5 space-y-0.5 text-ink-faint">
         {share && <div>{share} {shareOf}</div>}
         {node.txnCount ? <div>{node.txnCount} {node.txnCount === 1 ? 'transaction' : 'transactions'}</div> : null}
         {node.creditCents ? <div>{formatCents(node.creditCents)} came back, shown as Credits</div> : null}
       </div>
-      {tip && <div className="mt-2 border-t border-rule pt-1.5 text-ink-dim">{tip}</div>}
+      {tip && <div className="mt-2 border-t border-rule pt-2 text-ink-dim">{tip}</div>}
     </div>
   );
 }

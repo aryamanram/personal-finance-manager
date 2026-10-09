@@ -22,10 +22,13 @@ export function TransactionTable({
   totals,
   allCategoriesHidden = false,
   groupSlots = {},
+  colors = {},
 }: {
   initial: VTransaction[];
   /** Each group's palette slot, so a category wears its colour (V10). */
   groupSlots?: Record<string, number>;
+  /** Each category's own shade of its group's colour, by id (lib/palette.ts). */
+  colors?: Record<string, string>;
   categories: CategoryWithGroup[];
   accounts: Account[];
   total: number;
@@ -35,13 +38,14 @@ export function TransactionTable({
   allCategoriesHidden?: boolean;
 }) {
   const qc = useQueryClient();
-  const slotOf = useMemo(() => {
+  const colorOf = useMemo(() => {
     const group = new Map(categories.map((c) => [c.id, c.group_name]));
-    return (id: string | null) => {
-      const g = id ? group.get(id) : undefined;
-      return g ? (groupSlots[g] ?? null) : null;
+    return (id: string | null): string => {
+      if (id && colors[id]) return colors[id];
+      const slot = id ? groupSlots[group.get(id) ?? ''] : undefined;
+      return slot ? `var(--color-group-${slot})` : 'var(--color-chart-strong)';
     };
-  }, [categories, groupSlots]);
+  }, [categories, groupSlots, colors]);
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [rows, setRows] = useState(initial);
@@ -284,8 +288,9 @@ export function TransactionTable({
               // Rows are sorted by date descending, so a repeat is always the
               // row immediately above.
               repeatsDate={i > 0 && rows[i - 1]!.eff_posted_date === txn.eff_posted_date}
-              groupSlot={slotOf(txn.category_id)}
+              swatch={colorOf(txn.category_id)}
               groupSlots={groupSlots}
+              colors={colors}
               selected={selected.has(txn.id)}
               onSelect={toggle}
               onPatch={(id, p) => patch.mutate({ id, patch: p })}
@@ -343,6 +348,7 @@ export function TransactionTable({
                   <CategoryPalette
                     categories={categories}
                     groupSlots={groupSlots}
+                    colors={colors}
                     onPick={(id) => {
                       // Bulk-clearing to Uncategorized is not offered: the
                       // palette's clear row only appears for a single row's

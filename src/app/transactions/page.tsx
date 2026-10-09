@@ -8,6 +8,7 @@ import { PeriodPicker } from '@/components/PeriodPicker';
 import { buildPeriods } from '@/lib/periods';
 import { CategoryFilter } from '@/components/CategoryFilter';
 import { registerView } from '@/lib/register-filters';
+import { categoryColors } from '@/lib/palette';
 
 export const dynamic = 'force-dynamic';
 
@@ -181,6 +182,7 @@ export default async function TransactionsPage({
         total={total}
         totals={totals}
         groupSlots={groupSlots}
+        colors={categoryColors(allCategories, groupSlots)}
         allCategoriesHidden={
           allCategories.length > 0 && hiddenCategoryIds.length >= allCategories.length
         }

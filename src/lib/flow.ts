@@ -39,6 +39,8 @@ export interface FlowInput {
   categories: FlowRow[];
   /** Each group's palette slot, by group name (getGroupSlots). */
   groupSlots?: Record<string, number>;
+  /** Each category's own shade of its group's colour, by id (lib/palette.ts). */
+  colors?: Record<string, string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -60,6 +62,8 @@ export interface FlowLeaf {
   cents: number;
   creditCents: number;
   txnCount: number;
+  /** Its own shade: a subcategory's offshoot of its parent's, General the parent's. */
+  color: string | null;
 }
 
 /** A top-level category in one bucket: its own rows and its subcategories'. */
@@ -69,6 +73,8 @@ export interface FlowCategory {
   group: string;
   /** Palette slot, 1-8; null for a group without one (drawn in ink). */
   slot: number | null;
+  /** Its own shade of the group's colour; null when the group has no slot. */
+  color: string | null;
   cents: number;
   creditCents: number;
   txnCount: number;
@@ -103,6 +109,7 @@ const byCents = <T extends { cents: number; name: string }>(a: T, b: T) =>
 /** Builds the Flow for a period, or null when no money moved. */
 export function buildFlow(d: FlowInput): FlowModel | null {
   const slots = d.groupSlots ?? {};
+  const colors = d.colors ?? {};
   const spending: Record<'required' | 'discretionary', Map<string, FlowCategory>> = {
     required: new Map(), discretionary: new Map(),
   };
@@ -126,6 +133,7 @@ export function buildFlow(d: FlowInput): FlowModel | null {
         name: isSub ? (r.parent_name ?? r.category_name) : r.category_name,
         group,
         slot: slots[group] ?? null,
+        color: (id && colors[id]) || null,
         cents: 0, creditCents: 0, txnCount: 0,
         children: [],
       };
@@ -141,6 +149,7 @@ export function buildFlow(d: FlowInput): FlowModel | null {
       cents: r.total_cents,
       creditCents: r.credit_cents,
       txnCount: r.txn_count,
+      color: (r.category_id && colors[r.category_id]) || cat.color,
     });
   }
 
@@ -214,6 +223,8 @@ export interface CategoryFlowModel {
   name: string;
   group: string;
   slot: number | null;
+  /** Its own shade; its leaves carry theirs. */
+  color: string | null;
   cents: number;
   creditCents: number;
   txnCount: number;
@@ -230,9 +241,11 @@ export interface CategoryFlowModel {
 
 /** A category's Flow down to merchants, or null when nothing was spent in it. */
 export function buildCategoryFlow(
-  root: { id: string; name: string; group: string; slot: number | null },
+  root: { id: string; name: string; group: string; slot: number | null; color?: string | null },
   rows: CategoryFlowInputRow[],
+  colors: Record<string, string> = {},
 ): CategoryFlowModel | null {
+  const rootColor = root.color ?? colors[root.id] ?? null;
   const spent = rows.filter((r) => r.total_cents > 0);
   if (spent.length === 0) return null;
 
@@ -249,6 +262,7 @@ export function buildCategoryFlow(
       leaf = {
         id: r.category_id, name: general ? GENERAL : r.category_name, general,
         cents: 0, creditCents: 0, txnCount: 0, merchants: [],
+        color: colors[r.category_id] ?? rootColor,
       };
       leaves.set(r.category_id, leaf);
     }
@@ -281,6 +295,7 @@ export function buildCategoryFlow(
   const cents = all.reduce((a, l) => a + l.cents, 0);
   return {
     ...root,
+    color: rootColor,
     cents,
     creditCents: all.reduce((a, l) => a + l.creditCents, 0),
     txnCount: all.reduce((a, l) => a + l.txnCount, 0),
@@ -306,7 +321,7 @@ export type Tone =
   | { kind: 'strong' }
   | { kind: 'mid' }
   | { kind: 'hatch' }
-  | { kind: 'group'; slot: number | null };
+  | { kind: 'group'; slot: number | null; color?: string | null };
 
 export type NodeKind =
   | 'source' | 'junction' | 'bucket' | 'category' | 'subcategory' | 'general' | 'more' | 'merchant';
@@ -426,7 +441,7 @@ export function flowGraph(
 
     for (const c of ordered) {
       const catKey = `cat:${b.key}:${c.id ?? 'none'}`;
-      const tone: Tone = { kind: 'group', slot: c.slot };
+      const tone: Tone = { kind: 'group', slot: c.slot, color: c.color };
       const own = rows({ categoryId: c.id, withSubcategories: true, necessity });
       push({
         key: catKey, column: 3, name: c.name, label: c.name, kind: 'category',
@@ -456,21 +471,22 @@ export function flowGraph(
     for (const c of ordered) {
       if (c.children.length === 0) continue;
       const catKey = `cat:${b.key}:${c.id ?? 'none'}`;
-      const tone: Tone = { kind: 'group', slot: c.slot };
+      const tone: Tone = { kind: 'group', slot: c.slot, color: c.color };
       const { shown: kids, rest } = fold(c.children, MAX_CHILDREN, expanded.has(catKey));
       for (const k of kids) {
+        const kidTone: Tone = { kind: 'group', slot: c.slot, color: k.color };
         const key = `${catKey}:${k.general ? 'general' : k.id}`;
         const href = rows({ categoryId: k.id, necessity });
         push({
           key, column: 4, name: k.general ? `${c.name}, not in a subcategory` : k.name,
           label: k.name, kind: k.general ? 'general' : 'subcategory',
-          cents: k.cents, creditCents: k.creditCents, txnCount: k.txnCount, share: ofSpending(k.cents), tone,
+          cents: k.cents, creditCents: k.creditCents, txnCount: k.txnCount, share: ofSpending(k.cents), tone: kidTone,
           // General is the parent's own rows: looking inside it is looking
           // inside the parent, which is one click to the left.
           action: !k.general && k.id ? { type: 'focus', id: k.id } : { type: 'rows', href },
           rows: href,
         });
-        links.push({ source: catKey, target: key, cents: k.cents, tone });
+        links.push({ source: catKey, target: key, cents: k.cents, tone: kidTone });
       }
       if (rest.length > 0) {
         const cents = rest.reduce((a, k) => a + k.cents, 0);
@@ -503,7 +519,8 @@ export function categoryGraph(
   let order = 0;
   const push = (n: Omit<GraphNode, 'order'>) => { nodes.push({ ...n, order: order++ }); return n.key; };
   const rows = (r: Omit<Parameters<typeof registerHref>[0], 'from' | 'to'>) => registerHref({ ...r, ...period });
-  const tone: Tone = { kind: 'group', slot: c.slot };
+  const tone: Tone = { kind: 'group', slot: c.slot, color: c.color };
+  const leafTone = (l: CategoryFlowLeaf): Tone => ({ kind: 'group', slot: c.slot, color: l.color });
   const of = (cents: number) => (c.cents > 0 ? cents / c.cents : 0);
 
   for (const b of c.buckets) {
@@ -531,11 +548,11 @@ export function categoryGraph(
     push({
       key, column: 2, name: l.general ? `${c.name}, not in a subcategory` : l.name, label: l.name,
       kind: l.general ? 'general' : 'subcategory', cents: l.cents, creditCents: l.creditCents,
-      txnCount: l.txnCount, share: of(l.cents), tone,
+      txnCount: l.txnCount, share: of(l.cents), tone: leafTone(l),
       action: !l.general && l.id ? { type: 'focus', id: l.id } : { type: 'rows', href },
       rows: href,
     });
-    links.push({ source: 'root', target: key, cents: l.cents, tone });
+    links.push({ source: 'root', target: key, cents: l.cents, tone: leafTone(l) });
     leafKeys.push([l, key]);
   }
 
@@ -545,13 +562,13 @@ export function categoryGraph(
       const key = `${parentKey}:m:${mer.id ?? mer.name}`;
       push({
         key, column: merchantColumn, name: mer.name, label: mer.name, kind: 'merchant',
-        cents: mer.cents, creditCents: mer.creditCents, txnCount: mer.txnCount, share: of(mer.cents), tone,
+        cents: mer.cents, creditCents: mer.creditCents, txnCount: mer.txnCount, share: of(mer.cents), tone: leafTone(l),
         action: {
           type: 'rows',
           href: mer.id ? rows({ categoryId: l.id, merchantId: mer.id }) : rows({ categoryId: l.id }),
         },
       });
-      links.push({ source: parentKey, target: key, cents: mer.cents, tone });
+      links.push({ source: parentKey, target: key, cents: mer.cents, tone: leafTone(l) });
     }
     if (rest.length > 0) {
       const cents = rest.reduce((a, x) => a + x.cents, 0);
@@ -559,9 +576,9 @@ export function categoryGraph(
       push({
         key, column: merchantColumn, name: `${rest.length} more merchants`, label: `+${rest.length} more`,
         kind: 'more', cents, share: of(cents), txnCount: rest.reduce((a, x) => a + x.txnCount, 0),
-        tone, action: { type: 'expand', key: parentKey },
+        tone: leafTone(l), action: { type: 'expand', key: parentKey },
       });
-      links.push({ source: parentKey, target: key, cents, tone });
+      links.push({ source: parentKey, target: key, cents, tone: leafTone(l) });
     }
   }
 
@@ -578,6 +595,7 @@ export interface InsideOption {
   name: string;
   group: string;
   slot: number | null;
+  color: string | null;
   /** Across both buckets: a category spent in two is one choice. */
   cents: number;
   /** The parent, for a subcategory. */
@@ -596,12 +614,12 @@ export function insideOptions(m: FlowModel | null): InsideOption[] {
   for (const b of m?.buckets ?? []) {
     for (const c of b.categories) {
       if (!c.id) continue;
-      const opt = cats.get(c.id) ?? { id: c.id, name: c.name, group: c.group, slot: c.slot, cents: 0, kids: new Map() };
+      const opt = cats.get(c.id) ?? { id: c.id, name: c.name, group: c.group, slot: c.slot, color: c.color, cents: 0, kids: new Map() };
       opt.cents += c.cents;
       for (const k of c.children) {
         if (k.general || !k.id) continue;
         const kid = opt.kids.get(k.id) ?? {
-          id: k.id, name: k.name, group: c.group, slot: c.slot, cents: 0, parentId: c.id, parentName: c.name,
+          id: k.id, name: k.name, group: c.group, slot: c.slot, color: k.color, cents: 0, parentId: c.id, parentName: c.name,
         };
         kid.cents += k.cents;
         opt.kids.set(k.id, kid);

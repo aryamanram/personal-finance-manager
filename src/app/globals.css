@@ -25,13 +25,16 @@
   --color-ground: light-dark(#f3f3ef, #151716);
   --color-raised: light-dark(#fbfbf8, #1d201e);
   --color-well: light-dark(#e8e8e2, #252826);
+  /* A card: the white sheet a chart or a figure sits on, lifted off the
+     ground by a soft shadow (.card, below). */
+  --color-card: light-dark(#ffffff, #1c1e1d);
   /* Hairlines between rows, and the stronger edge of an input or a chip. */
   --color-rule: light-dark(#dadad3, #2d312e);
   --color-rule-strong: light-dark(#bebeb5, #424741);
 
   /* Text. Faint is used at 11-14px for eyebrows and metadata, below the
-     large-text threshold, so all three clear 4.5:1 on the ground, on Raised
-     and on Well, in both themes. */
+     large-text threshold, so all three clear 4.5:1 on the ground, on Raised,
+     on Well and on a card, in both themes. */
   --color-ink: light-dark(#1b1d1a, #ecede8);
   --color-ink-dim: light-dark(#474a45, #b6b9b2);
   --color-ink-faint: light-dark(#62655f, #8f938c);
@@ -46,10 +49,12 @@
   --color-alert: light-dark(#ba2b28, #f47c70);
 
   /* The chart's two neutral inks: the Flow's sources and buckets, and fixed
-     against variable. At least 3:1 apart and each 3:1 against the ground, so
-     two touching bands read as two. */
-  --color-chart-strong: light-dark(#3b3e39, #dfe1db);
-  --color-chart-mid: light-dark(#8a8d85, #777b74);
+     against variable. A cool slate rather than grey, so money that has not
+     been spent yet reads as calm rather than switched off. At least 3:1 apart
+     and each 3:1 against the ground and a card, so two touching bands read
+     as two. */
+  --color-chart-strong: light-dark(#21344c, #ccddee);
+  --color-chart-mid: light-dark(#6f869e, #647a92);
 
   /* The group palette. A category is drawn in its group's slot, everywhere
      (V10); the slot is the group's position among groups that hold spending.
@@ -80,10 +85,10 @@
    carry, because it is not a colour. A translucent colour on a dark ground
    reads darker than on a light one, so the dark theme shows more of it. */
 :root {
-  --ribbon: 0.42;
-  --ribbon-lit: 0.72;
-  --ribbon-neutral: 0.16;
-  --ribbon-neutral-lit: 0.36;
+  --ribbon: 0.34;
+  --ribbon-lit: 0.62;
+  --ribbon-neutral: 0.13;
+  --ribbon-neutral-lit: 0.3;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -135,11 +140,33 @@ html, body {
 }
 
 .eyebrow {
-  font-family: var(--font-mono);
   font-size: 0.6875rem;
-  letter-spacing: 0.14em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-ink-faint);
+}
+
+/* A display figure: the Flow page's headline numbers and chart labels. The
+   sans face at tabular widths — the digits still align, without the
+   typewriter voice the register's columns use. */
+.figure-display {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.015em;
+}
+
+/* A sheet on the page: white on the light ground, lifted by a shadow soft
+   enough to read as depth rather than as a border; on the dark ground, a
+   lighter sheet with a hairline, since shadows do not show on black. */
+.card {
+  --chart-surface: var(--color-card);
+  background: var(--color-card);
+  border-radius: 16px;
+  box-shadow:
+    0 0 0 1px light-dark(rgb(0 0 0 / 0.045), rgb(255 255 255 / 0.06)),
+    0 1px 2px light-dark(rgb(0 0 0 / 0.04), rgb(0 0 0 / 0.3)),
+    0 8px 24px -12px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.5));
 }
 
 /* A ruled register: hairlines between rows, nothing around them. */
@@ -169,7 +196,7 @@ html, body {
    readable whatever passes beneath it. */
 .flow-label {
   paint-order: stroke;
-  stroke: var(--color-ground);
+  stroke: var(--chart-surface, var(--color-ground));
   stroke-width: 3px;
   stroke-linejoin: round;
 }
@@ -183,11 +210,15 @@ html, body {
 ::-webkit-scrollbar-thumb { background: var(--color-rule-strong); border-radius: 5px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-ink-faint); }
 
-/* Ink, not a hue: the focus ring is chrome, and amber is not chrome. */
-:focus-visible {
-  outline: 2px solid var(--color-ink);
-  outline-offset: 2px;
-  border-radius: 2px;
+/* Ink, not a hue: the focus ring is chrome, and amber is not chrome. In the
+   base layer, so a control that draws its own focus (a search box inside a
+   menu) can say so with a utility. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

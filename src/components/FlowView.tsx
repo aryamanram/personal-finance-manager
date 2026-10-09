@@ -11,10 +11,11 @@ import { flowGraph, type FlowModel, type FlowCategory, type BucketKey } from '@/
 import { registerHref } from '@/lib/register-link';
 
 /**
- * Sources, junction and buckets are bookkeeping; the room goes to the
- * categories, where the colour is.
+ * Each gap holds the labels of the column to its right (or, for the first,
+ * the sources'); the categories' gap is widest, since that is where the
+ * colour fans out.
  */
-const MAIN_GAPS = [0.55, 0.8, 1.35, 1.15];
+const MAIN_GAPS = [1, 0.85, 1.25, 1.1];
 
 const NECESSITY: Record<BucketKey, string | undefined> = {
   required: 'required', discretionary: 'discretionary', invested: 'investment', leftover: undefined,
@@ -32,11 +33,14 @@ export function FlowView({
   model,
   period,
   label,
+  range,
 }: {
   model: FlowModel | null;
   period: { from: string; to: string };
   /** "September 2026": what the chart is of, for its accessible name. */
   label: string;
+  /** "Sep 1 – 27, 2026": the dates the card's heading names. */
+  range?: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -74,15 +78,18 @@ export function FlowView({
   };
 
   return (
-    <section aria-labelledby="flow-heading">
-      <div className="rule-b flex flex-wrap items-end justify-between gap-x-6 gap-y-3 pb-2">
-        <h2 id="flow-heading" className="eyebrow">Where it went</h2>
-        <div className="flex items-center gap-4 text-xs">
+    <section aria-labelledby="flow-heading" className="card">
+      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3 px-6 pt-5">
+        <div>
+          <h2 id="flow-heading" className="eyebrow">Where it went</h2>
+          {range && <p className="mt-1 text-lg font-semibold tracking-tight text-ink">{range}</p>}
+        </div>
+        <div className="flex items-center gap-2">
           {view === 'chart' && (foldable || allOpen) && (
             <button
               type="button"
               onClick={() => setExpanded(allOpen ? new Set() : everyKey)}
-              className="text-ink-dim underline decoration-rule-strong underline-offset-4 transition-colors hover:text-ink"
+              className="rounded-lg border border-rule bg-card px-3 py-1.5 text-xs font-medium text-ink shadow-[0_1px_2px_rgb(0_0_0/0.05)] transition-colors hover:border-rule-strong"
             >
               {allOpen ? 'Show the largest' : 'Show every category'}
             </button>
@@ -97,7 +104,7 @@ export function FlowView({
       </div>
 
       {legend.length > 1 && (
-        <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-ink-dim" aria-label="Category groups">
+        <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 px-6 text-xs text-ink-dim" aria-label="Category groups">
           {legend.map((g) => (
             <li key={g.name} className="flex items-center gap-1.5">
               <span
@@ -111,7 +118,7 @@ export function FlowView({
         </ul>
       )}
 
-      <div className="mt-4">
+      <div className="mt-5 px-6 pb-6">
         {view === 'chart' ? (
           <FlowChart
             graph={graph}
@@ -146,7 +153,8 @@ export function Segmented<T extends string>({
   label: string;
 }) {
   return (
-    <div role="group" aria-label={label} className="flex rounded-sm border border-rule-strong p-0.5 text-xs">
+    // A segmented control: a sunken track with the chosen segment raised.
+    <div role="group" aria-label={label} className="flex rounded-lg bg-well p-0.5 text-xs font-medium">
       {options.map((o) => (
         <button
           key={o.value}
@@ -154,8 +162,10 @@ export function Segmented<T extends string>({
           aria-pressed={value === o.value}
           onClick={() => onChange(o.value)}
           className={clsx(
-            'rounded-[1px] px-2.5 py-1 transition-colors',
-            value === o.value ? 'bg-ink text-ground' : 'text-ink-dim hover:text-ink',
+            'rounded-md px-3 py-1 transition-all',
+            value === o.value
+              ? 'bg-card text-ink shadow-[0_1px_2px_rgb(0_0_0/0.08),0_0_0_0.5px_rgb(0_0_0/0.04)]'
+              : 'text-ink-dim hover:text-ink',
           )}
         >
           {o.label}
@@ -243,7 +253,7 @@ function categoryRows(
   share: (c: number) => string,
   onFocus?: (id: string) => void,
 ) {
-  const swatch = c.slot ? `var(--color-group-${c.slot})` : 'var(--color-chart-strong)';
+  const swatch = c.color ?? (c.slot ? `var(--color-group-${c.slot})` : 'var(--color-chart-strong)');
   const out = [
     <tr key={`${bucket}:${c.id}`} className="rule-b">
       <th scope="row" className="py-2 pl-4 text-left font-normal">
@@ -273,10 +283,13 @@ function categoryRows(
     out.push(
       <tr key={`${bucket}:${c.id}:${k.general ? 'general' : k.id}`} className="rule-b">
         <th scope="row" className="py-1.5 pl-10 text-left text-ink-dim font-normal">
+          <span className="flex items-center gap-2">
+          <span aria-hidden className="swatch" style={{ background: k.color ?? swatch }} />
           <RowLink href={rows({ categoryId: k.id, necessity })}>
             {k.name}
             {k.general && <span className="sr-only"> (in {c.name}, not in a subcategory)</span>}
           </RowLink>
+          </span>
         </th>
         <td className="py-1.5 text-right"><Figure cents={k.cents} tone="neutral" /></td>
         <td className="hidden py-1.5 text-right text-xs text-ink-faint sm:table-cell">{share(k.cents)}</td>
