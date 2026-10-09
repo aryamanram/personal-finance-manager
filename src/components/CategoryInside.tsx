@@ -16,6 +16,8 @@ import { formatCents } from '@/money';
 
 const groupColor = (slot: number | null) => (slot ? `var(--color-group-${slot})` : 'var(--color-chart-strong)');
 const optionColor = (o: InsideOption) => o.color ?? groupColor(o.slot);
+/** A category is a part of the month: its trunk is drawn shorter than the main Flow's. */
+const INSIDE_TRUNK_HEIGHT = 300;
 
 /**
  * The second level of Flow: one category, from the buckets that paid for it,
@@ -112,6 +114,7 @@ export function CategoryInside({
           <FlowChart
             graph={graph}
             label={`Inside ${detail.name}`}
+            trunkHeight={INSIDE_TRUNK_HEIGHT}
             onFocusCategory={pick}
             onExpand={(key) => setExpanded((e) => new Set([...e, key]))}
           />

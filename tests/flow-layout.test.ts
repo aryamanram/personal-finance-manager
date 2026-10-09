@@ -3,16 +3,20 @@
  *
  * The owner asked for Monarch's "one large cut from the left": the sources
  * stack into one bar, as tall as the junction and level with it, so their
- * ribbons run straight into it as one block and the money splits from there.
- * And with a $1.77 source flush against a $10,800 one, labels have to be kept
- * apart by something other than the gap between nodes.
+ * ribbons run straight into it as one block and the money splits from there —
+ * and then for that trunk to take "a good portion of the height", with
+ * everything else splitting off from it. And with a sliver of a source flush
+ * against a paycheck, labels have to be kept apart by something other than
+ * the gap between nodes.
  */
 import { describe, it, expect } from 'vitest';
 import {
   buildFlow, buildCategoryFlow, flowGraph, categoryGraph,
   type FlowGraph, type FlowInput, type FlowRow,
 } from '@/lib/flow';
-import { layoutFlow, placeLabels, LABEL_H, type FlowLayout, type LayoutNode } from '@/lib/flow-layout';
+import {
+  layoutFlow, pack, placeLabels, EDGE, GAP, LABEL_H, TRUNK_HEIGHT, type FlowLayout, type LayoutNode,
+} from '@/lib/flow-layout';
 
 const PERIOD = { from: '2026-09-01', to: '2026-09-30' };
 const WIDTH = 1200;
@@ -35,8 +39,8 @@ const overspent: FlowInput = {
   groupSlots: { Housing: 1, Food: 3, Lifestyle: 5 },
 };
 
-function laid(graph: FlowGraph): FlowLayout {
-  const l = layoutFlow(graph, WIDTH, [1, 0.85, 1.25, 1.1]);
+function laid(graph: FlowGraph, trunkHeight?: number): FlowLayout {
+  const l = layoutFlow(graph, WIDTH, { gaps: [1, 0.85, 1.25, 1.1], trunkHeight });
   if (!l) throw new Error('nothing laid out');
   return l;
 }
@@ -70,6 +74,42 @@ describe('the trunk', () => {
     expect(widths).toBeCloseTo(bottom(junction) - top(junction), 6);
   });
 
+  it('draws the whole of the money at the trunk height, from the top of the chart', () => {
+    expect(top(junction)).toBe(EDGE);
+    expect(bottom(junction) - top(junction)).toBeCloseTo(TRUNK_HEIGHT, 6);
+    const taller = laid(flowGraph(model, PERIOD), 300);
+    const j = node(taller, 'junction');
+    expect(bottom(j) - top(j)).toBeCloseTo(300, 6);
+  });
+
+  it('hangs the buckets from the trunk\'s top edge, a gap apart', () => {
+    const buckets = l.nodes.filter((n) => n.kind === 'bucket').sort((a, b) => top(a) - top(b));
+    expect(buckets.map((b) => b.key)).toEqual(['bucket:required', 'bucket:discretionary']);
+    expect(top(buckets[0])).toBe(EDGE);
+    expect(top(buckets[1]) - bottom(buckets[0])).toBeCloseTo(GAP, 6);
+  });
+
+  it('runs the first category\'s ribbon straight from its bucket', () => {
+    const rent = node(l, 'cat:required:Rent');
+    expect(top(rent)).toBeCloseTo(top(node(l, 'bucket:required')), 6);
+  });
+
+  it('keeps every other column a gap apart, and grows the chart to fit rather than shrinking the trunk', () => {
+    const every = laid(flowGraph(model, PERIOD, new Set(['bucket:required', 'bucket:discretionary'])));
+    const columns = new Map<number, LayoutNode[]>();
+    for (const n of every.nodes) if (n.column > 0) columns.set(n.column, [...(columns.get(n.column) ?? []), n]);
+    for (const [column, nodes] of columns) {
+      nodes.sort((a, b) => top(a) - top(b));
+      for (let i = 1; i < nodes.length; i++) {
+        expect(top(nodes[i]) - bottom(nodes[i - 1]), `column ${column}`).toBeGreaterThanOrEqual(GAP - 1e-6);
+      }
+    }
+    const j = node(every, 'junction');
+    expect(bottom(j) - top(j)).toBeCloseTo(TRUNK_HEIGHT, 6);
+    expect(every.height).toBeGreaterThan(TRUNK_HEIGHT + 2 * EDGE);
+    expect(every.height).toBeCloseTo(Math.max(...every.nodes.map((n) => bottom(n))) + EDGE, 6);
+  });
+
   it('draws a seam between each pair of stacked sources, inside the taller one', () => {
     expect(l.seams).toHaveLength(2);
     // Income above the $1.77 credit: the seam is cut from Income, not from the sliver.
@@ -86,6 +126,7 @@ describe('the trunk', () => {
     const root = node(own, 'root');
     const paid = own.nodes.filter((n) => n.column === 0).sort((a, b) => top(a) - top(b));
     expect(own.trunk).toBe('root');
+    expect(top(root)).toBe(EDGE);
     expect(paid).toHaveLength(2);
     expect(top(paid[0])).toBeCloseTo(top(root), 6);
     expect(top(paid[1])).toBeCloseTo(bottom(paid[0]), 6);
@@ -105,6 +146,19 @@ describe('the trunk', () => {
     });
     expect(l2.trunk).toBeNull();
     expect(l2.seams).toEqual([]);
+  });
+});
+
+describe('packing a column', () => {
+  it('leaves items where they want to be when they fit', () => {
+    expect(pack([{ want: 20, size: 10 }, { want: 80, size: 10 }], 32, 16)).toEqual([20, 80]);
+  });
+  it('pushes a collision apart by exactly the gap, centred on the wants', () => {
+    // Both want 100: the pair spans 10 + 32 + 10 and centres on 100.
+    expect(pack([{ want: 100, size: 10 }, { want: 100, size: 10 }], 32, 16)).toEqual([79, 121]);
+  });
+  it('never goes above the top, and keeps the order it was given', () => {
+    expect(pack([{ want: 0, size: 50 }, { want: 0, size: 5 }, { want: 0, size: 5 }], 0, 16)).toEqual([16, 66, 71]);
   });
 });
 

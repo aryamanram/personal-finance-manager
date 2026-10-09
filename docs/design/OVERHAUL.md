@@ -72,6 +72,10 @@ pushed; waiting on the owner's look.
     into one bar as tall as the junction, their ribbons run straight into it
     as one block and blend there, and the junction is a labelled total that
     the money visibly splits from.
+11. *"Can we make the left side of the flow also larger. Try to make is so
+    that it basically takes up a good portion of the height, and then
+    everything else splits off from it."* The trunk is drawn at a fixed,
+    generous height from the top of the chart, and the rest hangs from it.
 
 ## Why
 
@@ -175,6 +179,13 @@ Five columns, left to right:
   **Available** with the total, and the money splits from there. The same
   holds in a category's own Flow, where the buckets that paid for it are the
   trunk.
+- **The trunk sets the scale.** The whole of the money is drawn at one
+  generous height (520px on the main Flow, 300px in a category's own) and
+  every other node takes its share of that. The trunk starts at the top of
+  the chart and every column hangs from the same top edge: the buckets stack
+  down from it, each category sits beside the band that feeds it, and where
+  thin categories need room for their labels the chart grows downward
+  rather than shrinking the trunk to fit.
 - **Left over** mirrors it: the solid stream fades into the hatch as it
   reaches the bucket.
 - **Labels never collide.** Within a column, labels that would overlap are

@@ -12,7 +12,7 @@ import { layoutFlow, NODE_W, type LayoutLink, type LayoutNode } from '@/lib/flow
 /**
  * Draws a Flow: the main one on the Flow page, or a category's own.
  *
- * d3-sankey lays it out and the marks are hand-written SVG (DESIGN.md §4).
+ * lib/flow-layout.ts places it and the marks are hand-written SVG (DESIGN.md §4).
  * Ribbon width is the money and nothing else encodes magnitude. Each ribbon
  * fades from the colour of the node it leaves to the colour of the node it
  * reaches, so money visibly turns into what it became; colour is never the
@@ -22,7 +22,8 @@ import { layoutFlow, NODE_W, type LayoutLink, type LayoutNode } from '@/lib/flow
  * The first column is a trunk: when it all feeds one node, it stacks flush
  * against that node, as tall as it and level with it, so the money arrives
  * as one block — separate where it starts, one stream where it lands — and
- * visibly splits from there.
+ * visibly splits from there. The trunk is drawn at a fixed height from the
+ * top of the chart, and the rest hangs from it.
  *
  * Labels sit inside the drawing, on the side of each node its money arrives
  * from: the first column and the junction label to their right, every other
@@ -64,6 +65,7 @@ export function FlowChart({
   graph,
   label,
   gaps,
+  trunkHeight,
   onFocusCategory,
   onExpand,
 }: {
@@ -76,6 +78,8 @@ export function FlowChart({
    * colours more.
    */
   gaps?: number[];
+  /** How tall the whole of the money is drawn; the main Flow's by default. */
+  trunkHeight?: number;
   onFocusCategory?: (id: string) => void;
   onExpand?: (key: string) => void;
 }) {
@@ -98,7 +102,7 @@ export function FlowChart({
     return () => ro.disconnect();
   }, []);
 
-  const layout = useMemo(() => layoutFlow(graph, width, gaps), [graph, width, gaps]);
+  const layout = useMemo(() => layoutFlow(graph, width, { gaps, trunkHeight }), [graph, width, gaps, trunkHeight]);
 
   /** Everything upstream and downstream of the active node: its whole path. */
   const lit = useMemo(() => {
