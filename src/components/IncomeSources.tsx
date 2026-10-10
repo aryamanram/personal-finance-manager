@@ -75,7 +75,7 @@ export function IncomeSources({
 
   return (
     <div>
-      <p className="mt-3 max-w-lg text-sm leading-relaxed text-ink-dim">
+      <p className="max-w-lg text-sm leading-relaxed text-ink-dim">
         Money from a payer listed here is filed automatically and skips review.
       </p>
 

@@ -202,7 +202,8 @@ export function TransactionTable({
 
   return (
     <div className={selected.size > 0 ? 'pb-20' : undefined}>
-      <div className="rule-b flex flex-wrap items-baseline justify-between gap-4 pb-2">
+      <div className="card overflow-hidden">
+      <div className="rule-b flex flex-wrap items-baseline justify-between gap-4 px-5 pb-3 pt-4 sm:px-6">
         {/* The header already carries the total, so repeating "n of N" here
             said the same number twice on one screen. What this line adds is
             the money — over every matching row, not just the ones loaded —
@@ -249,18 +250,18 @@ export function TransactionTable({
       </div>
 
       {patch.isError && (
-        <p className="mt-2 text-xs text-alert">{(patch.error as Error).message}</p>
+        <p className="px-5 pt-2 text-xs text-alert sm:px-6">{(patch.error as Error).message}</p>
       )}
 
       {/* Six fixed-width columns together need more than a phone's width.
           Scrolling the table inside its own container keeps the columns
           aligned and the page free of a horizontal scrollbar, rather than
           collapsing a ledger into cards where figures stop lining up. */}
-      <div className="-mx-6 overflow-x-auto px-6 sm:mx-0 sm:px-0">
+      <div className="overflow-x-auto px-3 pb-2 sm:px-4">
       <table className="w-full min-w-[680px] table-fixed">
         <thead>
           <tr className="rule-b">
-            <th className="w-8 pl-1">
+            <th className="w-8 pl-1 text-left">
               <input
                 type="checkbox"
                 checked={allShown}
@@ -315,6 +316,7 @@ export function TransactionTable({
             : 'No transactions match these filters.'}
         </p>
       )}
+      </div>
 
       {/* Fixed to the VIEWPORT, not the top of the table. Selecting rows at
           the bottom of a 300-row register used to mean scrolling back up to
@@ -323,8 +325,9 @@ export function TransactionTable({
           A bar that follows the viewport is in reach from any scroll
           position, and it only exists while something is selected. */}
       {selected.size > 0 && (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-rule-strong bg-raised/95 backdrop-blur">
-          <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-end gap-3 px-6 py-3 text-xs">
+        // Right of the sidebar (w-20, lg:w-56), lined up with the page's own column.
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-rule-strong bg-raised/95 backdrop-blur md:left-20 lg:left-56">
+          <div className="mx-auto flex max-w-[1760px] flex-wrap items-center justify-end gap-3 px-4 py-3 text-xs sm:px-6 md:px-8">
             <span className="mr-auto text-ink-dim">
               <span className="figure">{selected.size}</span> selected
             </span>

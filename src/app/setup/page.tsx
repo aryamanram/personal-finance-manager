@@ -3,6 +3,7 @@ import { CsvImport } from '@/components/CsvImport';
 import { BalanceSnapshotForm } from '@/components/BalanceSnapshotForm';
 import { IncomeSources } from '@/components/IncomeSources';
 import { Figure } from '@/components/Figure';
+import { Card } from '@/components/Card';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,7 +22,7 @@ export default async function SetupPage() {
   const investments = accounts.filter((a) => a.type === 'investment');
 
   return (
-    <div className="space-y-14">
+    <div className="space-y-6">
       <header>
         <div className="eyebrow">Setup</div>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight">What the feeds cannot send</h1>
@@ -31,18 +32,15 @@ export default async function SetupPage() {
         </p>
       </header>
 
-      <section aria-labelledby="balances-heading">
-        <div className="rule-b pb-2">
-          <h2 id="balances-heading" className="eyebrow">Record a balance</h2>
-        </div>
+      <Card label="Record a balance" id="balances">
         {investments.length === 0 && (
-          <p className="mt-4 text-sm text-ink-faint">No investment accounts to record.</p>
+          <p className="text-sm text-ink-faint">No investment accounts to record.</p>
         )}
-        <div className="mt-2 grid gap-x-12 md:grid-cols-2">
+        <div className="grid gap-x-12 gap-y-6 md:grid-cols-2">
           {investments.map((a) => {
             const p = performance.find((x) => x.account_id === a.id);
             return (
-              <div key={a.id} className="mt-4">
+              <div key={a.id}>
                 <h3 className="text-sm font-medium text-ink">{a.name}</h3>
                 <p className="mt-1 text-xs text-ink-faint">
                   {p ? (
@@ -56,18 +54,14 @@ export default async function SetupPage() {
             );
           })}
         </div>
-      </section>
+      </Card>
 
-      <section>
+      <div className="grid items-start gap-5 xl:grid-cols-2">
         <CsvImport accounts={accounts} />
-      </section>
-
-      <section aria-labelledby="income-heading">
-        <div className="rule-b pb-2">
-          <h2 id="income-heading" className="eyebrow">Income sources</h2>
-        </div>
-        <IncomeSources sources={incomeSources} categories={categories} />
-      </section>
+        <Card label="Income sources" id="income">
+          <IncomeSources sources={incomeSources} categories={categories} />
+        </Card>
+      </div>
     </div>
   );
 }

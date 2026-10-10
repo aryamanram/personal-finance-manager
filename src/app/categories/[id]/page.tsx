@@ -10,6 +10,7 @@ import { Figure } from '@/components/Figure';
 import { formatCentsCompact } from '@/money';
 import { formatMonthShort } from '@/lib/format-date';
 import { categoryColors } from '@/lib/palette';
+import { Card } from '@/components/Card';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,7 +65,7 @@ export default async function CategoryPage({
     : 0;
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-6">
       <header>
         <Link href="/transactions" className="eyebrow transition-colors hover:text-ink-dim">
           ← Register
@@ -76,24 +77,24 @@ export default async function CategoryPage({
         </h1>
       </header>
 
-      <section className="grid gap-10 lg:grid-cols-[1fr_320px]">
-        <div>
-          <div className="rule-b flex items-baseline justify-between pb-2">
-            <h2 className="eyebrow">Monthly</h2>
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <Card
+          label="Monthly"
+          action={
             <span className="text-xs text-ink-faint">
               average <Figure cents={average} tone="neutral" showCents={false} />
             </span>
-          </div>
-
+          }
+        >
           {/* A bar per month, drawn from the values themselves — no chart
               library needed for twelve numbers. */}
-          <ul className="mt-4 space-y-1.5">
+          <ul className="space-y-1.5">
             {months.map((m) => (
               <li key={m.month} className="flex items-center gap-3 text-xs">
                 <span className="figure w-16 shrink-0 text-ink-faint">
                   {formatMonthShort(m.month)}
                 </span>
-                <span className="h-4 flex-1 bg-well">
+                <span className="h-4 flex-1 overflow-hidden rounded-[3px] bg-well">
                   <span
                     className="block h-full"
                     style={{ width: `${(m.total_cents / peak) * 100}%`, background: colour }}
@@ -109,13 +110,10 @@ export default async function CategoryPage({
           {months.length === 0 && (
             <p className="py-8 text-sm text-ink-faint">No spending in this category yet.</p>
           )}
-        </div>
+        </Card>
 
-        <div>
-          <div className="rule-b pb-2">
-            <h2 className="eyebrow">Defaults</h2>
-          </div>
-          <p className="mt-3 text-xs leading-relaxed text-ink-faint">
+        <Card label="Defaults">
+          <p className="text-xs leading-relaxed text-ink-faint">
             Inherited by every transaction in this category. A per-transaction
             override still wins.
           </p>
@@ -124,10 +122,10 @@ export default async function CategoryPage({
             costType={category.default_cost_type}
             necessity={category.default_necessity}
           />
-        </div>
-      </section>
+        </Card>
+      </div>
 
-      <section>
+      <section aria-label="Transactions">
         <TransactionTable
           initial={transactions}
           categories={categories}

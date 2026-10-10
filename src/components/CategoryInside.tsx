@@ -63,7 +63,7 @@ export function CategoryInside({
   const all = detail ? registerHref({ categoryId: detail.id, withSubcategories: true, ...period }) : undefined;
 
   return (
-    <section id="inside" aria-labelledby="inside-heading" className="card scroll-mt-20">
+    <section id="inside" aria-labelledby="inside-heading" className="card scroll-mt-20 md:scroll-mt-8">
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3 px-6 pt-5">
         <div className="min-w-0">
           <h2 id="inside-heading" className="eyebrow">Inside a category</h2>

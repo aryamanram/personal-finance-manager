@@ -6,6 +6,7 @@ import {
 import { Figure } from '@/components/Figure';
 import { formatCents } from '@/money';
 import { formatTimestampLong } from '@/lib/format-date';
+import { Card } from '@/components/Card';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +28,7 @@ export default async function AccountsPage() {
   const total = netWorth.reduce((a, n) => a + n.balance_cents, 0);
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-6">
       <header>
         <div className="eyebrow">Accounts</div>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight">
@@ -36,14 +37,13 @@ export default async function AccountsPage() {
         </h1>
       </header>
 
-      <section>
-        <div className="rule-b pb-2">
-          <h2 className="eyebrow">Balances</h2>
-        </div>
+      {/* Two columns once there is room for a table in each; one below that. */}
+      <div className="grid items-start gap-5 xl:grid-cols-2">
+      <Card label="Balances">
         <table className="w-full">
-          <tbody>
+          <tbody className="divide-y divide-rule">
             {netWorth.map((n) => (
-              <tr key={n.account_id} className="rule-b">
+              <tr key={n.account_id}>
                 <td className="py-3 text-sm">{n.name}</td>
                 <td className="py-3 text-xs text-ink-faint">{n.type}</td>
                 <td className="py-3 text-xs text-ink-faint">
@@ -67,13 +67,10 @@ export default async function AccountsPage() {
             {lastSync.error && <span className="ml-2 text-alert">{lastSync.error}</span>}
           </p>
         )}
-      </section>
+      </Card>
 
-      <section aria-labelledby="checks-heading">
-        <div className="rule-b pb-2">
-          <h2 id="checks-heading" className="eyebrow">Does the ledger match the banks?</h2>
-        </div>
-        <ul className="mt-1">
+      <Card label="Does the ledger match the banks?" id="checks">
+        <ul className="-mt-2 divide-y divide-rule">
           <Check ok={drift.length === 0} name="Balances">
             {drift.length === 0
               ? 'every account adds up to the balance its bank reports'
@@ -85,7 +82,7 @@ export default async function AccountsPage() {
           </Check>
           <CardsCheck cards={cards} />
         </ul>
-      </section>
+      </Card>
 
       {performance.map((p) => {
         // One snapshot is a starting line, not a period. Reporting 0.00% would
@@ -93,13 +90,9 @@ export default async function AccountsPage() {
         // the case: tracking has begun, measurement starts at the next reading.
         const singleSnapshot = p.opening_date === p.as_of;
         return (
-        <section key={p.account_id}>
-          <div className="rule-b pb-2">
-            <h2 className="eyebrow">{p.name}</h2>
-          </div>
-
+        <Card key={p.account_id} label={p.name} id={`investment-${p.account_id}`}>
           {singleSnapshot && (
-            <p className="mt-4 max-w-lg text-sm leading-relaxed text-ink-dim">
+            <p className="max-w-lg text-sm leading-relaxed text-ink-dim">
               Tracking starts here, at{' '}
               <Figure cents={p.current_cents} tone="neutral" showCents={false} />{' '}
               on {p.as_of}. Whatever this account earned before today belongs to
@@ -110,7 +103,7 @@ export default async function AccountsPage() {
 
           {/* DESIGN.md §13: growth is measured from the first snapshot, never
               from zero, and contributions are not performance. */}
-          <table className="mt-4 w-full max-w-lg">
+          <table className={singleSnapshot ? 'mt-4 w-full' : 'w-full'}>
             <tbody>
               <Line label="Sent to investment" cents={p.contributed_cents}
                     hint={singleSnapshot ? 'since tracking began' : 'linked contributions'} />
@@ -169,7 +162,7 @@ export default async function AccountsPage() {
               Record this month&rsquo;s balance in Setup →
             </Link>
           </p>
-        </section>
+        </Card>
         );
       })}
 
@@ -177,19 +170,17 @@ export default async function AccountsPage() {
       {accounts
         .filter((a) => a.type === 'investment' && !performance.some((p) => p.account_id === a.id))
         .map((a) => (
-          <section key={a.id}>
-            <div className="rule-b pb-2">
-              <h2 className="eyebrow">{a.name}</h2>
-            </div>
-            <p className="mt-3 text-sm text-ink-dim">
+          <Card key={a.id} label={a.name} id={`investment-${a.id}`}>
+            <p className="text-sm text-ink-dim">
               No balance recorded yet.{' '}
               <Link href="/setup" className="underline decoration-rule-strong underline-offset-4 hover:text-ink">
                 Record one in Setup
               </Link>{' '}
               to start tracking performance.
             </p>
-          </section>
+          </Card>
         ))}
+      </div>
     </div>
   );
 }
@@ -200,7 +191,7 @@ export default async function AccountsPage() {
  */
 function Check({ ok, name, children }: { ok: boolean; name: string; children: React.ReactNode }) {
   return (
-    <li className="rule-b flex items-baseline gap-4 py-3 text-sm">
+    <li className="flex items-baseline gap-4 py-3 text-sm">
       <span className={ok ? 'w-24 shrink-0 text-ink-dim' : 'w-24 shrink-0 font-medium text-alert'}>
         <span aria-hidden className="mr-1.5">{ok ? '✓' : '△'}</span>{name}
       </span>

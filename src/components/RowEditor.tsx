@@ -107,7 +107,7 @@ export function RowEditor({
   }
 
   return (
-    <div className="bg-raised px-4 py-4">
+    <div className="bg-well/50 px-4 py-4">
       <div className="max-w-3xl space-y-5">
         <div>
           <label className="eyebrow block" htmlFor={`name-${txn.id}`}>Name it</label>

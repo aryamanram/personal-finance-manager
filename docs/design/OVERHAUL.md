@@ -81,6 +81,16 @@ pushed; waiting on the owner's look.
     subcategories hung far below a trunk of fixed height. The trunk now
     keeps a share of the chart's height and grows with the sprawl.
 
+**2026-10-10**:
+
+13. *"Lets make all the tabs, flow, review etc all on the left side in a
+    'navbar' type section. This way no matter the screen size that will
+    always be on the left coming out from the edge of the screen, unless the
+    screen is super small in which is can become a threebar dropdown. And
+    then the rest of the page can be equally spread by the cards on each
+    page."* A sidebar on the left edge; a menu button on a phone; every
+    page's content on cards filling the rest of the width.
+
 ## Why
 
 The first round's findings still stand, and the work below fixes each one:
@@ -110,8 +120,37 @@ The first round's findings still stand, and the work below fixes each one:
 ## The shape
 
 ```
-ledger     Flow   Review · 12   Register   Accounts   Setup              ◐
+┌──────────────┬────────────────────────────────────────────────┐
+│ ledger       │                                                │
+│              │   the page, on cards, across the whole width   │
+│ ⑂ Flow       │                                                │
+│ ▤ Review  12 │                                                │
+│ ≡ Register   │                                                │
+│ ⌂ Accounts   │                                                │
+│ ⚙ Setup      │                                                │
+│              │                                                │
+│              │                                                │
+│ ◐ ☼ ☾        │                                                │
+└──────────────┴────────────────────────────────────────────────┘
 ```
+
+**The sidebar** is fixed to the left edge of the screen and runs its full
+height, whatever the page's length: the wordmark at the top, the sections as
+rows of icon and name, the theme at the foot. It has three widths:
+
+- **Wide screens (≥ 1024px):** the full sidebar, 224px — icon, name, and
+  Review's count at the end of its row.
+- **Tablets (768–1023px):** a 80px rail of the same sections, each icon
+  with its name beneath, the count on the icon's corner. Still on the left;
+  the page keeps the width it needs.
+- **Phones (< 768px):** a top bar with the wordmark and a menu button (☰).
+  The button opens the same list as a panel beneath the bar, theme
+  included; choosing a page, Esc, or a tap outside closes it.
+
+**The page** takes everything to the right of the sidebar — its sections on
+cards, the same card the Flow uses, spread across the full width up to a
+1760px cap on very wide screens. Nothing a page does is lost in the move;
+only the header that held the nav is gone.
 
 - **ledger** — the wordmark. Plain text, not a link.
 - **Flow** (`/`) — the month: five figures, the main Flow, a category's own
@@ -125,7 +164,7 @@ ledger     Flow   Review · 12   Register   Accounts   Setup              ◐
   Viewing only.
 - **Setup** (`/setup`) — income sources, statement import, recording a
   balance.
-- **◐** — the theme: System, Light or Dark. System is the default.
+- **◐ ☼ ☾** — the theme: System, Light or Dark. System is the default.
 
 The period travels between Flow and Register (V5).
 

@@ -1,11 +1,10 @@
 import type { Metadata } from 'next';
-import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { Inter_Tight, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
-import { Nav, NavLinks } from '@/components/Nav';
-import { ThemeSwitch, type ThemeChoice } from '@/components/ThemeSwitch';
+import { MobileNav, Sidebar } from '@/components/Nav';
+import type { ThemeChoice } from '@/components/ThemeSwitch';
 import { getReviewCounts } from '@/lib/queries';
 
 // Fetched once at build time and served from this app. A stylesheet link to
@@ -65,25 +64,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           logs a hydration error that no change to this app can prevent. */}
       <body className="min-h-screen bg-ground" suppressHydrationWarning>
         <Providers>
-          <header className="rule-b sticky top-0 z-30 bg-ground/95 backdrop-blur">
-            {/* On a phone the nav takes a row of its own and scrolls sideways,
-                rather than pushing the whole page wider than the screen. */}
-            <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-6 gap-y-2 px-6 py-2.5">
-              <span className="text-[15px] font-semibold tracking-tight text-ink">ledger</span>
-              {/* The nav reads the URL's period, which suspends on the server.
-                  The fallback is the same links without it, so the header
-                  never paints empty while the boundary resolves. */}
-              <div className="order-last w-full sm:order-none sm:w-auto">
-                <Suspense fallback={<NavLinks items={nav} period={null} />}>
-                  <Nav items={nav} />
-                </Suspense>
-              </div>
-              <div className="ml-auto">
-                <ThemeSwitch initial={theme} />
-              </div>
-            </div>
-          </header>
-          <main className="mx-auto max-w-[1400px] px-6 py-8">{children}</main>
+          {/* The sections down the left edge from a tablet up; a menu
+              button in a bar across the top on a phone. */}
+          <Sidebar items={nav} theme={theme} />
+          <MobileNav items={nav} theme={theme} />
+          {/* Everything right of the sidebar, its width matching the
+              sidebar's (w-20, lg:w-56). The cap only bites on very wide
+              screens, where a chart or a table stretched edge to edge would
+              stop reading as one thing. */}
+          <main className="px-4 pb-12 pt-5 sm:px-6 md:pl-28 md:pr-8 md:pt-8 lg:pl-64">
+            <div className="mx-auto max-w-[1760px]">{children}</div>
+          </main>
         </Providers>
       </body>
     </html>

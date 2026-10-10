@@ -5,6 +5,7 @@ import { Figure } from './Figure';
 import { formatCents } from '@/money';
 import type { Account } from '@/lib/types';
 import { formatTimestampShort } from '@/lib/format-date';
+import { Card } from './Card';
 
 interface Preview {
   rowCount: number;
@@ -76,22 +77,22 @@ export function CsvImport({ accounts }: { accounts: Account[] }) {
   }
 
   return (
-    <div>
-      <div className="rule-b flex items-baseline justify-between pb-2">
-        <h2 className="eyebrow">Import a statement</h2>
-        {csvAccounts.length > 1 && (
-          <select
-            aria-label="Import into"
-            value={accountId}
-            onChange={(e) => setAccountId(e.target.value)}
-            className="rounded-sm border border-rule-strong bg-well px-2 py-1 text-xs"
-          >
-            {csvAccounts.map((a) => (
-              <option key={a.id} value={a.id}>{a.name}</option>
-            ))}
-          </select>
-        )}
-      </div>
+    <Card
+      label="Import a statement"
+      id="import"
+      action={csvAccounts.length > 1 && (
+        <select
+          aria-label="Import into"
+          value={accountId}
+          onChange={(e) => setAccountId(e.target.value)}
+          className="rounded-sm border border-rule-strong bg-well px-2 py-1 text-xs"
+        >
+          {csvAccounts.map((a) => (
+            <option key={a.id} value={a.id}>{a.name}</option>
+          ))}
+        </select>
+      )}
+    >
 
       {!preview && (
         <div
@@ -103,8 +104,8 @@ export function CsvImport({ accounts }: { accounts: Account[] }) {
             choose(e.dataTransfer.files[0]);
           }}
           onClick={() => inputRef.current?.click()}
-          className={`mt-4 cursor-pointer border border-dashed px-6 py-10 text-center transition-colors ${
-            dragging ? 'border-ink bg-raised' : 'border-rule-strong hover:border-ink-faint'
+          className={`cursor-pointer rounded-xl border border-dashed px-6 py-10 text-center transition-colors ${
+            dragging ? 'border-ink bg-well/60' : 'border-rule-strong hover:border-ink-faint'
           }`}
         >
           <input
@@ -171,7 +172,7 @@ export function CsvImport({ accounts }: { accounts: Account[] }) {
 
           <div className="max-h-72 overflow-y-auto">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-ground">
+              <thead className="sticky top-0 bg-card">
                 <tr className="rule-b">
                   <th className="eyebrow py-1.5 text-left">Date</th>
                   <th className="eyebrow py-1.5 text-left">Description</th>
@@ -214,7 +215,7 @@ export function CsvImport({ accounts }: { accounts: Account[] }) {
           </div>
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 

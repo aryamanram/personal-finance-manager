@@ -54,8 +54,8 @@ export function TransactionRow({
   //
   // scrollIntoView's block options are not enough here. 'nearest' stops as
   // soon as the top edge shows, leaving the category button off screen, and
-  // 'end' aligns to the viewport bottom without accounting for the sticky
-  // header above. So compute the target directly: scroll only as far as it
+  // 'end' aligns to the viewport bottom without accounting for the phone's
+  // sticky top bar. So compute the target directly: scroll only as far as it
   // takes to fit the panel, and leave it alone when it already fits.
   useEffect(() => {
     if (!expanded) return;
@@ -66,7 +66,9 @@ export function TransactionRow({
     // has not been laid out yet, so its height reads as 0 and nothing scrolls.
     const id = requestAnimationFrame(() => {
       const r = el.getBoundingClientRect();
-      const HEADER = 64;   // the sticky nav, which overlays the top of the page
+      // The phone's top bar overlays the top of the page; from a tablet up
+      // the nav is a sidebar and nothing does.
+      const HEADER = document.querySelector('[data-topbar]')?.getBoundingClientRect().height ?? 0;
       const MARGIN = 12;
       const overflowBelow = r.bottom - (window.innerHeight - MARGIN);
       const overflowAbove = HEADER + MARGIN - r.top;
@@ -100,7 +102,7 @@ export function TransactionRow({
     <tr
       className={clsx(
         'rule-b group transition-colors',
-        voided ? 'text-ink-faint' : 'hover:bg-raised',
+        voided ? 'text-ink-faint' : 'hover:bg-well/40',
         /* Dim the row's own text, not the subtree. `opacity` on the <tr>
            composites every descendant against the page — including the
            "pending" badge, whose background and text fade together. That took

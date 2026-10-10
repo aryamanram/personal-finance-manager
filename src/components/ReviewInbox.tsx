@@ -167,7 +167,7 @@ export function ReviewInbox({
 
   if (rows.length === 0) {
     return (
-      <div className="rule-t mt-2 py-16 text-center">
+      <div className="card px-6 py-16 text-center">
         <p className="text-lg font-medium text-ink">Nothing to review.</p>
         <p className="mt-2 text-sm text-ink-faint">
           Every row in this period has a category a person chose or confirmed.
@@ -178,12 +178,12 @@ export function ReviewInbox({
   }
 
   return (
-    <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_220px]">
-      <div>
+    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_240px]">
+      <div className="card overflow-hidden py-1.5">
         <p aria-live="polite" className="sr-only">{said} {current ? `${rows.length} left.` : ''}</p>
-        {error && <p role="alert" className="mb-3 text-xs text-alert">{error}</p>}
+        {error && <p role="alert" className="px-5 pb-1 pt-3 text-xs text-alert">{error}</p>}
 
-        <ol ref={listRef} className="rule-t" aria-label="Transactions to review">
+        <ol ref={listRef} aria-label="Transactions to review">
           {rows.map((r, i) => {
             const selected = i === at;
             const guess = isGuess(r);
@@ -194,11 +194,12 @@ export function ReviewInbox({
                 aria-current={selected ? 'true' : undefined}
                 onClick={() => { if (!selected) { setCursor(i); setMode('idle'); } }}
                 className={clsx(
-                  'rule-b border-l-2 transition-colors',
-                  selected ? 'border-l-ink bg-raised' : 'cursor-pointer border-l-transparent hover:bg-raised/60',
+                  'border-l-2 transition-colors',
+                  i < rows.length - 1 && 'rule-b',
+                  selected ? 'border-l-ink bg-well/50' : 'cursor-pointer border-l-transparent hover:bg-well/30',
                 )}
               >
-                <div className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-baseline gap-x-4 px-3 py-2.5 sm:grid-cols-[4.5rem_minmax(0,1fr)_minmax(0,14rem)_7rem]">
+                <div className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-baseline gap-x-4 px-4 py-2.5 sm:px-5 sm:grid-cols-[4.5rem_minmax(0,1fr)_minmax(0,14rem)_7rem]">
                   <span className="figure text-xs text-ink-faint">{formatRegisterDate(r.eff_posted_date)}</span>
                   <span className="min-w-0">
                     <span className="block truncate text-sm text-ink">{r.eff_description}</span>
@@ -232,7 +233,7 @@ export function ReviewInbox({
                 </div>
 
                 {selected && (
-                  <div className="px-3 pb-3 pl-[5.75rem]">
+                  <div className="px-4 pb-3 pl-[6.25rem] sm:px-5 sm:pl-[6.75rem]">
                     {guess && r.suggested_reason && (
                       <p className="mb-2 text-xs text-ink-faint">Guessed: {r.suggested_reason}</p>
                     )}
@@ -288,9 +289,9 @@ export function ReviewInbox({
         </ol>
       </div>
 
-      <aside className="hidden lg:block" aria-label="Keys">
-        <div className="sticky top-20 text-xs">
-          <h2 className="eyebrow rule-b pb-2">Keys</h2>
+      <aside className="sticky top-8 hidden lg:block" aria-label="Keys">
+        <div className="card px-5 pb-5 pt-4 text-xs">
+          <h2 className="eyebrow">Keys</h2>
           <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-ink-dim">
             <Key k="↓ j">Next</Key>
             <Key k="↑ k">Previous</Key>

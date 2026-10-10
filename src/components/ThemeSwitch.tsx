@@ -23,8 +23,22 @@ const MAX_AGE = 60 * 60 * 24 * 365;
  * theme never flashes the other one first. "System" removes the pin and lets
  * `color-scheme: light dark` follow the operating system.
  */
-export function ThemeSwitch({ initial }: { initial: ThemeChoice }) {
-  const [theme, setTheme] = useState(initial);
+export function ThemeSwitch({
+  initial,
+  className = 'flex items-center gap-0.5',
+}: {
+  initial: ThemeChoice;
+  /** The group's own layout: a row by default, a column on the sidebar's rail. */
+  className?: string;
+}) {
+  // What the page shows now, not only what the server sent: the menu on a
+  // phone mounts its own switch each time it opens, possibly after the
+  // sidebar's changed the theme. On first paint the two agree.
+  const [theme, setTheme] = useState<ThemeChoice>(() => {
+    if (typeof document === 'undefined') return initial;
+    const pinned = document.documentElement.dataset.theme;
+    return pinned === 'light' || pinned === 'dark' ? pinned : 'system';
+  });
 
   const choose = (next: ThemeChoice) => {
     setTheme(next);
@@ -39,7 +53,7 @@ export function ThemeSwitch({ initial }: { initial: ThemeChoice }) {
   };
 
   return (
-    <div role="group" aria-label="Theme" className="flex items-center gap-0.5">
+    <div role="group" aria-label="Theme" className={className}>
       {OPTIONS.map(({ value, label, Icon }) => (
         <button
           key={value}
