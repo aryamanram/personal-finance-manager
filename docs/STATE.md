@@ -22,7 +22,7 @@ Describe the *shape* of a decision here and keep the specifics there.
 
 ---
 
-## Right now · last updated 2026-10-08
+## Right now · last updated 2026-10-10
 
 **The overhaul is built on a local branch, `overhaul`, and is not pushed.**
 The owner asked for no push or PR until they say so: there will be many
@@ -30,8 +30,8 @@ design changes. It carries the whole of `docs/design/OVERHAUL.md` — the Flow
 as the first page with a category's own Flow beneath, the light and dark
 colour scheme, Review, Setup — with V1–V10 tested and the a11y suite clean.
 The owner is reviewing it in rounds and asking for changes (OVERHAUL.md "The
-asks", 1–10); the latest made the Flow's sources one trunk that splits from a
-labelled total. The working tree is left on `overhaul` so
+asks", 1–13); the latest moved the sections to a sidebar on the left edge (a
+menu button on a phone) and put every page's sections on cards. The working tree is left on `overhaul` so
 they can run it; it changes no sync code and no schema, so the nightly sync
 behaves as on `main`. Switch back to `main` once they are done looking.
 
