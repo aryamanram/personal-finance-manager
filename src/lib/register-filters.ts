@@ -11,6 +11,14 @@ import type { TransactionFilters } from './queries';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * How many rows the register shows first, and loads each time it is
+ * scrolled near its end. Every loaded row stays: a few thousand rows is an
+ * ordinary page, and unloading the ones above would cost find-in-page,
+ * shift-click ranges and a scroll position that holds still.
+ */
+export const REGISTER_BATCH = 150;
+
 export interface RegisterView {
   filters: TransactionFilters;
   /** The category asked for by a link, when it names a known one. */

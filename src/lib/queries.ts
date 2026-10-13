@@ -56,6 +56,11 @@ export interface TransactionFilters {
   includeTransfers?: boolean;
   limit?: number;
   offset?: number;
+  /**
+   * Only rows after this one in the register's order — the next batch as the
+   * register scrolls. Read by getTransactions alone; counts ignore it.
+   */
+  after?: string;
 }
 
 /**
@@ -108,10 +113,32 @@ function transactionWhere(f: TransactionFilters) {
  */
 const newestFirst = () => sql`eff_posted_date DESC, created_at DESC, eff_description, eff_amount_cents, id`;
 
+/**
+ * Rows that come after this one in newestFirst's order: the next batch, by
+ * where the last one shown sits rather than by how many came before it. An
+ * offset would skip a row for every one voided above it since the last
+ * batch, and repeat one for every row synced in. The row's own keys are read
+ * here in SQL, at full precision: created_at carries microseconds that a
+ * JavaScript Date would round away, putting the rest of a synced batch on
+ * the wrong side of the line.
+ */
+const afterRow = (id: string) => sql`
+  EXISTS (
+    SELECT 1 FROM v_transactions c
+    WHERE c.id = ${id}
+      AND (v_transactions.eff_posted_date < c.eff_posted_date
+        OR (v_transactions.eff_posted_date = c.eff_posted_date
+            AND v_transactions.created_at < c.created_at)
+        OR (v_transactions.eff_posted_date = c.eff_posted_date
+            AND v_transactions.created_at = c.created_at
+            AND (v_transactions.eff_description, v_transactions.eff_amount_cents, v_transactions.id)
+              > (c.eff_description, c.eff_amount_cents, c.id))))`;
+
 export async function getTransactions(f: TransactionFilters = {}) {
   const rows = await sql<VTransaction[]>`
     SELECT * FROM v_transactions
     ${transactionWhere(f)}
+    ${f.after ? sql`AND ${afterRow(f.after)}` : sql``}
     ORDER BY ${newestFirst()}
     LIMIT ${f.limit ?? 200} OFFSET ${f.offset ?? 0}`;
   return rows;
@@ -135,12 +162,11 @@ export interface TransactionTotals {
 }
 
 /**
- * Spending totals over EVERY row a filter matches, not just the page of them
- * the register loads. The register used to sum the rows it had fetched, so a
- * filter matching more than its 300-row limit printed a partial total.
- *
- * Gross, not net: a figure the Flow draws is gross, and clicking it must land
- * on a register that shows the same number.
+ * Spending totals over every row a filter matches — gross, as the Flow draws
+ * its figures. The register no longer prints these (it is for filing rows,
+ * not reading sums); tests/flow.test.ts uses them to prove, at the query
+ * level, that a figure's register filter selects exactly that figure's
+ * money (V2). The end-to-end test adds up the rows the register shows.
  */
 export async function getTransactionTotals(f: TransactionFilters = {}): Promise<TransactionTotals> {
   const [row] = await sql<TransactionTotals[]>`

@@ -1,13 +1,13 @@
 import {
   getTransactions, countTransactions, getCategories, getAccounts,
-  getReviewCounts, getActiveMonths, getLedgerBounds, getTransactionTotals, getGroupSlots,
+  getReviewCounts, getActiveMonths, getLedgerBounds, getGroupSlots,
 } from '@/lib/queries';
 import { TransactionTable } from '@/components/TransactionTable';
 import { FilterChips } from '@/components/FilterChips';
 import { PeriodPicker } from '@/components/PeriodPicker';
 import { buildPeriods } from '@/lib/periods';
 import { CategoryFilter } from '@/components/CategoryFilter';
-import { registerView } from '@/lib/register-filters';
+import { registerView, REGISTER_BATCH } from '@/lib/register-filters';
 import { categoryColors } from '@/lib/palette';
 
 export const dynamic = 'force-dynamic';
@@ -56,15 +56,12 @@ export default async function TransactionsPage({
     filters: view, linkedCategory, withSubcategories, linkedNecessity,
     hiddenCategoryIds, defaultHiddenIds,
   } = registerView(one, allCategories, period);
-  const filters = { ...view, limit: 300 };
+  const filters = { ...view, limit: REGISTER_BATCH };
 
   const categories = allCategories;
-  const [transactions, total, totals, accounts, review, groupSlots] = await Promise.all([
+  const [transactions, total, accounts, review, groupSlots] = await Promise.all([
     getTransactions(filters),
     countTransactions(filters),
-    // Over every matching row, not the 300 loaded — and gross, so a figure
-    // clicked in the Flow lands on the same number here.
-    getTransactionTotals(filters),
     getAccounts(),
     // Under the table's own filters, so each chip counts what it would show (V3).
     getReviewCounts(filters),
@@ -180,7 +177,7 @@ export default async function TransactionsPage({
         categories={categories}
         accounts={accounts}
         total={total}
-        totals={totals}
+        filters={view}
         groupSlots={groupSlots}
         colors={categoryColors(allCategories, groupSlots)}
         allCategoriesHidden={

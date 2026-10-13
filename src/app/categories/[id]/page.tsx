@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { sql } from '@/lib/db';
 import {
-  getTransactions, countTransactions, getTransactionTotals, getCategories, getAccounts, getGroupSlots,
+  getTransactions, countTransactions, getCategories, getAccounts, getGroupSlots,
 } from '@/lib/queries';
 import { TransactionTable } from '@/components/TransactionTable';
 import { CategoryDefaults } from '@/components/CategoryDefaults';
@@ -11,6 +11,7 @@ import { formatCentsCompact } from '@/money';
 import { formatMonthShort } from '@/lib/format-date';
 import { categoryColors } from '@/lib/palette';
 import { Card } from '@/components/Card';
+import { REGISTER_BATCH } from '@/lib/register-filters';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,9 +36,10 @@ export default async function CategoryPage({
 
   if (!category) notFound();
 
-  // The rows, their count and their totals all read the same filter.
+  // The rows and their count read the same filter, and so does every batch
+  // the register loads as it scrolls.
   const filter = { categoryIds: [id] };
-  const [trend, transactions, total, totals, categories, accounts, groupSlots] = await Promise.all([
+  const [trend, transactions, total, categories, accounts, groupSlots] = await Promise.all([
     sql<{ month: string; total_cents: number; n: number }[]>`
       SELECT date_trunc('month', eff_posted_date)::date AS month,
              -SUM(eff_amount_cents)::bigint AS total_cents,
@@ -45,9 +47,8 @@ export default async function CategoryPage({
       FROM v_transactions
       WHERE category_id = ${id} AND counts_as_spending
       GROUP BY 1 ORDER BY 1 DESC LIMIT 12`,
-    getTransactions({ ...filter, limit: 200 }),
+    getTransactions({ ...filter, limit: REGISTER_BATCH }),
     countTransactions(filter),
-    getTransactionTotals(filter),
     getCategories(),
     getAccounts(),
     getGroupSlots(),
@@ -131,7 +132,7 @@ export default async function CategoryPage({
           categories={categories}
           accounts={accounts}
           total={total}
-          totals={totals}
+          filters={filter}
           groupSlots={groupSlots}
           colors={colors}
         />

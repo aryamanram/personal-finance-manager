@@ -134,3 +134,69 @@ describe('the register pages through a day without repeating or skipping a row',
     expect(new Set(pages.map((r) => r.id)).size).toBe(names.length);
   });
 });
+
+describe('the register loads the next batch by the last row shown', () => {
+  /** A day of rows, one batch from a sync: the same created_at, to the microsecond. */
+  async function day(date: string, names: string[]) {
+    await sql.begin(async (tx) => {
+      for (const [i, name] of names.entries()) {
+        await tx`
+          INSERT INTO transactions
+            (account_id, raw_description, amount_cents, posted_date, status, source, fingerprint,
+             category_id, category_source)
+          VALUES (${accountId}, ${name}, ${-(200 + i)}, ${date}, 'posted', 'simplefin',
+                  ${fingerprint({ accountId, postedDate: date, amountCents: -(200 + i), rawDescription: name })},
+                  ${cat.Groceries}, 'manual')`;
+      }
+    });
+  }
+  const names = (rs: { raw_description: string }[]) => rs.map((r) => r.raw_description);
+
+  it('skips nothing when a row already shown is voided', async () => {
+    const june = { from: '2026-06-01', to: '2026-06-30' };
+    await day('2026-06-20', ['J1', 'J2', 'J3', 'J4']);
+    await day('2026-06-10', ['K1', 'K2', 'K3']);
+    const first = await q.getTransactions({ ...june, limit: 3 });
+    expect(names(first)).toEqual(['J1', 'J2', 'J3']);
+    await sql`UPDATE transactions SET voided_at = now(), void_reason = 'duplicate' WHERE raw_description = 'J1'`;
+    // An offset of 3 would now start at K1, and J4 would never be shown.
+    const next = await q.getTransactions({ ...june, limit: 3, after: first[2].id });
+    expect(names(next)).toEqual(['J4', 'K1', 'K2']);
+    expect(names(await q.getTransactions({ ...june, limit: 3, after: next[2].id }))).toEqual(['K3']);
+  });
+
+  it('repeats nothing when a newer row syncs in between batches', async () => {
+    const may = { from: '2026-05-01', to: '2026-05-31' };
+    await day('2026-05-20', ['L1', 'L2', 'L3', 'L4']);
+    await day('2026-05-10', ['M1', 'M2', 'M3']);
+    const first = await q.getTransactions({ ...may, limit: 3 });
+    expect(names(first)).toEqual(['L1', 'L2', 'L3']);
+    await day('2026-05-25', ['NEWER']);
+    // An offset of 3 would now start at L3, showing it twice.
+    const next = await q.getTransactions({ ...may, limit: 3, after: first[2].id });
+    expect(names(next)).toEqual(['L4', 'M1', 'M2']);
+  });
+
+  it('serves each batch through the endpoint with exactly the filters the register read', async () => {
+    const { POST } = await import('@/app/api/transactions/earlier/route');
+    const ask = (body: unknown) => POST(new Request('http://localhost/api/transactions/earlier', {
+      method: 'POST', body: JSON.stringify(body), headers: { 'content-type': 'application/json' },
+    }));
+    const [anyRow] = await q.getTransactions({ limit: 1 });
+    // Every view the register can open, as the page hands it to the table.
+    for (const query of [
+      '', 'from=2026-09-01&to=2026-09-30', 'hide=none', 'voided=1', 'necessity=discretionary', 'q=GROCER',
+      'review=1', 'uncategorized=1', `category=${cat.Groceries}&sub=1`, `category=${cat.Groceries}`,
+      'credits=1', `account=${accountId}`,
+    ]) {
+      const p = new URLSearchParams(query);
+      const { filters } = registerView((k) => p.get(k) ?? undefined, categories);
+      const res = await ask({ filters: JSON.parse(JSON.stringify(filters)), after: anyRow.id, limit: 5 });
+      expect(res.status, query || 'the default register').toBe(200);
+    }
+    // A filter it does not know is refused, not dropped: dropping it would
+    // load rows the register's own filter excludes.
+    const res = await ask({ filters: { somethingNew: true }, after: anyRow.id, limit: 5 });
+    expect(res.status).toBe(400);
+  });
+});

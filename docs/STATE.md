@@ -22,7 +22,7 @@ Describe the *shape* of a decision here and keep the specifics there.
 
 ---
 
-## Right now · last updated 2026-10-10
+## Right now · last updated 2026-10-13
 
 **The overhaul is built on a local branch, `overhaul`, and is not pushed.**
 The owner asked for no push or PR until they say so: there will be many
@@ -30,8 +30,8 @@ design changes. It carries the whole of `docs/design/OVERHAUL.md` — the Flow
 as the first page with a category's own Flow beneath, the light and dark
 colour scheme, Review, Setup — with V1–V10 tested and the a11y suite clean.
 The owner is reviewing it in rounds and asking for changes (OVERHAUL.md "The
-asks", 1–13); the latest moved the sections to a sidebar on the left edge (a
-menu button on a phone) and put every page's sections on cards. The working tree is left on `overhaul` so
+asks", 1–14); the latest made the register load as it scrolls and dropped its
+totals line. The working tree is left on `overhaul` so
 they can run it; it changes no sync code and no schema, so the nightly sync
 behaves as on `main`. Switch back to `main` once they are done looking.
 
@@ -240,6 +240,18 @@ Monarch's "one large cut from the left" with income and savings still
 separate: the sources stack flush against the junction and blend into it, and
 the junction is a labelled total. Dropping the junction instead would make the
 chart decide which source paid for which bucket, which nothing records.
+
+**The register loads as it scrolls, by the last row shown, and keeps every
+row.** 150 at a time, keyset not offset (an offset skips a row per void above
+the line and repeats one per sync). No windowing: it would cost find-in-page,
+shift-click ranges and a steady scroll position, and a few thousand rows is an
+ordinary page. No totals line either — the owner wants the register for
+filing, not sums; V2's end-to-end test adds up the rows instead.
+
+**`npm run typecheck` is never incremental.** TypeScript 7's incremental
+`--noEmit` stopped re-reporting errors in files that had not changed when a
+file they import did (2026-10-13: two pages kept passing a removed prop). A
+full check takes under half a second.
 
 **The register's order is total.** A sync inserts a batch with one
 `created_at`, so newest-first on date and `created_at` alone left same-day

@@ -91,6 +91,19 @@ pushed; waiting on the owner's look.
     page."* A sidebar on the left edge; a menu button on a phone; every
     page's content on cards filling the rest of the width.
 
+**2026-10-13**:
+
+14. *"When I scroll to the bottom of the register, it does not load farther
+    in the past… we can create a 'treadmill' sort of effect, where we load
+    the first 150, and then as you scroll down we can unload above and load
+    below. If this is unnecessarily complicated and its just better to load
+    as the user scrolls down let me know. and remove this entire 'Spent … ·
+    showing the latest 300 of 405' from the top. This page is not to check
+    on aggregates, its just for confirmation and organization."* The
+    register opens on the newest 150 and loads 150 more as it nears the end,
+    keeping every row it has loaded — no treadmill (below) — and prints no
+    totals.
+
 ## Why
 
 The first round's findings still stand, and the work below fixes each one:
@@ -167,6 +180,29 @@ only the header that held the nav is gone.
 - **◐ ☼ ☾** — the theme: System, Light or Dark. System is the default.
 
 The period travels between Flow and Register (V5).
+
+## The register
+
+For finding and filing rows, not for reading sums: the Flow is where the
+numbers are. No totals line.
+
+- **Loads as it scrolls.** It opens on the newest 150 rows of its view and
+  loads the next 150 while the end of the table is still a screen away; a
+  button at the foot does the same from a keyboard, and says so when the
+  view has nothing earlier. The header's count is the whole view's.
+- **By the last row shown, not a count.** Each batch asks for the rows
+  after the last one loaded, in the register's own order (date, then when
+  it arrived, description, amount, id — a total order). Counting rows would
+  skip one for every row voided above it since the last batch and repeat
+  one for every row synced in.
+- **Every loaded row stays — no treadmill.** Unloading rows above as you
+  scroll would cost find-in-page, shift-click ranges across them, select
+  all, a scroll position that holds still under rows of different heights
+  (an open editor, a renamed row's second line), and a screen reader's
+  sense of the table. A few thousand rows is an ordinary page; if the
+  register ever stutters, windowing is the next step, not the first.
+- An edit refreshes the page's first batch without dropping what was
+  scrolled into below it.
 
 ## The Flow page, top to bottom
 
@@ -393,7 +429,7 @@ These hold for every change below. Each gets a test.
 | | |
 |---|---|
 | **V1** | **The Flow balances to the cent, at every level.** Sources = junction = buckets; each bucket = Σ its categories; each category = Σ its subcategories and General; in a category's own Flow, each subcategory = Σ its merchants. For every period, including months with credits, a zero bucket, spending above income, and no income at all. Tested against the app's own queries on synthetic data, not a re-implementation of them. |
-| **V2** | **Every number opens to its rows.** Every figure, source, bucket, category and subcategory has a way to the register filtered to exactly the transactions that make it, and the register's total for that filter equals the number. In the chart, a category's click looks inside first; its rows are one more click, from the detail's header or the table. |
+| **V2** | **Every number opens to its rows.** Every figure, source, bucket, category and subcategory has a way to the register filtered to exactly the transactions that make it, and those rows add up to the number (pending rows, which no spending figure counts yet, are marked as pending). The register prints no total of its own (ask 14); the test adds up the rows it shows. In the chart, a category's click looks inside first; its rows are one more click, from the detail's header or the table. |
 | **V3** | **A count is what its destination shows.** The Review badge counts exactly the rows Review lists; a register chip counts exactly the rows it filters to. (Today's 216/204 fails this.) |
 | **V4** | **Amber means a human changed this, and nothing else.** No new use of `--color-edited`; the four misuses above are removed. |
 | **V5** | **One period.** The period chosen on Flow or Register is the one the other opens on. Review opens on everything outstanding, whatever the period, because its badge counts everything outstanding (V3); its own picker narrows it. |

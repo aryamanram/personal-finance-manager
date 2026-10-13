@@ -3,10 +3,14 @@ import { SEED_TODAY } from '../../scripts/demo-config';
 
 /**
  * V2 of docs/design/OVERHAUL.md, end to end: every number on the Flow page
- * opens the register on exactly the rows behind it, and the register prints
+ * opens the register on exactly the rows behind it, and those rows add up to
  * that same number, to the cent. tests/flow.test.ts proves the queries agree;
  * this proves the page wiring does — the category links once opened an
  * unfiltered register because the page never read `category`.
+ *
+ * The register prints no total (the owner's call: it is for filing rows, not
+ * reading sums), so the rows themselves are added up — stricter than reading
+ * back a total the server computed over the same filter.
  */
 
 /** "$479.00", "-$478.79", "+$45.66" → cents. */
@@ -16,15 +20,34 @@ const cents = (text: string) => {
   return (m[1] === '-' ? -1 : 1) * (Number(m[2].replace(/,/g, '')) * 100 + Number(m[3]));
 };
 
-/** The register's totals line, read back: spent, credits, received, invested. */
+/**
+ * The register's rows added up the way the Flow counts them. Pending rows are
+ * not spending yet (counts_as_spending), so spent and credits pass over them;
+ * income and investing count every row, as their figures do.
+ */
 async function registerTotals(page: Page) {
   await page.waitForURL(/\/transactions\?/);
-  const line = (await page.locator('[data-totals]').innerText()).replace(/\s+/g, ' ');
-  const after = (label: string) => {
-    const m = new RegExp(`${label} ([-+]?\\$[\\d,]+\\.\\d{2})`, 'i').exec(line);
-    return m ? Math.abs(cents(m[1])) : 0;
+  const rows = page.locator('table tbody tr');
+  await expect(rows.first()).toBeVisible();
+  // Every row is on the page: none of these views is longer than a batch.
+  await expect(page.getByRole('button', { name: /earlier transactions/ })).toHaveCount(0);
+  const read: { cents: number; pending: boolean }[] = [];
+  for (const row of await rows.all()) {
+    const cells = row.locator('td');
+    if ((await cells.count()) < 5) continue; // an open editor, not a row
+    read.push({
+      cents: cents(await cells.last().innerText()),
+      pending: (await row.getByText(/^pending$/i).count()) > 0,
+    });
+  }
+  const posted = read.filter((r) => !r.pending);
+  const sum = (rs: typeof read) => rs.reduce((a, r) => a + r.cents, 0);
+  return {
+    spent: -sum(posted.filter((r) => r.cents < 0)),
+    credits: sum(posted.filter((r) => r.cents > 0)),
+    received: sum(read),
+    invested: -sum(read),
   };
-  return { spent: after('Spent'), credits: after('credits'), received: after('Received'), invested: after('Invested') };
 }
 
 /** Both Flows as charts — a phone opens on their tables. */
@@ -69,7 +92,7 @@ test('a subcategory in the Flow table opens only its own rows', async ({ page })
   expect((await registerTotals(page)).spent).toBe(amount);
 });
 
-test('a figure opens its bucket, and the register prints the figure', async ({ page }) => {
+test('a figure opens its bucket, and its rows add up to the figure', async ({ page }) => {
   for (const [label, key] of [['Required', 'spent'], ['Discretionary', 'spent'], ['Income', 'received'], ['Invested', 'invested']] as const) {
     await page.goto('/');
     // The whole card is the link; its first amount is the figure.

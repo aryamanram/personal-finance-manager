@@ -1,25 +1,31 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { TransactionRow } from './TransactionRow';
 import { CategoryPalette } from './CategoryPalette';
-import { Figure } from './Figure';
 import type { VTransaction, CategoryWithGroup, Account } from '@/lib/types';
-import type { TransactionTotals } from '@/lib/queries';
+import type { TransactionFilters } from '@/lib/queries';
+import { REGISTER_BATCH } from '@/lib/register-filters';
 
 /**
  * The register. Edits are optimistic and reconciled against the row the server
  * returns from v_transactions, so eff_* values never drift between client and
  * database (DESIGN.md §7).
+ *
+ * It opens on the newest REGISTER_BATCH rows and loads the next batch as it is
+ * scrolled near its end, by the last row shown rather than a count, so rows
+ * voided or synced meanwhile never shift what comes next. No totals: the
+ * register is for finding and filing rows, not for reading sums — the Flow
+ * is where the numbers are.
  */
 export function TransactionTable({
   initial,
   categories,
   accounts,
   total,
-  totals,
+  filters,
   allCategoriesHidden = false,
   groupSlots = {},
   colors = {},
@@ -32,8 +38,11 @@ export function TransactionTable({
   categories: CategoryWithGroup[];
   accounts: Account[];
   total: number;
-  /** Spending over every row the filter matches, from the server. */
-  totals: TransactionTotals;
+  /**
+   * The filters `initial` was read with, sent back for each further batch so
+   * every batch is the same view. Without them the table shows `initial` only.
+   */
+  filters?: TransactionFilters;
   /** Every category is filtered out — an empty table the user asked for. */
   allCategoriesHidden?: boolean;
 }) {
@@ -58,7 +67,72 @@ export function TransactionTable({
    * a bulk edit, would fetch new rows that never appeared. Optimistic edits
    * still apply locally on top of whatever the server last sent.
    */
-  useEffect(() => { setRows(initial); }, [initial]);
+  const view = JSON.stringify(filters ?? null);
+  const last = useRef({ view, head: initial.length });
+  const [end, setEnd] = useState(initial.length >= total);
+  useEffect(() => {
+    const before = last.current;
+    last.current = { view, head: initial.length };
+    if (before.view !== view) {
+      // A different view — another period, filter or search: start over.
+      setRows(initial);
+      setEnd(initial.length >= total);
+      return;
+    }
+    // The same view refreshed after an edit: the server's first batch, and
+    // everything already scrolled into beyond it, so an edit far down the
+    // register does not throw away the rows above the one just changed.
+    setRows((prev) => {
+      const head = new Set(initial.map((r) => r.id));
+      return [...initial, ...prev.slice(before.head).filter((r) => !head.has(r.id))];
+    });
+  }, [initial, view, total]);
+
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const loadEarlier = useCallback(async () => {
+    if (!filters || loading || end || rows.length === 0) return;
+    const asked = view;
+    setLoading(true);
+    setLoadError(false);
+    try {
+      const res = await fetch('/api/transactions/earlier', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ filters, after: rows[rows.length - 1].id, limit: REGISTER_BATCH }),
+      });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const { rows: more } = (await res.json()) as { rows: VTransaction[] };
+      // The view changed while this was in flight: these rows are not its.
+      if (last.current.view !== asked) return;
+      setRows((prev) => {
+        const have = new Set(prev.map((r) => r.id));
+        return [...prev, ...more.filter((r) => !have.has(r.id))];
+      });
+      if (more.length < REGISTER_BATCH) setEnd(true);
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters, loading, end, rows, view]);
+
+  // Load the next batch while the end of the table is still a screen away,
+  // so scrolling rarely meets it. The button under the table does the same
+  // for a keyboard, and when the observer has nothing to observe.
+  const sentinel = useRef<HTMLDivElement>(null);
+  const loadRef = useRef(loadEarlier);
+  useEffect(() => { loadRef.current = loadEarlier; }, [loadEarlier]);
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el || end || !filters) return;
+    const io = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) void loadRef.current(); },
+      { rootMargin: '0px 0px 900px 0px' },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [end, filters, rows.length]);
   const [bulkOpen, setBulkOpen] = useState(false);
   /** The last row clicked, for shift-click range selection. */
   const anchorRef = useRef<string | null>(null);
@@ -203,61 +277,15 @@ export function TransactionTable({
   return (
     <div className={selected.size > 0 ? 'pb-20' : undefined}>
       <div className="card overflow-hidden">
-      <div className="rule-b flex flex-wrap items-baseline justify-between gap-4 px-5 pb-3 pt-4 sm:px-6">
-        {/* The header already carries the total, so repeating "n of N" here
-            said the same number twice on one screen. What this line adds is
-            the money — over every matching row, not just the ones loaded —
-            and the fact that the view is truncated, which only matters when
-            it actually is. Gross, with credits beside it, so it is the same
-            figure the Flow draws for this filter. */}
-        <div className="text-xs text-ink-faint" data-totals>
-          {(totals.spent_cents !== 0 || totals.credit_cents !== 0
-            || (totals.income_cents === 0 && totals.invested_cents === 0)) && (
-            <>Spent <Figure cents={-totals.spent_cents} tone="neutral" /></>
-          )}
-          {/* With credits the net is printed too: the Flow links here with a
-              gross figure and Cashflow with a net one, and whichever was
-              clicked has to be on this line (V2). */}
-          {totals.credit_cents > 0 && (
-            <>
-              {' · credits '}
-              <Figure cents={totals.credit_cents} tone="neutral" signed />
-              {' · net '}
-              <Figure cents={totals.credit_cents - totals.spent_cents} tone="neutral" />
-            </>
-          )}
-          {/* Income and investing are not spending, so a register opened on
-              either from the Flow says what it holds in the Flow's own words:
-              the figure clicked is on this line (V2). */}
-          {totals.income_cents !== 0 && (
-            <>{totals.spent_cents !== 0 || totals.credit_cents !== 0 ? ' · received ' : 'Received '}
-              <Figure cents={totals.income_cents} tone="neutral" signed /></>
-          )}
-          {totals.invested_cents !== 0 && (
-            <>{totals.spent_cents !== 0 || totals.credit_cents !== 0 || totals.income_cents !== 0 ? ' · invested ' : 'Invested '}
-              <Figure cents={totals.invested_cents} tone="neutral" /></>
-          )}
-          {rows.length < total && (
-            <>
-              {' · showing the latest '}
-              <span className="figure text-ink-dim">{rows.length}</span>
-              {' of '}
-              <span className="figure text-ink-dim">{total}</span>
-            </>
-          )}
-        </div>
-
-      </div>
-
       {patch.isError && (
-        <p className="px-5 pt-2 text-xs text-alert sm:px-6">{(patch.error as Error).message}</p>
+        <p className="px-5 pt-3 text-xs text-alert sm:px-6">{(patch.error as Error).message}</p>
       )}
 
       {/* Six fixed-width columns together need more than a phone's width.
           Scrolling the table inside its own container keeps the columns
           aligned and the page free of a horizontal scrollbar, rather than
           collapsing a ledger into cards where figures stop lining up. */}
-      <div className="overflow-x-auto px-3 pb-2 sm:px-4">
+      <div className="overflow-x-auto px-3 pb-2 pt-1 sm:px-4">
       <table className="w-full min-w-[680px] table-fixed">
         <thead>
           <tr className="rule-b">
@@ -315,6 +343,33 @@ export function TransactionTable({
             ? 'Every category is hidden. Tick the ones you want to see.'
             : 'No transactions match these filters.'}
         </p>
+      )}
+
+      {/* The end of what is loaded. Watched, so the next batch arrives
+          before scrolling reaches it; a button, so a keyboard can ask. */}
+      {/* Only when there is more to load, or more was loaded: a view that
+          fits in one batch ends with its last row. */}
+      {rows.length > 0 && filters && (!end || rows.length > REGISTER_BATCH) && (
+        <div ref={sentinel} className="rule-t flex items-center justify-center px-5 py-4 text-xs text-ink-faint">
+          <span aria-live="polite">
+            {end ? (
+              'That’s every transaction in this view.'
+            ) : loadError ? (
+              <>
+                Couldn’t load earlier transactions.{' '}
+                <button type="button" onClick={() => void loadEarlier()}
+                  className="text-ink underline decoration-rule-strong underline-offset-4 hover:decoration-ink">
+                  Try again
+                </button>
+              </>
+            ) : (
+              <button type="button" onClick={() => void loadEarlier()} disabled={loading}
+                className="rounded-lg px-3 py-1.5 transition-colors hover:bg-well/60 hover:text-ink disabled:hover:bg-transparent">
+                {loading ? 'Loading earlier transactions…' : 'Load earlier transactions'}
+              </button>
+            )}
+          </span>
+        </div>
       )}
       </div>
 
