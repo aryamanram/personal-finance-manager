@@ -11,7 +11,7 @@ import '../src/app/globals.css';
 const root = document.documentElement.style;
 root.setProperty('--font-inter-tight', "'Inter Tight Variable'");
 root.setProperty('--font-jetbrains-mono', "'JetBrains Mono Variable'");
-document.body.classList.add('bg-ink-900');
+document.body.classList.add('bg-ground');
 
 const preview: Preview = {
   parameters: {

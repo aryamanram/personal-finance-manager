@@ -2,50 +2,147 @@ import { expect, test, type Page } from '@playwright/test';
 import { SEED_TODAY } from '../../scripts/demo-config';
 
 /**
- * V2 of docs/design/OVERHAUL.md, end to end: a category figure opens the
- * register on exactly the rows behind it. tests/flow.test.ts proves the
- * queries agree; this proves the page wiring does — the category links once
- * opened an unfiltered register because the page never read `category`.
+ * V2 of docs/design/OVERHAUL.md, end to end: every number on the Flow page
+ * opens the register on exactly the rows behind it, and those rows add up to
+ * that same number, to the cent. tests/flow.test.ts proves the queries agree;
+ * this proves the page wiring does — the category links once opened an
+ * unfiltered register because the page never read `category`.
+ *
+ * The register prints no total (the owner's call: it is for filing rows, not
+ * reading sums), so the rows themselves are added up — stricter than reading
+ * back a total the server computed over the same filter.
  */
 
-/** "$479" or "-$478.79" → cents. */
+/** "$479.00", "-$478.79", "+$45.66" → cents. */
 const cents = (text: string) => {
-  const m = /(-?)\$([\d,]+)(?:\.(\d{2}))?/.exec(text);
+  const m = /([-+]?)\$([\d,]+)\.(\d{2})/.exec(text);
   if (!m) throw new Error(`no amount in "${text}"`);
-  return (m[1] ? -1 : 1) * (Number(m[2].replace(/,/g, '')) * 100 + Number(m[3] ?? 0));
+  return (m[1] === '-' ? -1 : 1) * (Number(m[2].replace(/,/g, '')) * 100 + Number(m[3]));
 };
 
-async function expectRegisterOn(page: Page, category: string, figureCents: number) {
-  await page.waitForURL(/\/transactions\?.*category=.*necessity=required/);
-  await expect(page.getByText(`Only ${category} · required`)).toBeVisible();
+/**
+ * The register's rows added up the way the Flow counts them. Pending rows are
+ * not spending yet (counts_as_spending), so spent and credits pass over them;
+ * income and investing count every row, as their figures do.
+ */
+async function registerTotals(page: Page) {
+  await page.waitForURL(/\/transactions\?/);
+  const rows = page.locator('table tbody tr');
+  await expect(rows.first()).toBeVisible();
+  // Every row is on the page: none of these views is longer than a batch.
+  await expect(page.getByRole('button', { name: /earlier transactions/ })).toHaveCount(0);
+  const read: { cents: number; pending: boolean }[] = [];
+  for (const row of await rows.all()) {
+    const cells = row.locator('td');
+    if ((await cells.count()) < 5) continue; // an open editor, not a row
+    read.push({
+      cents: cents(await cells.last().innerText()),
+      pending: (await row.getByText(/^pending$/i).count()) > 0,
+    });
+  }
+  const posted = read.filter((r) => !r.pending);
+  const sum = (rs: typeof read) => rs.reduce((a, r) => a + r.cents, 0);
+  return {
+    spent: -sum(posted.filter((r) => r.cents < 0)),
+    credits: sum(posted.filter((r) => r.cents > 0)),
+    received: sum(read),
+    invested: -sum(read),
+  };
+}
 
-  const categories = await page.locator('table tbody tr td:nth-child(4)').allInnerTexts();
-  expect(categories.length).toBeGreaterThan(0);
-  expect(new Set(categories.map((c) => c.split('\n')[0].trim()))).toEqual(new Set([category]));
+/** Both Flows as charts — a phone opens on their tables. */
+async function openCharts(page: Page) {
+  await page.goto('/');
+  for (const b of await page.getByRole('button', { name: 'Chart', exact: true }).all()) await b.click();
+}
 
-  // The figure was rounded to dollars; the register prints cents.
-  const spent = cents((await page.getByText(/^Spent/).first().textContent()) ?? '');
-  expect(Math.round(-spent / 100)).toBe(Math.round(figureCents / 100));
+async function openTable(page: Page) {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Table', exact: true }).first().click();
+}
+
+/** A row of the Flow table: its link, and the amount in the same row. */
+async function tableRow(page: Page, name: string) {
+  const link = page.getByRole('link', { name, exact: true }).first();
+  const amount = cents(await page.locator('tr', { has: link }).locator('td').first().innerText());
+  return { link, amount };
 }
 
 test.beforeEach(async ({ page }) => {
   await page.clock.setFixedTime(new Date(`${SEED_TODAY}T12:00:00-05:00`));
 });
 
-test('a category under the Flow opens the register on exactly its rows', async ({ page }) => {
-  await page.goto('/flow');
-  const link = page.getByRole('link', { name: 'Groceries', exact: true });
-  const figure = cents((await page.locator('li', { has: link }).locator('.figure').first().textContent()) ?? '');
+test('a category in the Flow table opens exactly its rows, subcategories included', async ({ page }) => {
+  await openTable(page);
+  const { link, amount } = await tableRow(page, 'Restaurants');
   await link.click();
-  await expectRegisterOn(page, 'Groceries', figure);
+  await expect(page.getByText('Only Restaurants and its subcategories · discretionary')).toBeVisible();
+  // Every row is Restaurants or one of its subcategories.
+  const filed = await page.locator('table tbody tr td:nth-child(4)').allInnerTexts();
+  expect(filed.length).toBeGreaterThan(0);
+  for (const f of filed) expect(['Dining out', 'Takeout', 'Restaurants']).toContain(f.split('\n')[0].trim());
+  expect((await registerTotals(page)).spent).toBe(amount);
 });
 
-test("a category on Cashflow's list opens the register on exactly its rows", async ({ page }) => {
-  await page.goto('/');
-  const link = page.getByRole('link', { name: 'Groceries', exact: true });
-  // Cashflow's list is still net (the Month page, PR 3, makes it gross);
-  // the demo's Groceries has no credits, so net and gross agree here.
-  const figure = cents((await page.locator('li', { has: link }).locator('.figure').first().textContent()) ?? '');
+test('a subcategory in the Flow table opens only its own rows', async ({ page }) => {
+  await openTable(page);
+  const { link, amount } = await tableRow(page, 'Takeout');
   await link.click();
-  await expectRegisterOn(page, 'Groceries', figure);
+  await expect(page.getByText('Only Takeout · discretionary')).toBeVisible();
+  expect((await registerTotals(page)).spent).toBe(amount);
+});
+
+test('a figure opens its bucket, and its rows add up to the figure', async ({ page }) => {
+  for (const [label, key] of [['Required', 'spent'], ['Discretionary', 'spent'], ['Income', 'received'], ['Invested', 'invested']] as const) {
+    await page.goto('/');
+    // The whole card is the link; its first amount is the figure.
+    const figure = page.locator('a', { has: page.locator('dt', { hasText: new RegExp(`^${label}$`, 'i') }) });
+    const shown = cents(await figure.innerText());
+    await figure.click();
+    expect((await registerTotals(page))[key], label).toBe(shown);
+  }
+});
+
+test('clicking a category in the chart looks inside it', async ({ page }) => {
+  await openCharts(page);
+  const node = page.locator('svg[aria-label^="Where"] g[role="button"][aria-label^="Groceries,"]');
+  const amount = cents((await node.getAttribute('aria-label'))!);
+  await node.click();
+  await page.waitForURL(/focus=/);
+  const inside = page.locator('#inside');
+  await expect(inside.getByRole('button', { name: /Choose another category/ })).toContainText('Groceries');
+  // The category's own Flow starts from the same number the main one drew.
+  const root = inside.locator('g[role="button"][aria-label^="Groceries,"]');
+  expect(cents((await root.getAttribute('aria-label'))!)).toBe(amount);
+  // And its rows are one click further: the register on that number.
+  await inside.getByRole('link', { name: 'open in the register' }).click();
+  expect((await registerTotals(page)).spent).toBe(amount);
+});
+
+test("a merchant in a category's own Flow opens exactly its rows", async ({ page }) => {
+  await openCharts(page);
+  const node = page.locator('#inside g[role="button"][aria-label^="Chipotle,"]');
+  const amount = cents((await node.getAttribute('aria-label'))!);
+  await node.click();
+  expect((await registerTotals(page)).spent).toBe(amount);
+  const descriptions = await page.locator('table tbody tr td:nth-child(3)').allInnerTexts();
+  for (const d of descriptions) expect(d).toMatch(/CHIPOTLE/);
+});
+
+test('the Credits source opens the money that came back', async ({ page }) => {
+  await openCharts(page);
+  const node = page.locator('g[role="button"][aria-label^="Credits,"]');
+  const amount = cents((await node.getAttribute('aria-label'))!);
+  await node.click();
+  expect((await registerTotals(page)).credits).toBe(amount);
+});
+
+test('the chart is usable from the keyboard', async ({ page }) => {
+  await openCharts(page);
+  const node = page.locator('svg[aria-label^="Where"] g[role="button"][aria-label^="Restaurants,"]');
+  await node.focus();
+  await expect(page.getByRole('tooltip')).toContainText('Restaurants');
+  await page.keyboard.press('Enter');
+  await page.waitForURL(/focus=/);
+  await expect(page.locator('#inside').getByRole('button', { name: /Choose another category/ })).toContainText('Restaurants');
 });

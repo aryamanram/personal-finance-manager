@@ -1,49 +1,52 @@
+import Link from 'next/link';
 import {
-  getAccounts, getNetWorth, getInvestmentPerformance, getLastSync, getIncomeSources, getCategories,
+  getAccounts, getNetWorth, getInvestmentPerformance, getLastSync, getReconciliation, getCardSettlement,
+  type CardSettlement,
 } from '@/lib/queries';
 import { Figure } from '@/components/Figure';
-import { CsvImport } from '@/components/CsvImport';
-import { BalanceSnapshotForm } from '@/components/BalanceSnapshotForm';
-import { IncomeSources } from '@/components/IncomeSources';
 import { formatCents } from '@/money';
 import { formatTimestampLong } from '@/lib/format-date';
+import { Card } from '@/components/Card';
 
 export const dynamic = 'force-dynamic';
 
-/** Renders account balances, investment performance, and import controls. */
+/**
+ * Balances, net worth and investment returns, and the two standing checks
+ * that the ledger matches the banks. Viewing only: recording a balance, an
+ * import and income sources are on Setup.
+ */
 export default async function AccountsPage() {
-  const [accounts, netWorth, performance, lastSync, incomeSources, categories] = await Promise.all([
+  const [accounts, netWorth, performance, lastSync, drift, cards] = await Promise.all([
     getAccounts(),
     getNetWorth(),
     getInvestmentPerformance(),
     getLastSync(),
-    getIncomeSources(),
-    getCategories(),
+    getReconciliation(),
+    getCardSettlement(),
   ]);
 
   const total = netWorth.reduce((a, n) => a + n.balance_cents, 0);
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-6">
       <header>
         <div className="eyebrow">Accounts</div>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight">
           <Figure cents={total} tone="neutral" showCents={false} className="text-2xl" />
-          <span className="ml-3 text-sm font-normal text-paper-faint">net worth</span>
+          <span className="ml-3 text-sm font-normal text-ink-faint">net worth</span>
         </h1>
       </header>
 
-      <section>
-        <div className="rule-b pb-2">
-          <h2 className="eyebrow">Balances</h2>
-        </div>
+      {/* Two columns once there is room for a table in each; one below that. */}
+      <div className="grid items-start gap-5 xl:grid-cols-2">
+      <Card label="Balances">
         <table className="w-full">
-          <tbody>
+          <tbody className="divide-y divide-rule">
             {netWorth.map((n) => (
-              <tr key={n.account_id} className="rule-b">
+              <tr key={n.account_id}>
                 <td className="py-3 text-sm">{n.name}</td>
-                <td className="py-3 text-xs text-paper-faint">{n.type}</td>
-                <td className="py-3 text-xs text-paper-faint">
+                <td className="py-3 text-xs text-ink-faint">{n.type}</td>
+                <td className="py-3 text-xs text-ink-faint">
                   {n.basis === 'snapshot'
                     ? `snapshot · ${n.snapshot_date}`
                     : 'from transactions'}
@@ -56,22 +59,30 @@ export default async function AccountsPage() {
           </tbody>
         </table>
         {lastSync && (
-          <p className="mt-3 text-xs text-paper-faint">
+          <p className="mt-3 text-xs text-ink-faint">
             Last sync {lastSync.finished_at
               ? formatTimestampLong(lastSync.finished_at)
               : 'in progress'}{' '}
             · {lastSync.status}
-            {lastSync.error && <span className="ml-2 text-edited">{lastSync.error}</span>}
+            {lastSync.error && <span className="ml-2 text-alert">{lastSync.error}</span>}
           </p>
         )}
-      </section>
+      </Card>
 
-      <section>
-        <div className="rule-b pb-2">
-          <h2 className="eyebrow">Income sources</h2>
-        </div>
-        <IncomeSources sources={incomeSources} categories={categories} />
-      </section>
+      <Card label="Does the ledger match the banks?" id="checks">
+        <ul className="-mt-2 divide-y divide-rule">
+          <Check ok={drift.length === 0} name="Balances">
+            {drift.length === 0
+              ? 'every account adds up to the balance its bank reports'
+              : drift.map((d) => (
+                <span key={d.name} className="mr-4">
+                  {d.name} differs from the bank by <span className="figure text-ink">{formatCents(d.drift_cents)}</span>
+                </span>
+              ))}
+          </Check>
+          <CardsCheck cards={cards} />
+        </ul>
+      </Card>
 
       {performance.map((p) => {
         // One snapshot is a starting line, not a period. Reporting 0.00% would
@@ -79,13 +90,9 @@ export default async function AccountsPage() {
         // the case: tracking has begun, measurement starts at the next reading.
         const singleSnapshot = p.opening_date === p.as_of;
         return (
-        <section key={p.account_id}>
-          <div className="rule-b pb-2">
-            <h2 className="eyebrow">{p.name}</h2>
-          </div>
-
+        <Card key={p.account_id} label={p.name} id={`investment-${p.account_id}`}>
           {singleSnapshot && (
-            <p className="mt-4 max-w-lg text-sm leading-relaxed text-paper-dim">
+            <p className="max-w-lg text-sm leading-relaxed text-ink-dim">
               Tracking starts here, at{' '}
               <Figure cents={p.current_cents} tone="neutral" showCents={false} />{' '}
               on {p.as_of}. Whatever this account earned before today belongs to
@@ -96,7 +103,7 @@ export default async function AccountsPage() {
 
           {/* DESIGN.md §13: growth is measured from the first snapshot, never
               from zero, and contributions are not performance. */}
-          <table className="mt-4 w-full max-w-lg">
+          <table className={singleSnapshot ? 'mt-4 w-full' : 'w-full'}>
             <tbody>
               <Line label="Sent to investment" cents={p.contributed_cents}
                     hint={singleSnapshot ? 'since tracking began' : 'linked contributions'} />
@@ -121,12 +128,12 @@ export default async function AccountsPage() {
                   <tr>
                     <td className="pb-3 text-sm">
                       Return
-                      <span className="ml-2 text-xs text-paper-faint">Modified Dietz</span>
+                      <span className="ml-2 text-xs text-ink-faint">Modified Dietz</span>
                     </td>
                     <td className="pb-3 text-right">
                       <span
                         className={`figure text-sm ${
-                          (p.return_pct ?? 0) >= 0 ? 'text-in' : 'text-out'
+                          (p.return_pct ?? 0) >= 0 ? 'text-earned' : 'text-ink'
                         }`}
                       >
                         {p.return_pct === null ? '—' : `${p.return_pct.toFixed(2)}%`}
@@ -139,7 +146,7 @@ export default async function AccountsPage() {
           </table>
 
           {!singleSnapshot && (
-            <p className="mt-3 max-w-lg text-xs leading-relaxed text-paper-faint">
+            <p className="mt-3 max-w-lg text-xs leading-relaxed text-ink-faint">
               Money in the account before tracking began is a starting position, not a gain.
               A naive {'(end − start) / start'} would read{' '}
               {p.opening_cents > 0
@@ -150,10 +157,12 @@ export default async function AccountsPage() {
             </p>
           )}
 
-          <div className="mt-6 max-w-lg">
-            <BalanceSnapshotForm accountId={p.account_id} />
-          </div>
-        </section>
+          <p className="mt-4 text-xs text-ink-faint">
+            <Link href="/setup" className="underline decoration-rule-strong underline-offset-4 hover:text-ink">
+              Record this month&rsquo;s balance in Setup →
+            </Link>
+          </p>
+        </Card>
         );
       })}
 
@@ -161,23 +170,67 @@ export default async function AccountsPage() {
       {accounts
         .filter((a) => a.type === 'investment' && !performance.some((p) => p.account_id === a.id))
         .map((a) => (
-          <section key={a.id}>
-            <div className="rule-b pb-2">
-              <h2 className="eyebrow">{a.name}</h2>
-            </div>
-            <p className="mt-3 text-sm text-paper-dim">
-              No balance recorded yet. Add one to start tracking performance.
+          <Card key={a.id} label={a.name} id={`investment-${a.id}`}>
+            <p className="text-sm text-ink-dim">
+              No balance recorded yet.{' '}
+              <Link href="/setup" className="underline decoration-rule-strong underline-offset-4 hover:text-ink">
+                Record one in Setup
+              </Link>{' '}
+              to start tracking performance.
             </p>
-            <div className="mt-4 max-w-lg">
-              <BalanceSnapshotForm accountId={a.id} />
-            </div>
-          </section>
+          </Card>
         ))}
-
-      <section>
-        <CsvImport accounts={accounts} />
-      </section>
+      </div>
     </div>
+  );
+}
+
+/**
+ * One standing check, stated plainly when it holds: "no warning" and "not
+ * checked" look identical otherwise.
+ */
+function Check({ ok, name, children }: { ok: boolean; name: string; children: React.ReactNode }) {
+  return (
+    <li className="flex items-baseline gap-4 py-3 text-sm">
+      <span className={ok ? 'w-24 shrink-0 text-ink-dim' : 'w-24 shrink-0 font-medium text-alert'}>
+        <span aria-hidden className="mr-1.5">{ok ? '✓' : '△'}</span>{name}
+      </span>
+      <span className="text-ink-dim">{children}</span>
+    </li>
+  );
+}
+
+/**
+ * Whether the credit cards' purchases can be trusted as a spending record.
+ *
+ * Card purchases are counted as spending and the payments that settle them are
+ * not (they carry necessity 'transfer'), which is only sound while the cards
+ * are actually paid off. This is the standing evidence: for each card,
+ * charges minus applied payments should equal what the issuer says is owed.
+ */
+function CardsCheck({ cards }: { cards: CardSettlement[] }) {
+  if (cards.length === 0) return null;
+  const off = cards.filter((c) => c.gap_cents !== 0);
+  const clearing = cards.filter((c) => c.clearing_cents > 0);
+  return (
+    <Check ok={off.length === 0} name="Cards">
+      {off.length === 0 ? (
+        <>
+          every charge is settled or still owed — the ledger and the issuers agree
+          {clearing.map((c) => (
+            <span key={c.name} className="ml-2 text-ink-faint">
+              ({c.name}: <span className="figure">{formatCents(c.clearing_cents)}</span> clearing)
+            </span>
+          ))}
+        </>
+      ) : (
+        off.map((c) => (
+          <span key={c.name} className="mr-4">
+            {c.name} is <span className="figure text-ink">{formatCents(c.gap_cents)}</span> from what its issuer reports
+          </span>
+        ))
+      )}
+    </Check>
   );
 }
 
@@ -186,7 +239,7 @@ function Line({ label, cents, hint }: { label: string; cents: number; hint?: str
     <tr className="rule-b">
       <td className="py-3 text-sm">
         {label}
-        {hint && <span className="ml-2 text-xs text-paper-faint">{hint}</span>}
+        {hint && <span className="ml-2 text-xs text-ink-faint">{hint}</span>}
       </td>
       <td className="py-3 text-right">
         <Figure cents={cents} tone="neutral" />

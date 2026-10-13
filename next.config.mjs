@@ -12,6 +12,9 @@ const nextConfig = {
   // The demo builds into .next-demo, so the demo and the real app can run
   // side by side without sharing a build directory.
   distDir: demo ? '.next-demo' : '.next',
+  // The dev-only route badge defaults to the bottom-left corner, which is
+  // where the sidebar keeps the theme switch.
+  devIndicators: { position: 'bottom-right' },
   experimental: {
     // `next dev` serves /_next/mcp — logs, routes, runtime errors — to any
     // agent that probes localhost, and next-devtools-mcp probes 3000–3010.

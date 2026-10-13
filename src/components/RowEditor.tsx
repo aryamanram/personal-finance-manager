@@ -17,11 +17,15 @@ import type { MerchantContext } from '@/lib/queries';
 export function RowEditor({
   txn,
   categories,
+  groupSlots,
+  colors,
   onPatch,
   onClose,
 }: {
   txn: VTransaction;
   categories: CategoryWithGroup[];
+  groupSlots?: Record<string, number>;
+  colors?: Record<string, string>;
   onPatch: (id: string, patch: Record<string, unknown>) => void;
   onClose: () => void;
 }) {
@@ -103,7 +107,7 @@ export function RowEditor({
   }
 
   return (
-    <div className="bg-ink-850 px-4 py-4">
+    <div className="bg-well/50 px-4 py-4">
       <div className="max-w-3xl space-y-5">
         <div>
           <label className="eyebrow block" htmlFor={`name-${txn.id}`}>Name it</label>
@@ -117,7 +121,7 @@ export function RowEditor({
               if (e.key === 'Escape') { setName(txn.eff_description ?? ''); onClose(); }
             }}
             placeholder={txn.raw_description}
-            className="mt-2 w-full rounded-sm border border-ink-600 bg-ink-800 px-3 py-2 text-sm text-paper outline-none transition-colors focus:border-ink-500"
+            className="mt-2 w-full rounded-sm border border-rule-strong bg-well px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-ink-faint"
           />
           {/* Only once the name differs from the bank's. Before that the
               input already shows the raw description, so repeating it below
@@ -125,7 +129,7 @@ export function RowEditor({
               keeps the original said the same thing under every row forever.
               "Restore the bank's name" carries that affordance instead. */}
           {renamed && (
-            <p className="mt-2 text-xs text-paper-faint">
+            <p className="mt-2 text-xs text-ink-faint">
               <span className="figure">{txn.raw_description}</span>
             </p>
           )}
@@ -137,6 +141,8 @@ export function RowEditor({
             <div className="mt-2">
               <CategoryPalette
                 categories={categories}
+                groupSlots={groupSlots}
+                colors={colors}
                 currentId={txn.category_id}
                 onPick={pick}
                 onClose={() => setPicking(false)}
@@ -146,12 +152,12 @@ export function RowEditor({
             <button
               onClick={() => setPicking(true)}
               disabled={saving}
-              className="mt-2 flex w-full items-center justify-between gap-3 rounded-sm border border-ink-600 bg-ink-800 px-3 py-2 text-left text-sm transition-colors hover:border-ink-500 disabled:opacity-60"
+              className="mt-2 flex w-full items-center justify-between gap-3 rounded-sm border border-rule-strong bg-well px-3 py-2 text-left text-sm transition-colors hover:border-ink-faint disabled:opacity-60"
             >
-              <span className={txn.category_name ? 'text-paper' : 'text-paper-faint'}>
+              <span className={txn.category_name ? 'text-ink' : 'text-ink-faint'}>
                 {txn.category_name ?? 'Uncategorized'}
               </span>
-              <span className="text-xs text-paper-faint">
+              <span className="text-xs text-ink-faint">
                 {txn.eff_cost_type} · {txn.eff_necessity}
               </span>
             </button>
@@ -159,7 +165,7 @@ export function RowEditor({
           {/* Why the machine chose it. Only while no human has: once locked,
               the reason is history, and the choice is the owner's. */}
           {!picking && !txn.category_locked && txn.suggested_reason && (
-            <p className="mt-2 text-xs text-paper-faint">
+            <p className="mt-2 text-xs text-ink-faint">
               {isGuess ? 'Guessed' : 'Filed'}: {txn.suggested_reason}
             </p>
           )}
@@ -172,23 +178,23 @@ export function RowEditor({
             subcategory assignment. A repeat charge is handled by a rule or the
             guesser, both of which are visible and editable. */}
         {merchant && merchant.siblings > 0 && (
-          <div className="border-l-2 border-edited/40 pl-4">
-            <label className="flex items-start gap-2 text-xs text-paper-dim">
+          <div className="border-l-2 border-rule-strong pl-4">
+            <label className="flex items-start gap-2 text-xs text-ink-dim">
               <input
                 type="checkbox"
                 checked={applySiblings}
                 onChange={(e) => setApplySiblings(e.target.checked)}
-                className="mt-0.5 accent-edited"
+                className="mt-0.5 accent-ink"
               />
               <span>
                 Also apply to the{' '}
-                <span className="figure text-paper">{merchant.siblings}</span>{' '}
+                <span className="figure text-ink">{merchant.siblings}</span>{' '}
                 other unreviewed {merchant.merchant_name}{' '}
                 {merchant.siblings === 1 ? 'row' : 'rows'}
               </span>
             </label>
             {applySiblings && (
-              <p className="mt-2 text-xs leading-relaxed text-paper-faint">
+              <p className="mt-2 text-xs leading-relaxed text-ink-faint">
                 Applied when you pick a category above. Rows you decided by
                 hand are never touched.
               </p>
@@ -196,12 +202,12 @@ export function RowEditor({
           </div>
         )}
 
-        {error && <p className="text-xs text-out">{error}</p>}
+        {error && <p className="text-xs text-alert">{error}</p>}
 
         <div className="flex items-center gap-4 text-xs">
           <button
             onClick={() => { commitName(); onClose(); }}
-            className="border-b border-paper-faint pb-0.5 text-paper transition-colors hover:border-paper"
+            className="border-b border-ink-faint pb-0.5 text-ink transition-colors hover:border-ink"
           >
             Done
           </button>
@@ -211,7 +217,7 @@ export function RowEditor({
                 onPatch(txn.id, { description: null });
                 setName(txn.raw_description);
               }}
-              className="text-paper-faint transition-colors hover:text-paper"
+              className="text-ink-faint transition-colors hover:text-ink"
             >
               Restore the bank’s name
             </button>

@@ -129,18 +129,18 @@ export function CategoryFilter({
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex items-center gap-1.5 rounded-sm border border-ink-600 bg-ink-800 px-2 py-1.5 transition-colors hover:border-ink-500"
+        className="flex items-center gap-1.5 rounded-sm border border-rule-strong bg-well px-2 py-1.5 transition-colors hover:border-ink-faint"
       >
         <span>
           {hiddenCount === 0
             ? 'All categories'
             : `Categories · ${hiddenCount} hidden`}
         </span>
-        <span aria-hidden className="shrink-0 text-paper-faint">▾</span>
+        <span aria-hidden className="shrink-0 text-ink-faint">▾</span>
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-40 mt-1 w-[300px] overflow-hidden rounded-sm border border-ink-500 bg-ink-800 shadow-2xl shadow-black/50">
+        <div className="absolute right-0 top-full z-40 mt-1 w-[300px] overflow-hidden rounded-sm border border-rule-strong bg-raised shadow-xl shadow-black/20">
           <div className="rule-b flex items-center gap-3 px-3 py-2 text-[10px]">
             {/* Selection, then view. These do different things and undoing
                 one must not undo the other: Show all / Reset change which
@@ -148,7 +148,7 @@ export function CategoryFilter({
             <button
               type="button"
               onClick={() => commit(new Set())}
-              className="text-paper-faint transition-colors hover:text-paper"
+              className="text-ink-faint transition-colors hover:text-ink"
             >
               Show all
             </button>
@@ -158,14 +158,14 @@ export function CategoryFilter({
             <button
               type="button"
               onClick={() => commit(new Set(categories.map((c) => c.id)))}
-              className="text-paper-faint transition-colors hover:text-paper"
+              className="text-ink-faint transition-colors hover:text-ink"
             >
               Hide all
             </button>
             <button
               type="button"
               onClick={() => commit(new Set(defaultHiddenIds))}
-              className="text-paper-faint transition-colors hover:text-paper"
+              className="text-ink-faint transition-colors hover:text-ink"
             >
               Reset
             </button>
@@ -175,7 +175,7 @@ export function CategoryFilter({
                 setCollapsed((c) =>
                   c.size > 0 ? new Set() : new Set(tree.map(([g]) => g)))
               }
-              className="ml-auto text-paper-faint transition-colors hover:text-paper"
+              className="ml-auto text-ink-faint transition-colors hover:text-ink"
             >
               {collapsed.size > 0 ? 'Expand all' : 'Collapse all'}
             </button>
@@ -195,13 +195,13 @@ export function CategoryFilter({
                     type="button"
                     onClick={() => toggleCollapse(group)}
                     aria-expanded={!groupShut}
-                    className="eyebrow rule-b sticky top-0 z-10 flex w-full items-center gap-1.5 bg-ink-900 px-3 py-1.5 text-left transition-colors hover:text-paper-dim"
+                    className="eyebrow rule-b sticky top-0 z-10 flex w-full items-center gap-1.5 bg-ground px-3 py-1.5 text-left transition-colors hover:text-ink-dim"
                   >
-                    <span aria-hidden className="w-2 shrink-0 text-paper-faint">
+                    <span aria-hidden className="w-2 shrink-0 text-ink-faint">
                       {groupShut ? '›' : '⌄'}
                     </span>
                     <span className="truncate">{group}</span>
-                    <span className="ml-auto shrink-0 text-paper-faint">
+                    <span className="ml-auto shrink-0 text-ink-faint">
                       {showing}/{all.length}
                     </span>
                   </button>
@@ -266,8 +266,8 @@ function Row({
   return (
     <div
       className={clsx(
-        'flex items-center gap-2 py-1.5 pr-3 text-sm transition-colors hover:bg-ink-700',
-        indent ? 'pl-8 text-paper-dim' : 'pl-3 text-paper',
+        'flex items-center gap-2 py-1.5 pr-3 text-sm transition-colors hover:bg-well',
+        indent ? 'pl-8 text-ink-dim' : 'pl-3 text-ink',
       )}
     >
       {/* The checkbox and the disclosure are separate controls: clicking a
@@ -278,7 +278,7 @@ function Row({
           type="checkbox"
           checked={checked}
           onChange={onChange}
-          className="accent-edited"
+          className="accent-ink"
         />
         <span className="truncate">{label}</span>
       </label>
@@ -289,7 +289,7 @@ function Row({
           onClick={disclosure.onToggle}
           aria-expanded={!disclosure.collapsed}
           aria-label={`${disclosure.collapsed ? 'Expand' : 'Collapse'} ${label}`}
-          className="shrink-0 text-xs text-paper-faint transition-colors hover:text-paper"
+          className="shrink-0 text-xs text-ink-faint transition-colors hover:text-ink"
         >
           {disclosure.count} <span aria-hidden>{disclosure.collapsed ? '›' : '⌄'}</span>
         </button>

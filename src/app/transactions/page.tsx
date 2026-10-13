@@ -1,13 +1,14 @@
 import {
   getTransactions, countTransactions, getCategories, getAccounts,
-  getReviewCounts, getActiveMonths, getLedgerBounds, getTransactionTotals,
+  getReviewCounts, getActiveMonths, getLedgerBounds, getGroupSlots,
 } from '@/lib/queries';
 import { TransactionTable } from '@/components/TransactionTable';
 import { FilterChips } from '@/components/FilterChips';
 import { PeriodPicker } from '@/components/PeriodPicker';
 import { buildPeriods } from '@/lib/periods';
 import { CategoryFilter } from '@/components/CategoryFilter';
-import { NECESSITIES, type CategoryWithGroup } from '@/lib/types';
+import { registerView, REGISTER_BATCH } from '@/lib/register-filters';
+import { categoryColors } from '@/lib/palette';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,60 +32,40 @@ export default async function TransactionsPage({
     ? buildPeriods(activeMonths, bounds)
     : [];
   const requested = one('period');
-  const period = periods.find((p) => p.key === requested) ?? periods[0];
+  // A link from a figure names its dates; when they are exactly a period,
+  // the picker says which, rather than "All time" over one month's rows.
+  // Periods are clamped to the ledger, so the dates are too before comparing:
+  // September 1st-30th is September in a ledger that ends on the 28th.
+  const clamp = (d: string | undefined, edge: 'first' | 'last') => {
+    if (!d || !bounds) return d;
+    return edge === 'first' ? (d < bounds.first ? bounds.first : d) : (d > bounds.last ? bounds.last : d);
+  };
+  const dated = one('from') || one('to')
+    ? periods.find((p) => p.from === clamp(one('from'), 'first') && p.to === clamp(one('to'), 'last'))
+    : undefined;
+  const period = dated ?? periods.find((p) => p.key === requested) ?? periods[0];
+  const customRange = !dated && (one('from') || one('to'));
 
   const allCategories = await getCategories();
 
-  /**
-   * Categories hidden from the register.
-   *
-   * The URL carries what is HIDDEN, not what is shown, because the default is
-   * not "everything" — Credit Card Payment starts off. An absent param has to
-   * mean the default, so encoding the shown set would make a fresh load and a
-   * deliberately-empty selection look identical. `hide=none` is the explicit
-   * "show everything", which an absent param cannot express.
-   */
-  const defaultHiddenIds = allCategories
-    .filter((c) => c.name === 'Credit Card Payment')
-    .map((c) => c.id);
-  const hideParam = one('hide');
-
-  // Opened from a figure (registerHref): exactly that category's rows, and
-  // its necessity when the figure was one bucket's share of a category.
-  // Validated rather than passed through — a malformed id would otherwise
-  // reach the query as a uuid cast and fail the whole page.
-  const linkedCategory = allCategories.find((c) => c.id === one('category'));
-  const linkedNecessity = NECESSITIES.find((n) => n === one('necessity'));
-  // A category asked for by name is shown even if it is hidden by default.
-  const hiddenCategoryIds = linkedCategory && !hideParam
-    ? []
-    : resolveHidden(hideParam, allCategories, defaultHiddenIds);
-
-  const filters = {
-    // An explicit from/to still wins, so a link with a hand-built range works.
-    from: one('from') ?? period?.from,
-    to: one('to') ?? period?.to,
-    accountIds: one('account') ? [one('account')!] : undefined,
-    excludeCategoryIds: hiddenCategoryIds,
-    leafCategoryIds: linkedCategory ? [linkedCategory.id] : undefined,
-    necessity: linkedNecessity ? [linkedNecessity] : undefined,
-    search: one('q'),
-    uncategorizedOnly: one('uncategorized') === '1',
-    needsReviewOnly: one('review') === '1',
-    includeVoided: one('voided') === '1',
-    limit: 300,
-  };
+  // Read by the same function the tests open the Flow's links with (V2).
+  // `category` and `necessity` arrive from a figure (registerHref): exactly
+  // that category's rows — with its subcategories when `sub=1` — and its
+  // necessity when the figure was one bucket's share of a category.
+  const {
+    filters: view, linkedCategory, withSubcategories, linkedNecessity,
+    hiddenCategoryIds, defaultHiddenIds,
+  } = registerView(one, allCategories, period);
+  const filters = { ...view, limit: REGISTER_BATCH };
 
   const categories = allCategories;
-  const [transactions, total, totals, accounts, review] = await Promise.all([
+  const [transactions, total, accounts, review, groupSlots] = await Promise.all([
     getTransactions(filters),
     countTransactions(filters),
-    // Over every matching row, not the 300 loaded — and gross, so a figure
-    // clicked in the Flow lands on the same number here.
-    getTransactionTotals(filters),
     getAccounts(),
-    // Scoped to the period, so the chip counts what the table would show.
-    getReviewCounts({ from: filters.from, to: filters.to }),
+    // Under the table's own filters, so each chip counts what it would show (V3).
+    getReviewCounts(filters),
+    getGroupSlots(),
   ]);
 
   return (
@@ -97,8 +78,8 @@ export default async function TransactionsPage({
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
           <div className="flex items-baseline gap-3">
             <h1 className="text-2xl font-semibold tracking-tight">Register</h1>
-            <span className="text-xs text-paper-faint">
-              <span className="figure text-paper-dim">
+            <span className="text-xs text-ink-faint">
+              <span className="figure text-ink-dim">
                 {total.toLocaleString('en-US')}
               </span>{' '}
               {total === 1 ? 'transaction' : 'transactions'}
@@ -113,18 +94,19 @@ export default async function TransactionsPage({
                 a search would silently un-hide everything. */}
             {passthrough(params, [
               'uncategorized', 'review', 'voided', 'from', 'to', 'period', 'hide',
-              'category', 'necessity',
+              'category', 'necessity', 'sub', 'merchant', 'credits',
             ])}
             <input
               name="q"
               defaultValue={one('q') ?? ''}
               placeholder="Search descriptions"
-              className="w-56 rounded-sm border border-ink-600 bg-ink-800 px-2 py-1.5 placeholder:text-paper-faint"
+              className="w-56 rounded-sm border border-rule-strong bg-well px-2 py-1.5 placeholder:text-ink-faint"
             />
             <select
               name="account"
+              aria-label="Account"
               defaultValue={one('account') ?? ''}
-              className="rounded-sm border border-ink-600 bg-ink-800 px-2 py-1.5"
+              className="rounded-sm border border-rule-strong bg-well px-2 py-1.5"
             >
               <option value="">All accounts</option>
               {accounts.map((a) => (
@@ -143,14 +125,23 @@ export default async function TransactionsPage({
 
             <button
               type="submit"
-              className="rounded-sm border border-ink-500 px-3 py-1.5 text-paper transition-colors hover:border-paper-faint"
+              className="rounded-sm border border-ink-faint px-3 py-1.5 text-ink transition-colors hover:border-ink-faint"
             >
               Apply
             </button>
           </form>
         </div>
 
-        {period && (
+        {customRange ? (
+          <p className="text-sm text-ink-dim">
+            <span className="figure text-ink">{one('from') ?? 'the start'}</span> to{' '}
+            <span className="figure text-ink">{one('to') ?? 'today'}</span>
+            {' · '}
+            <a href={withoutParams(params, ['from', 'to'])} className="text-xs text-ink-faint underline decoration-rule-strong underline-offset-4 hover:text-ink">
+              any date
+            </a>
+          </p>
+        ) : period && (
           <PeriodPicker options={periods} active={period.key} />
         )}
 
@@ -169,11 +160,12 @@ export default async function TransactionsPage({
             express "this one category" and the page would otherwise be
             silently narrower than it looks. */}
         {linkedCategory && (
-          <p className="text-xs text-paper-faint">
-            Only <span className="text-paper">{linkedCategory.name}</span>
+          <p className="text-xs text-ink-faint">
+            Only <span className="text-ink">{linkedCategory.name}</span>
+            {withSubcategories && <> and its subcategories</>}
             {linkedNecessity && <> · {linkedNecessity}</>}
             {' · '}
-            <a href={withoutParams(params, ['category', 'necessity'])} className="underline decoration-ink-500 underline-offset-4 hover:text-paper">
+            <a href={withoutParams(params, ['category', 'necessity', 'sub'])} className="underline decoration-ink-faint underline-offset-4 hover:text-ink">
               show every category
             </a>
           </p>
@@ -185,41 +177,15 @@ export default async function TransactionsPage({
         categories={categories}
         accounts={accounts}
         total={total}
-        totals={totals}
+        filters={view}
+        groupSlots={groupSlots}
+        colors={categoryColors(allCategories, groupSlots)}
         allCategoriesHidden={
           allCategories.length > 0 && hiddenCategoryIds.length >= allCategories.length
         }
       />
     </div>
   );
-}
-
-/**
- * Which categories the register hides, from the `hide` param.
- *
- * Four forms, because the param has to distinguish "nothing was said" from
- * "nothing is hidden", and because naming 55 uuids to hide is a worse URL than
- * naming the 3 to show:
- *
- *   absent            the default (Credit Card Payment)
- *   none              hide nothing
- *   all               hide everything
- *   only:<a>,<b>      show ONLY these
- *   <a>,<b>           hide these
- */
-export function resolveHidden(
-  param: string | undefined,
-  categories: CategoryWithGroup[],
-  fallback: string[],
-): string[] {
-  if (!param) return fallback;
-  if (param === 'none') return [];
-  if (param === 'all') return categories.map((c) => c.id);
-  if (param.startsWith('only:')) {
-    const shown = new Set(param.slice('only:'.length).split(',').filter(Boolean));
-    return categories.filter((c) => !shown.has(c.id)).map((c) => c.id);
-  }
-  return param.split(',').filter(Boolean);
 }
 
 /** This page's URL with some parameters dropped. */

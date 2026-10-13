@@ -22,16 +22,40 @@ Describe the *shape* of a decision here and keep the specifics there.
 
 ---
 
-## Right now · last updated 2026-10-07
+## Right now · last updated 2026-10-13
 
-**Nothing is in flight.** PRs #12–#17 are merged and `main` is green. The
-ledger syncs itself daily (see the decisions below), was caught up on
-2026-10-07, and the owner has confirmed every row the register shows — the
-review backlog is empty. The card that syncs daily matches its issuer to the
-cent. The employer's income source was re-registered by the text the bank
-actually prints, checked against the real deposit with the app's own matcher.
+**The overhaul is PR #23, reviewed and waiting on the owner's merge.** The
+owner called it as a save point before more UI work. It carries the whole of
+`docs/design/OVERHAUL.md` (asks 1–14): the Flow first, with its trunk and a
+category's own Flow beneath; light and dark themes; Review; Setup; a sidebar;
+every page on cards; a register that loads as it scrolls. CodeRabbit reviewed
+the latest commit with nothing outstanding — its three findings (stale status
+docs, the demo seed's edited row, `.swatch` outside a layer) are fixed and
+answered on their threads. The merge itself was left to the owner: Claude
+Code's permission check refused it. 398 unit tests, the browser suites and
+`prepush` are green. The ledger was backed up to `db/dumps/` on 2026-10-13,
+after the work and before the merge.
+
+Until it merges the working tree stays on `overhaul` — it changes no sync code
+and no schema, so the nightly sync behaves as on `main`. After merging: check
+out `main`, pull, and start the next round of UI work on a new branch, local
+until the owner asks for a PR.
+
+`main` itself is as on 2026-10-07: PRs #12–#22 merged, green. The owner has
+confirmed every row the register showed then. The card that syncs daily
+matches its issuer to the cent.
 
 **For whoever picks this up:**
+
+- **The monthly card's SimpleFIN connection needs re-authenticating.** Every
+  sync since 2026-10-12 has ended `partial` with SimpleFIN's "Auth required"
+  for that connection; the other accounts sync normally. Only the owner can
+  fix it, in SimpleFIN Bridge. (The two runs on 2026-10-10 failed on the
+  network, not on auth.)
+- **Docker Desktop has to be running.** On 2026-10-09 it was closed after a
+  restart, and the Flow failed with an `AggregateError` from its first query
+  — a refused connection, not an app bug. The container comes back with
+  Docker (`restart: unless-stopped`); starting Docker at login avoids it.
 
 - **Checking's reconciliation difference is real, not timing.** It predates
   this session, moved once on 2026-10-06, then held across later syncs — so a
@@ -55,8 +79,9 @@ Standing tasks the owner tracks — details in `private/STATE.local.md`:
 
 - Record a brokerage balance monthly, so investment performance has a period to
   measure over. One snapshot is a starting line, not a return.
-- Register a new income source on the Accounts page when one starts — by the
-  text the bank prints, then check the first deposit is filed as known.
+- Register a new income source when one starts — on Accounts on `main`, on
+  Setup once the overhaul lands — by the text the bank prints, then check the
+  first deposit is filed as known.
 
 ---
 
@@ -217,6 +242,47 @@ reading has no period to measure over. The page says tracking starts here rather
 than printing a meaningless 0.00%, and Modified Dietz only becomes meaningful at
 the second reading.
 
+**Colour is by category group, and buckets are ink.** One hue per category
+cannot be told apart past eight, and the taxonomy has dozens; a group is a
+handful and means something. The slot is the group's position among groups
+holding spending, in the taxonomy's sort order, so it moves only when the
+taxonomy does. Neutral sources and buckets are what let the group colours
+carry without competing (docs/design/OVERHAUL.md, "Colour").
+
+**The Flow's sources are a trunk, and the junction stays.** The owner wanted
+Monarch's "one large cut from the left" with income and savings still
+separate: the sources stack flush against the junction and blend into it, and
+the junction is a labelled total. Dropping the junction instead would make the
+chart decide which source paid for which bucket, which nothing records.
+
+**The register loads as it scrolls, by the last row shown, and keeps every
+row.** 150 at a time, keyset not offset (an offset skips a row per void above
+the line and repeats one per sync). No windowing: it would cost find-in-page,
+shift-click ranges and a steady scroll position, and a few thousand rows is an
+ordinary page. No totals line either — the owner wants the register for
+filing, not sums; V2's end-to-end test adds up the rows instead.
+
+**`npm run typecheck` is never incremental.** TypeScript 7's incremental
+`--noEmit` stopped re-reporting errors in files that had not changed when a
+file they import did (2026-10-13: two pages kept passing a removed prop). A
+full check takes under half a second.
+
+**The register's order is total.** A sync inserts a batch with one
+`created_at`, so newest-first on date and `created_at` alone left same-day
+rows unordered — enough for a page boundary to repeat or skip a row, and for
+screenshot baselines to flicker on every reseed. Description, amount, then id
+break the tie.
+
+**Review opens on everything outstanding, whatever the period.** Its nav
+badge counts everything outstanding, and a count must be what its
+destination shows (V3); a period would make the two disagree. Flow and
+Register share the period; Review's own picker narrows it.
+
+**A review count reads the view's own WHERE clause.** `getReviewCounts`
+takes the register's filters and runs `transactionWhere`, so the chips can no
+longer count rows the table hides — the third time that bug had appeared in
+a new form.
+
 ## Known and deliberate
 
 **The row editor's scroll-into-view is approximate.** Opening a row near the
@@ -270,9 +336,11 @@ Flagged rather than guessed at, per `docs/DESIGN.md` §12:
   Instalment plans are deliberately *not* their own category — the destination
   is what matters — so they sit unspecified until a human says where the money
   went. No automation will fix this; the descriptions do not carry it.
-- **Sankey depth.** The diagram still shows top-level categories while the list
-  under it shows subcategories. Expanding a band on click was chosen and not
-  built.
+- **The Flow's trunk in colour, or slate.** The trunk and buckets are slate,
+  so colour means "where it was spent"; Monarch colours its sources. Offered
+  to the owner twice, not decided. The trunk's 60% share and 2× cap were set
+  against synthetic data; how they read on the owner's own "All time" view is
+  not yet confirmed.
 
 ## Where things live
 

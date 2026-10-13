@@ -85,3 +85,16 @@ export function formatTimestampLong(value: Date | string): string {
   const mm = String(d.getUTCMinutes()).padStart(2, '0');
   return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}, ${hh}:${mm} UTC`;
 }
+
+/**
+ * An inclusive date range, said once: "Sep 1 – 27, 2026", "Aug 16 – Sep 15,
+ * 2026", "Dec 1, 2025 – Jan 31, 2026". What a chart's heading names.
+ */
+export function formatRange(from: string, to: string): string {
+  const a = parts(from);
+  const b = parts(to);
+  if (a.y !== b.y) return `${MONTHS[a.m - 1]} ${a.d}, ${a.y} – ${MONTHS[b.m - 1]} ${b.d}, ${b.y}`;
+  if (a.m !== b.m) return `${MONTHS[a.m - 1]} ${a.d} – ${MONTHS[b.m - 1]} ${b.d}, ${b.y}`;
+  if (a.d !== b.d) return `${MONTHS[a.m - 1]} ${a.d} – ${b.d}, ${b.y}`;
+  return `${MONTHS[a.m - 1]} ${a.d}, ${a.y}`;
+}

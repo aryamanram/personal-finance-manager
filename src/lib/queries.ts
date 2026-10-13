@@ -33,6 +33,13 @@ export interface TransactionFilters {
    * register would include its children's and disagree with the figure (V2).
    */
   leafCategoryIds?: string[];
+  /** These merchants' rows — a merchant figure in a category's own Flow. */
+  merchantIds?: string[];
+  /**
+   * Only money coming back on spending rows — refunds, Daily Cash. The
+   * Flow's Credits source opens to exactly these.
+   */
+  creditsOnly?: boolean;
   necessity?: string[];
   costType?: string[];
   search?: string;
@@ -49,6 +56,11 @@ export interface TransactionFilters {
   includeTransfers?: boolean;
   limit?: number;
   offset?: number;
+  /**
+   * Only rows after this one in the register's order — the next batch as the
+   * register scrolls. Read by getTransactions alone; counts ignore it.
+   */
+  after?: string;
 }
 
 /**
@@ -76,6 +88,8 @@ function transactionWhere(f: TransactionFilters) {
                        AND NOT rollup_category_id = ANY(${f.excludeCategoryIds}::uuid[])))`
         : sql``}
       ${f.leafCategoryIds?.length ? sql`AND category_id = ANY(${f.leafCategoryIds}::uuid[])` : sql``}
+      ${f.merchantIds?.length ? sql`AND merchant_id = ANY(${f.merchantIds}::uuid[])` : sql``}
+      ${f.creditsOnly ? sql`AND counts_as_spending AND eff_amount_cents > 0` : sql``}
       ${f.necessity?.length ? sql`AND eff_necessity::text = ANY(${f.necessity})` : sql``}
       ${f.costType?.length ? sql`AND eff_cost_type::text = ANY(${f.costType})` : sql``}
       ${f.uncategorizedOnly
@@ -91,11 +105,41 @@ function transactionWhere(f: TransactionFilters) {
         : sql``}`;
 }
 
+/**
+ * The register's order: newest first, then a full tie-break. A sync inserts
+ * a whole batch with one created_at, so date and created_at alone leave
+ * same-day rows in no particular order — which a page boundary can then
+ * show twice or not at all. The id makes the order total.
+ */
+const newestFirst = () => sql`eff_posted_date DESC, created_at DESC, eff_description, eff_amount_cents, id`;
+
+/**
+ * Rows that come after this one in newestFirst's order: the next batch, by
+ * where the last one shown sits rather than by how many came before it. An
+ * offset would skip a row for every one voided above it since the last
+ * batch, and repeat one for every row synced in. The row's own keys are read
+ * here in SQL, at full precision: created_at carries microseconds that a
+ * JavaScript Date would round away, putting the rest of a synced batch on
+ * the wrong side of the line.
+ */
+const afterRow = (id: string) => sql`
+  EXISTS (
+    SELECT 1 FROM v_transactions c
+    WHERE c.id = ${id}
+      AND (v_transactions.eff_posted_date < c.eff_posted_date
+        OR (v_transactions.eff_posted_date = c.eff_posted_date
+            AND v_transactions.created_at < c.created_at)
+        OR (v_transactions.eff_posted_date = c.eff_posted_date
+            AND v_transactions.created_at = c.created_at
+            AND (v_transactions.eff_description, v_transactions.eff_amount_cents, v_transactions.id)
+              > (c.eff_description, c.eff_amount_cents, c.id))))`;
+
 export async function getTransactions(f: TransactionFilters = {}) {
   const rows = await sql<VTransaction[]>`
     SELECT * FROM v_transactions
     ${transactionWhere(f)}
-    ORDER BY eff_posted_date DESC, created_at DESC
+    ${f.after ? sql`AND ${afterRow(f.after)}` : sql``}
+    ORDER BY ${newestFirst()}
     LIMIT ${f.limit ?? 200} OFFSET ${f.offset ?? 0}`;
   return rows;
 }
@@ -111,15 +155,18 @@ export interface TransactionTotals {
   spent_cents: number;
   /** Money back on spending rows — refunds, Daily Cash — as a positive number. */
   credit_cents: number;
+  /** Income received, as the Flow's Income source counts it. */
+  income_cents: number;
+  /** Net money into investments, as the Flow's Invested bucket counts it. */
+  invested_cents: number;
 }
 
 /**
- * Spending totals over EVERY row a filter matches, not just the page of them
- * the register loads. The register used to sum the rows it had fetched, so a
- * filter matching more than its 300-row limit printed a partial total.
- *
- * Gross, not net: a figure the Flow draws is gross, and clicking it must land
- * on a register that shows the same number.
+ * Spending totals over every row a filter matches — gross, as the Flow draws
+ * its figures. The register no longer prints these (it is for filing rows,
+ * not reading sums); tests/flow.test.ts uses them to prove, at the query
+ * level, that a figure's register filter selects exactly that figure's
+ * money (V2). The end-to-end test adds up the rows the register shows.
  */
 export async function getTransactionTotals(f: TransactionFilters = {}): Promise<TransactionTotals> {
   const [row] = await sql<TransactionTotals[]>`
@@ -127,7 +174,13 @@ export async function getTransactionTotals(f: TransactionFilters = {}): Promise<
       COALESCE(-SUM(eff_amount_cents) FILTER (
         WHERE counts_as_spending AND eff_amount_cents < 0), 0)::bigint AS spent_cents,
       COALESCE(SUM(eff_amount_cents) FILTER (
-        WHERE counts_as_spending AND eff_amount_cents > 0), 0)::bigint AS credit_cents
+        WHERE counts_as_spending AND eff_amount_cents > 0), 0)::bigint AS credit_cents,
+      -- The same predicates as getPeriodTotals, so a Flow figure for income
+      -- or investing lands on a register that prints the same number.
+      COALESCE(SUM(eff_amount_cents) FILTER (
+        WHERE eff_necessity = 'income'), 0)::bigint AS income_cents,
+      COALESCE(-SUM(eff_amount_cents) FILTER (
+        WHERE eff_necessity = 'investment'), 0)::bigint AS invested_cents
     FROM v_transactions
     ${transactionWhere(f)}`;
   return row;
@@ -216,6 +269,9 @@ export async function getPeriodTotals(from: string, to: string): Promise<PeriodT
 export interface FlowCategory extends CategoryBreakdownRow {
   /** Money back in this category over the range, positive; not in total_cents. */
   credit_cents: number;
+  /** The parent, for a subcategory; NULL for a top-level category. */
+  parent_id: string | null;
+  parent_name: string | null;
 }
 
 /** What the Flow draws for a range. Shaped for lib/flow.ts's buildFlow. */
@@ -248,6 +304,10 @@ export async function getFlow(from: string, to: string): Promise<FlowData> {
           category_id,
           COALESCE(category_name, 'Uncategorized')   AS category_name,
           COALESCE(category_group_name, 'Other')     AS category_group_name,
+          -- The view's rollup is the parent for a subcategory and the
+          -- category itself otherwise, so this is the parent or nothing.
+          CASE WHEN is_subcategory THEN rollup_category_id END   AS parent_id,
+          CASE WHEN is_subcategory THEN rollup_category_name END AS parent_name,
           eff_necessity::text                        AS necessity,
           eff_cost_type::text                        AS cost_type,
           COALESCE(-SUM(eff_amount_cents) FILTER (WHERE eff_amount_cents < 0), 0)::bigint AS spent,
@@ -256,19 +316,21 @@ export async function getFlow(from: string, to: string): Promise<FlowData> {
         FROM v_transactions
         WHERE counts_as_spending
           AND eff_posted_date >= ${from}::date AND eff_posted_date <= ${to}::date
-        GROUP BY 1,2,3,4,5
+        GROUP BY 1,2,3,4,5,6,7
       )
       SELECT
         category_id,
         category_name,
         category_group_name,
+        parent_id,
+        parent_name,
         necessity,
         (ARRAY_AGG(cost_type ORDER BY spent DESC))[1] AS cost_type,
         SUM(spent)::bigint                            AS total_cents,
         SUM(credit)::bigint                           AS credit_cents,
         SUM(txn_count)::int                           AS txn_count
       FROM per_axis
-      GROUP BY 1,2,3,4
+      GROUP BY 1,2,3,4,5,6
       ORDER BY total_cents DESC, category_name`,
   ]);
 
@@ -280,6 +342,72 @@ export async function getFlow(from: string, to: string): Promise<FlowData> {
     // is already in creditsCents.
     categories: categories.filter((c) => c.total_cents > 0),
   };
+}
+
+/**
+ * Each spending group's slot in the chart palette (globals.css, group-1..8),
+ * by group name.
+ *
+ * A slot is the group's position among the groups that hold spending
+ * categories, in the taxonomy's own order — so it moves only when the
+ * taxonomy does, never with a month's data (V10). Income and transfer groups
+ * hold no spending and take no slot. A ninth spending group gets none, and is
+ * drawn in neutral ink rather than in a generated colour.
+ */
+export async function getGroupSlots(): Promise<Record<string, number>> {
+  const rows = await sql<{ name: string; slot: number }[]>`
+    SELECT g.name, row_number() OVER (ORDER BY g.sort_order, g.name)::int AS slot
+    FROM category_groups g
+    WHERE EXISTS (
+      SELECT 1 FROM categories c
+      WHERE c.group_id = g.id AND NOT c.is_archived
+        AND c.default_necessity IN ('required', 'discretionary'))
+    ORDER BY slot`;
+  return Object.fromEntries(rows.filter((r) => r.slot <= GROUP_SLOTS).map((r) => [r.name, r.slot]));
+}
+
+/** How many colours the group palette has. */
+export const GROUP_SLOTS = 8;
+
+/** One merchant's spending under one category, for a category's own Flow. */
+export interface CategoryFlowRow {
+  category_id: string;
+  category_name: string;
+  necessity: string;
+  /** NULL when the rows have no merchant; merchant_name is then their description. */
+  merchant_id: string | null;
+  merchant_name: string;
+  total_cents: number;
+  credit_cents: number;
+  txn_count: number;
+}
+
+/**
+ * Everything spent in one category over a range — the category itself and
+ * every subcategory under it — down to the merchant.
+ *
+ * Gross, like getFlow, so the category's total here is the figure the main
+ * Flow drew for it. Rows with no merchant are grouped by their description,
+ * which is what the register would show for them.
+ */
+export async function getCategoryFlow(categoryId: string, from: string, to: string): Promise<CategoryFlowRow[]> {
+  return sql<CategoryFlowRow[]>`
+    SELECT
+      v.category_id,
+      v.category_name,
+      v.eff_necessity::text                                        AS necessity,
+      v.merchant_id,
+      COALESCE(m.display_name, v.eff_description)                  AS merchant_name,
+      COALESCE(-SUM(v.eff_amount_cents) FILTER (WHERE v.eff_amount_cents < 0), 0)::bigint AS total_cents,
+      COALESCE(SUM(v.eff_amount_cents) FILTER (WHERE v.eff_amount_cents > 0), 0)::bigint  AS credit_cents,
+      count(*)::int                                                AS txn_count
+    FROM v_transactions v
+    LEFT JOIN merchants m ON m.id = v.merchant_id
+    WHERE v.counts_as_spending
+      AND (v.category_id = ${categoryId} OR v.rollup_category_id = ${categoryId})
+      AND v.eff_posted_date >= ${from}::date AND v.eff_posted_date <= ${to}::date
+    GROUP BY 1,2,3,4,5
+    ORDER BY total_cents DESC, merchant_name`;
 }
 
 /** Category breakdown over an arbitrary range. */
@@ -397,21 +525,20 @@ export interface ReviewCounts {
 }
 
 /**
- * The two review backlogs, optionally within a date range.
+ * The two review backlogs, under exactly the filters of the view that will
+ * show them (V3 in docs/design/OVERHAUL.md).
  *
- * These count what the REGISTER CAN SHOW, which means every predicate the
- * register applies unconditionally has to appear here too. A chip promises
- * rows; clicking it must deliver them.
- *
- * It has broken twice the same way. First the counts were global while the
- * table was scoped to a period, so "Needs review · 338" sat above 34 rows.
- * Then card-payment credit legs became permanently invisible, and the four
- * of them that no human had confirmed became a chip reading "4" over an
- * empty table with no way to clear it — the backlog could never reach zero.
+ * A chip promises rows; clicking it must deliver them. This has broken three
+ * times the same way. First the counts were global while the table was
+ * scoped to a period, so "Needs review · 338" sat above 34 rows. Then
+ * card-payment credit legs became permanently invisible, and the four of them
+ * no human had confirmed became a chip over an empty table. Then the register
+ * hid Credit Card Payment by default while the count still included it — 216
+ * to review over 204 rows. So the count no longer restates the register's
+ * predicates: it reads the same WHERE clause, with the backlog filters taken
+ * off so both chips can be counted at once.
  */
-export async function getReviewCounts(
-  range?: { from?: string; to?: string },
-): Promise<ReviewCounts> {
+export async function getReviewCounts(f: TransactionFilters = {}): Promise<ReviewCounts> {
   const [row] = await sql<ReviewCounts[]>`
     SELECT
       count(*) FILTER (
@@ -423,16 +550,28 @@ export async function getReviewCounts(
         WHERE category_id IS NULL OR category_source IN ('unset','default')
       )::int AS uncategorized
     FROM v_transactions
-    WHERE superseded_by_id IS NULL AND voided_at IS NULL
-      -- The register never shows these, so counting them offers work that
-      -- cannot be done.
-      AND NOT is_card_payment_credit
-      ${range?.from ? sql`AND eff_posted_date >= ${range.from}::date` : sql``}
-      ${range?.to ? sql`AND eff_posted_date <= ${range.to}::date` : sql``}`;
+    ${transactionWhere({ ...f, needsReviewOnly: false, uncategorizedOnly: false, limit: undefined, offset: undefined })}`;
   return row;
 }
 
-
+/**
+ * Review's inbox: every row a machine guessed that no human has confirmed,
+ * and every row nobody has categorised — newest first, the way they arrive.
+ *
+ * Nothing is hidden by category here, unlike the register: a guess that
+ * filed a purchase as Credit Card Payment takes it out of spending entirely,
+ * which is exactly the guess most worth checking.
+ */
+export async function getReviewQueue(range: { from?: string; to?: string } = {}): Promise<VTransaction[]> {
+  return sql<VTransaction[]>`
+    SELECT * FROM v_transactions
+    ${transactionWhere(range)}
+      AND ((NOT category_locked AND category_id IS NOT NULL
+            AND category_source = ANY(${GUESS_SOURCES as string[]}::category_source[]))
+           OR category_id IS NULL OR category_source IN ('unset','default'))
+    ORDER BY ${newestFirst()}
+    LIMIT 1000`;
+}
 
 /**
  * What the register knows about one row's merchant, for the edit panel.

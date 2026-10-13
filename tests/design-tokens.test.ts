@@ -1,5 +1,6 @@
 /**
- * Keeps the design tokens Figma sees and the CSS the app ships from drifting.
+ * Keeps the design tokens Figma sees and the CSS the app ships from drifting,
+ * and keeps both themes legible.
  *
  * src/app/globals.css is the single source of truth. docs/design/tokens.json
  * is derived from it by `npm run tokens` (scripts/tokens.ts), in the format
@@ -13,7 +14,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { buildTokens, renderTokens, SET, TOKENS_PATH, type TokenFile } from '../scripts/tokens';
+import { buildTokens, renderTokens, SETS, TOKENS_PATH, type TokenFile } from '../scripts/tokens';
 
 const committed = JSON.parse(readFileSync(TOKENS_PATH, 'utf8')) as TokenFile;
 const css = readFileSync('src/app/globals.css', 'utf8');
@@ -23,13 +24,16 @@ describe('docs/design/tokens.json is globals.css, for Figma', () => {
   it('is exactly what npm run tokens writes from the current CSS', () => {
     const fresh = JSON.parse(renderTokens()) as TokenFile;
     const drift: string[] = [];
-    for (const group of ['color', 'font'] as const) {
-      const a = committed[SET][group];
-      const b = fresh[SET][group];
+    const groups = [
+      ['light', 'color'], ['light', 'font'], ['dark', 'color'],
+    ] as const;
+    for (const [set, group] of groups) {
+      const a = (committed[set] as Record<string, Record<string, { $value: string }>>)[group];
+      const b = (fresh[set] as Record<string, Record<string, { $value: string }>>)[group];
       for (const name of new Set([...Object.keys(a), ...Object.keys(b)])) {
         const was = a[name]?.$value;
         const now = b[name]?.$value;
-        if (was !== now) drift.push(`${group}/${name}: tokens.json ${was ?? '(missing)'} vs globals.css ${now ?? '(removed)'}`);
+        if (was !== now) drift.push(`${set}/${group}/${name}: tokens.json ${was ?? '(missing)'} vs globals.css ${now ?? '(removed)'}`);
       }
     }
     expect(drift, `tokens.json is stale — run npm run tokens:\n  ${drift.join('\n  ')}`).toEqual([]);
@@ -40,38 +44,51 @@ describe('docs/design/tokens.json is globals.css, for Figma', () => {
   it('carries every @theme custom property', () => {
     // Counted without the generator's parser: comments stripped, then every
     // declaration anywhere in the block, including one sharing a comment's line.
-    const theme = /@theme\s*\{([\s\S]*?)\n\}/.exec(css)![1].replace(/\/\*[\s\S]*?\*\//g, '');
+    const theme = /@theme(?:\s+static)?\s*\{([\s\S]*?)\n\}/.exec(css)![1].replace(/\/\*[\s\S]*?\*\//g, '');
     const declared = [...theme.matchAll(/(--(?:color|font)-[a-z0-9-]+)\s*:/g)].map((m) => m[1]);
     const tokens = [
-      ...Object.keys(committed[SET].color).map((n) => `--color-${n}`),
-      ...Object.keys(committed[SET].font).map((n) => `--font-${n}`),
+      ...Object.keys(committed.light.color).map((n) => `--color-${n}`),
+      ...Object.keys(committed.light.font).map((n) => `--font-${n}`),
     ];
     expect(tokens.sort()).toEqual([...new Set(declared)].sort());
+  });
+
+  it('chooses a dark value for every colour, not just a light one', () => {
+    // A colour with no dark half would show its light value on a dark ground.
+    expect(Object.keys(committed.dark.color).sort()).toEqual(Object.keys(committed.light.color).sort());
   });
 
   it('is a file Tokens Studio can load', () => {
     // A token set per top-level key, plus the two $-keys beside them; any
     // other top-level key would be read as a set.
-    expect(Object.keys(committed).sort()).toEqual(['$metadata', '$themes', SET].sort());
-    expect(committed.$metadata.tokenSetOrder).toEqual([SET]);
-    for (const group of Object.values(committed[SET])) {
-      for (const [name, token] of Object.entries(group)) {
-        expect(Object.keys(token).every((k) => ['$value', '$type', '$description'].includes(k)), name).toBe(true);
-        // Tokens Studio rejects these characters in token names.
-        expect(/[{}$]/.test(name), name).toBe(false);
-        if (token.$type === 'color') expect(token.$value, name).toMatch(/^#[0-9a-f]{6}$/);
+    expect(Object.keys(committed).sort()).toEqual(['$metadata', '$themes', ...SETS].sort());
+    expect(committed.$metadata.tokenSetOrder).toEqual([...SETS]);
+    // The Dark theme reads light as its source, so the fonts reach it too.
+    expect(committed.$themes.map((t) => [t.name, t.selectedTokenSets])).toEqual([
+      ['Light', { light: 'enabled' }],
+      ['Dark', { light: 'source', dark: 'enabled' }],
+    ]);
+    for (const set of SETS) {
+      for (const group of Object.values(committed[set])) {
+        for (const [name, token] of Object.entries(group)) {
+          expect(Object.keys(token).every((k) => ['$value', '$type', '$description'].includes(k)), name).toBe(true);
+          // Tokens Studio rejects these characters in token names.
+          expect(/[{}$]/.test(name), name).toBe(false);
+          if (token.$type === 'color') expect(token.$value, name).toMatch(/^#[0-9a-f]{6}$/);
+        }
       }
     }
   });
 
   it('takes the font family names from the fonts the app loads', () => {
-    expect(committed[SET].font.sans.$value).toBe('Inter Tight');
-    expect(committed[SET].font.mono.$value).toBe('JetBrains Mono');
+    expect(committed.light.font.sans.$value).toBe('Inter Tight');
+    expect(committed.light.font.mono.$value).toBe('JetBrains Mono');
   });
 
   it('takes the meaning along with the colour', () => {
     // Figma shows a variable's description; the amber rule has to travel.
-    expect(committed[SET].color.edited.$description).toMatch(/Reserved for human edits/);
+    expect(committed.light.color.edited.$description).toMatch(/Reserved for human edits/);
+    expect(committed.dark.color.edited.$description).toMatch(/Reserved for human edits/);
   });
 
   it('reads a declaration that shares a line with a comment', () => {
@@ -80,7 +97,7 @@ describe('docs/design/tokens.json is globals.css, for Figma', () => {
       '  /* before */ --color-a: #111111;',
       '  --color-b: #222222; /* after b */',
       '  --color-c: #333333;',
-    ].join('\n')), layout).ledger.color;
+    ].join('\n')), layout).light.color;
     expect(Object.keys(t)).toEqual(['a', 'b', 'c']);
     expect(t.a.$description).toBe('before');
     // "after b" describes b, and "before" still reaches c — no blank line between.
@@ -88,216 +105,157 @@ describe('docs/design/tokens.json is globals.css, for Figma', () => {
     expect(t.c.$description).toBe('before');
   });
 
+  it('splits light-dark() into the two sets', () => {
+    const t = buildTokens('@theme static {\n  --color-a: light-dark(#ABCDEF, #123456);\n}\n', layout);
+    expect(t.light.color.a.$value).toBe('#abcdef');
+    expect(t.dark.color.a.$value).toBe('#123456');
+  });
+
   it('reads Windows line endings the same as Unix ones', () => {
     const lf = '@theme {\n  /* first */\n  --color-a: #111111;\n\n  --color-b: #222222;\n}\n';
     const crlf = lf.replace(/\n/g, '\r\n');
     expect(buildTokens(crlf, layout)).toEqual(buildTokens(lf, layout));
     // The blank line ends the comment's reach: b has no description.
-    expect(buildTokens(crlf, layout).ledger.color.b.$description).toBeUndefined();
+    expect(buildTokens(crlf, layout).light.color.b.$description).toBeUndefined();
   });
 
   it('refuses what it cannot translate rather than guessing', () => {
     const theme = (body: string) => `@theme {\n${body}\n}\n`;
     expect(() => buildTokens(theme('  --color-x: oklch(70% 0.1 200);'), layout)).toThrow(/not a #rrggbb/);
+    expect(() => buildTokens(theme('  --color-x: light-dark(#111111, red);'), layout)).toThrow(/not a #rrggbb/);
     expect(() => buildTokens(theme('  --font-x: var(--font-unknown), serif;'), layout)).toThrow(/cannot resolve/);
     expect(() => buildTokens(theme('  --radius-x: 4px;'), layout)).toThrow(/no token type/);
     expect(() => buildTokens(theme('  --color-x #123456;'), layout)).toThrow(/Unreadable/);
   });
 });
 
-describe('contrast stays within WCAG AA', () => {
-  // Re-derived here rather than trusted from the audit, so a future colour
-  // change cannot quietly reintroduce an accessibility failure.
-  const channel = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-  const parse = (hex: string) => ({
-    r: parseInt(hex.slice(1, 3), 16) / 255,
-    g: parseInt(hex.slice(3, 5), 16) / 255,
-    b: parseInt(hex.slice(5, 7), 16) / 255,
-  });
-  const luminance = (hex: string) => {
-    const { r, g, b } = parse(hex);
-    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
-  };
-  const contrast = (a: string, b: string) => {
-    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-    return (hi + 0.05) / (lo + 0.05);
-  };
+// ---------------------------------------------------------------------------
+// Colour arithmetic, re-derived here rather than trusted from the audit, so a
+// future colour change cannot quietly reintroduce an accessibility failure.
+// WCAG 2 contrast; OKLab (Björn Ottosson) for perceptual distance, ×100; and
+// the Machado–Oliveira–Fernandes 2009 simulation at severity 1.0, which is
+// what the dataviz validator's thresholds are calibrated against.
+// ---------------------------------------------------------------------------
 
-  const P = Object.fromEntries(
-    Object.entries(committed[SET].color).map(([name, t]) => [name, t.$value]),
-  );
+const parse = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+const linear = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+const luminance = (hex: string) => {
+  const [r, g, b] = parse(hex).map(linear);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const contrast = (a: string, b: string) => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+};
 
-  it('keeps body text above 4.5:1 on the page ground', () => {
-    // These carry actual content at 11-16px, below the large-text threshold.
-    for (const token of ['paper', 'paper-dim', 'paper-faint']) {
-      const r = contrast(P[token], P['ink-900']);
-      expect(r, `${token} on ink-900 is ${r.toFixed(2)}:1, below AA 4.5:1`)
-        .toBeGreaterThanOrEqual(4.5);
+function oklab([r, g, b]: number[]): number[] {
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return [
+    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+  ];
+}
+const MACHADO = {
+  protan: [[0.152286, 1.052583, -0.204868], [0.114503, 0.786281, 0.099216], [-0.003882, -0.048116, 1.051998]],
+  deutan: [[0.367322, 0.860646, -0.227968], [0.280085, 0.672501, 0.047413], [-0.01182, 0.04294, 0.968881]],
+};
+const simulate = (rgb: number[], m: number[][]) =>
+  m.map((row) => Math.min(1, Math.max(0, row[0] * rgb[0] + row[1] * rgb[1] + row[2] * rgb[2])));
+/** OKLab distance ×100, as seen with normal vision or under a simulation. */
+function deltaE(a: string, b: string, vision?: keyof typeof MACHADO): number {
+  const la = parse(a).map(linear);
+  const lb = parse(b).map(linear);
+  const [A, B] = vision ? [oklab(simulate(la, MACHADO[vision])), oklab(simulate(lb, MACHADO[vision]))] : [oklab(la), oklab(lb)];
+  return 100 * Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2]);
+}
+const cvd = (a: string, b: string) => Math.min(deltaE(a, b, 'protan'), deltaE(a, b, 'deutan'));
+
+const THEMES = SETS.map((set) => ({
+  set,
+  P: Object.fromEntries(Object.entries(committed[set].color).map(([name, t]) => [name, t.$value])),
+}));
+
+describe.each(THEMES)('the $set theme', ({ P }) => {
+  const GROUPS = Object.keys(P).filter((k) => /^group-\d+$/.test(k))
+    .sort((a, b) => Number(a.slice(6)) - Number(b.slice(6)));
+
+  it('keeps every text ink above 4.5:1 on every surface it sits on', () => {
+    // These carry content at 11-16px, below the large-text threshold.
+    for (const ink of ['ink', 'ink-dim', 'ink-faint']) {
+      for (const ground of ['ground', 'raised', 'well', 'card']) {
+        const r = contrast(P[ink], P[ground]);
+        expect(r, `${ink} on ${ground} is ${r.toFixed(2)}:1, below AA 4.5:1`).toBeGreaterThanOrEqual(4.5);
+      }
     }
   });
 
-  it('keeps the edited marker clearly legible', () => {
+  it('keeps the reserved colours legible as text', () => {
     // Amber means "a human changed this". If it is hard to see, the one signal
-    // the ledger depends on stops working.
-    const r = contrast(P['edited'], P['ink-900']);
-    expect(r, `edited (amber) on ink-900 is ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+    // the ledger depends on stops working. Earned and alert are text too.
+    for (const token of ['edited', 'earned', 'alert']) {
+      for (const ground of ['ground', 'raised', 'card']) {
+        const r = contrast(P[token], P[ground]);
+        expect(r, `${token} on ${ground} is ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
   });
 
   // A token pair can pass on its own and still fail on screen: CSS `opacity`
   // on an ancestor composites the whole subtree, so a badge's background and
   // its text fade together and the ratio between them collapses. The pending
   // row used to carry `opacity-60` on the <tr>, which took the "pending" badge
-  // to 2.46:1 — the one label on that row you need to read. It now dims its own
-  // text instead. This asserts the badge survives whatever dimming is applied.
-  it('keeps the pending badge legible however the row is dimmed', () => {
-    const composite = (fg: string, bg: string, alpha: number) => {
-      const f = parse(fg);
-      const b = parse(bg);
-      const mix = (x: number, y: number) => Math.round((x * alpha + y * (1 - alpha)) * 255);
-      return `#${[mix(f.r, b.r), mix(f.g, b.g), mix(f.b, b.b)]
-        .map((v) => v.toString(16).padStart(2, '0'))
-        .join('')}`;
-    };
+  // below AA — the one label on that row you need to read. It now dims its own
+  // text instead. This asserts the badge as drawn, on its well.
+  it('keeps the pending badge legible', () => {
+    const r = contrast(P['ink-faint'], P['well']);
+    expect(r, `the pending badge is ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+  });
 
-    // 1 = today's behaviour (text-only dim, badge untouched). The lower values
-    // stand in for anyone reintroducing a subtree opacity.
-    for (const alpha of [1, 0.6]) {
-      const bg = composite(P['ink-700'], P['ink-900'], alpha);
-      const fg = composite(P['paper-faint'], P['ink-900'], alpha);
-      const r = contrast(fg, bg);
-
-      if (alpha === 1) {
-        expect(r, `the undimmed pending badge is ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
-      } else {
-        // Documents why the subtree opacity had to go, and fails loudly if a
-        // future change makes it survivable-looking without actually fixing it.
-        expect(
-          r,
-          `compositing the badge at ${alpha} gives ${r.toFixed(2)}:1. If this now ` +
-            'passes, the palette changed — re-check whether dimming the row subtree ' +
-            'is safe again before reintroducing it.',
-        ).toBeLessThan(4.5);
+  // Two touching neutral bands — the Flow's buckets, fixed under variable —
+  // are told apart only by lightness, which WCAG 1.4.11 puts at 3:1.
+  it('separates the two chart inks from each other and from the ground', () => {
+    const pair = contrast(P['chart-strong'], P['chart-mid']);
+    expect(pair, `chart-strong and chart-mid are ${pair.toFixed(2)}:1 apart`).toBeGreaterThanOrEqual(3);
+    for (const t of ['chart-strong', 'chart-mid']) {
+      for (const surface of ['ground', 'card']) {
+        const r = contrast(P[t], P[surface]);
+        expect(r, `${t} on the ${surface} is ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
       }
     }
   });
 
-  // The cost-mix chart stacks fixed under variable as two touching bands whose
-  // colours are the only thing identifying them, which WCAG 1.4.11 puts at
-  // 3:1 against each other. Unlike the Sankey's four buckets (below), two
-  // bands can reach that comfortably, so they are held to the full bar.
-  it('separates the cost-mix chart bands by 3:1', () => {
-    const r = contrast(P['out'], P['out-lift']);
-    expect(
-      r,
-      `the fixed band ${P['out']} and the variable band ${P['out-lift']} are ` +
-        `${r.toFixed(2)}:1 apart, below the 3:1 WCAG asks of meaningful graphics`,
-    ).toBeGreaterThanOrEqual(3);
-  });
-
-  it('keeps the flow colours distinguishable from the ground', () => {
-    for (const token of ['in', 'out', 'invest']) {
-      const r = contrast(P[token], P['ink-900']);
-      expect(r, `${token} on ink-900 is ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
-    }
-  });
-
-  // The palette is entirely cool, so inflow and outflow are close in hue by
-  // design. That makes LIGHTNESS the only thing keeping them apart, and a
-  // well-meaning tweak toward "prettier" could silently merge the two colours
-  // that a ledger must never confuse. Pin the gap.
-  it('separates inflow from outflow by lightness, not hue alone', () => {
-    const r = contrast(P['in'], P['out']);
-    expect(
-      r,
-      `inflow ${P['in']} vs outflow ${P['out']} is only ${r.toFixed(2)}:1. ` +
-        'They must differ in lightness by at least 3:1 so the distinction survives ' +
-        'red-green colourblindness.',
-    ).toBeGreaterThanOrEqual(3);
-  });
-
-  // `Sankey.tsx` filters out zero-valued buckets before layout, so ANY pair can
-  // end up touching depending on the month's data — a month with nothing
-  // discretionary puts Required directly against Invested. The earlier version
-  // of this test only checked the full four-bucket order, which is the best
-  // case rather than the guaranteed one.
-  //
-  // Four cool colours cannot separate all six pairs by lightness and keep the
-  // hue spread colourblind viewers depend on. The ceiling is 1.86:1 — four
-  // luminances in geometric progression, each clearing 3:1 against the ground,
-  // with the lightest forced to pure white. Chasing it flattens the palette to
-  // near-identical hues and drops the worst deuteranopia pair to 1.08:1, which
-  // is worse than what it replaces.
-  //
-  // So the guarantee does not come from colour: every ribbon is drawn over a
-  // ground-coloured stroke 1.5px wider than itself, parting touching ribbons
-  // with a visible seam, and every bucket carries a text label. Colour is a
-  // secondary cue (WCAG 1.4.1), which is what makes the remaining overlap
-  // acceptable. These assertions keep it honest as a secondary cue.
-  it('keeps every reachable bucket pair distinguishable', () => {
-    const BUCKETS = ['flow-required', 'flow-discretionary', 'flow-invest', 'flow-leftover'];
-
-    for (const token of BUCKETS) {
-      const r = contrast(P[token], P['ink-900']);
-      expect(r, `${token} on ink-900 is ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
-    }
-
-    // Every pair, since any of them can become adjacent.
-    const hue = (hex: string) => {
-      const { r, g, b } = parse(hex);
-      const max = Math.max(r, g, b);
-      const min = Math.min(r, g, b);
-      const d = max - min;
-      if (d === 0) return 0;
-      const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
-      return (h * 60 + 360) % 360;
-    };
-
-    for (let i = 0; i < BUCKETS.length; i++) {
-      for (let j = i + 1; j < BUCKETS.length; j++) {
-        const [a, b] = [BUCKETS[i], BUCKETS[j]];
-        const ratio = contrast(P[a], P[b]);
-        let deg = Math.abs(hue(P[a]) - hue(P[b]));
-        if (deg > 180) deg = 360 - deg;
-
-        // A pair may be told apart by lightness OR by hue. Requiring both is
-        // what the maths above shows to be impossible for four cool colours.
-        expect(
-          ratio >= 1.8 || deg >= 30,
-          `${a} and ${b} can end up adjacent but differ by only ${ratio.toFixed(2)}:1 ` +
-            `and ${Math.round(deg)}deg — they need one of lightness (1.8:1) or hue (30deg)`,
-        ).toBe(true);
+  it('has the eight group slots, each a mark visible on the ground', () => {
+    expect(GROUPS).toEqual(['group-1', 'group-2', 'group-3', 'group-4', 'group-5', 'group-6', 'group-7', 'group-8']);
+    for (const g of GROUPS) {
+      for (const surface of ['ground', 'card']) {
+        const r = contrast(P[g], P[surface]);
+        expect(r, `${g} on the ${surface} is ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
       }
     }
   });
 
-  it('keeps inflow and outflow apart under red-green colourblindness', () => {
-    // Brettel-style linear approximations. Not a substitute for real testing,
-    // but enough to catch a palette change that collapses the two.
-    const toLinear = (c: number) => channel(c);
-    const toSrgb = (c: number) => {
-      const v = c <= 0.0031308 ? c * 12.92 : 1.055 * Math.max(c, 0) ** (1 / 2.4) - 0.055;
-      return Math.round(Math.min(1, Math.max(0, v)) * 255);
-    };
-    const simulate = (hex: string, m: number[]) => {
-      const { r, g, b } = parse(hex);
-      const [R, G, B] = [toLinear(r), toLinear(g), toLinear(b)];
-      const out = [
-        m[0] * R + m[1] * G + m[2] * B,
-        m[3] * R + m[4] * G + m[5] * B,
-        m[6] * R + m[7] * G + m[8] * B,
-      ];
-      return `#${out.map(toSrgb).map((v) => v.toString(16).padStart(2, '0')).join('')}`;
-    };
+  // V9. Within a bucket the Flow orders categories by group, so neighbouring
+  // colours are neighbouring slots — the pairs the dataviz validator checks.
+  it('separates neighbouring group slots for every reader', () => {
+    for (let i = 0; i + 1 < GROUPS.length; i++) {
+      const [a, b] = [P[GROUPS[i]], P[GROUPS[i + 1]]];
+      const n = deltaE(a, b);
+      const c = cvd(a, b);
+      expect(n, `${GROUPS[i]} and ${GROUPS[i + 1]}: normal-vision ΔE ${n.toFixed(1)}`).toBeGreaterThanOrEqual(15);
+      expect(c, `${GROUPS[i]} and ${GROUPS[i + 1]}: colour-blind ΔE ${c.toFixed(1)}`).toBeGreaterThanOrEqual(8);
+    }
+  });
 
-    const FORMS = {
-      deuteranopia: [0.625, 0.375, 0, 0.7, 0.3, 0, 0, 0.3, 0.7],
-      protanopia: [0.567, 0.433, 0, 0.558, 0.442, 0, 0, 0.242, 0.758],
-    };
-
-    for (const [name, matrix] of Object.entries(FORMS)) {
-      const r = contrast(simulate(P['in'], matrix), simulate(P['out'], matrix));
-      expect(r, `under ${name} inflow and outflow are ${r.toFixed(2)}:1 apart`)
-        .toBeGreaterThanOrEqual(2.5);
+  // A month with no spending in one group puts the groups either side of it
+  // next to each other. The six slots in use hold up to that too.
+  it('separates slots one apart, for a month missing a group', () => {
+    for (let i = 0; i + 2 < 6; i++) {
+      const [a, b] = [P[GROUPS[i]], P[GROUPS[i + 2]]];
+      expect(deltaE(a, b), `${GROUPS[i]} and ${GROUPS[i + 2]}`).toBeGreaterThanOrEqual(15);
+      expect(cvd(a, b), `${GROUPS[i]} and ${GROUPS[i + 2]}`).toBeGreaterThanOrEqual(8);
     }
   });
 });

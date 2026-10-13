@@ -16,22 +16,39 @@ export interface DemoPage {
 
 /**
  * Category IDs are random per seed, so the pages that take one are reached
- * from the Groceries link on Cashflow rather than by a fixed URL.
+ * from the Groceries row of the Flow's table rather than by a fixed URL.
  */
-async function groceriesHref(page: Page): Promise<string> {
+export async function groceriesHref(page: Page): Promise<string> {
   await page.goto('/');
+  await page.getByRole('button', { name: 'Table', exact: true }).first().click();
   const href = await page.getByRole('link', { name: 'Groceries', exact: true }).getAttribute('href');
-  if (!href) throw new Error('No Groceries link on Cashflow');
+  if (!href) throw new Error('No Groceries link in the Flow table');
   return href;
 }
 
 export const PAGES: DemoPage[] = [
-  { name: 'cashflow', open: (page) => page.goto('/') },
-  { name: 'flow', open: (page) => page.goto('/flow') },
-  // One month, the way Cashflow links to it. All six months is 8,000px of
+  { name: 'flow', open: (page) => page.goto('/') },
+  {
+    // Both themes are chosen, not flipped, so both are looked at.
+    name: 'flow-dark',
+    open: async (page) => {
+      await page.emulateMedia({ colorScheme: 'dark' });
+      return page.goto('/');
+    },
+  },
+  {
+    name: 'flow-table',
+    open: async (page) => {
+      await page.goto('/');
+      await page.getByRole('button', { name: 'Table', exact: true }).first().click();
+    },
+  },
+  { name: 'review', open: (page) => page.goto(`/review?period=${MONTH}`) },
+  // One month, the way the Flow links to it. All six months is 8,000px of
   // near-identical rows — a large baseline that adds nothing to the check.
   { name: 'register', open: (page) => page.goto(`/transactions?from=${MONTH}-01&to=${monthEnd()}`) },
   { name: 'accounts', open: (page) => page.goto('/accounts') },
+  { name: 'setup', open: (page) => page.goto('/setup') },
   {
     name: 'register-filtered',
     open: async (page) => page.goto(await groceriesHref(page)),

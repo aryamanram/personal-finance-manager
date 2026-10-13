@@ -8,6 +8,10 @@
  *   - a pending -> posted pair
  *   - a manually overridden category
  *   - investment contributions + balance snapshots
+ *   - three categories split into subcategories, with some spending left on
+ *     the parent itself (the Flow's "General")
+ *   - a refund in a category that also spends, so gross and net differ
+ *   - spending in every group, so the Flow shows the whole palette
  */
 import postgres from 'postgres';
 import { loadEnv } from './env.js';
@@ -122,6 +126,9 @@ async function main() {
 
   const groceries = ['TRADER JOES #447', 'WHOLE FOODS MKT 10234', 'SAFEWAY 2891'];
   const restaurants = ['THE LOCAL BISTRO', 'SQ *TACO HAUS', 'TST* NOODLE BAR', 'CHIPOTLE 1882'];
+  const pharmacy = ['CVS/PHARMACY #08812', 'WALGREENS #4417'];
+  const rideshare = ['UBER *TRIP', 'LYFT *RIDE SUN 8PM'];
+  const fun = ['AMC THEATRES 0441', 'TICKETMASTER *EVENT'];
   const coffee = ['STARBUCKS #12345', 'SQ *BLUE BOTTLE COFFEE', 'PEETS COFFEE 331'];
   const shopping = ['AMAZON.COM*RT4X9', 'TARGET 00023877', 'UNIQLO USA 4412'];
   const gas = ['SHELL OIL 574123', 'CHEVRON 00982341'];
@@ -186,6 +193,21 @@ async function main() {
       add({ accountId: apple.id, amountCents: vary(-6800, 0.6), postedDate: day(5 + i * 9),
             rawDescription: pick(shopping), source: 'csv' });
     }
+    add({ accountId: explorer.id, amountCents: vary(-2400, 0.4), postedDate: day(11),
+          rawDescription: pick(pharmacy), externalId: sf() });
+    for (let i = 0; i < 2; i++) {
+      add({ accountId: apple.id, amountCents: vary(-2300, 0.5), postedDate: day(6 + i * 13),
+            rawDescription: pick(rideshare), source: 'csv' });
+    }
+    add({ accountId: explorer.id, amountCents: vary(-4800, 0.5), postedDate: day(21),
+          rawDescription: pick(fun), externalId: sf() });
+
+    // A return, every other month: money back into a category that also
+    // spends, so its gross and its net differ.
+    if (m % 2 === 0) {
+      add({ accountId: apple.id, amountCents: vary(3400, 0.3), postedDate: day(19),
+            rawDescription: 'AMAZON.COM*RT4X9 RETURN', source: 'csv' });
+    }
 
     // Apple Card Daily Cash: a credit, and it must never read as income.
     add({ accountId: apple.id, amountCents: vary(229, 0.3), postedDate: day(18),
@@ -248,6 +270,25 @@ async function main() {
     SET voided_at = ${today}, void_reason = 'Duplicate — bank posted this twice'
     WHERE id = ${dup.id}`;
 
+  console.log('· subcategories');
+  // The real ledger's shape: a few parents split, most categories not. Some
+  // spending stays on each parent itself — Amazon on Shopping — which is
+  // what the Flow draws as "General".
+  for (const [parent, children] of [
+    ['Restaurants', ['Dining out', 'Takeout']],
+    ['Subscriptions', ['Streaming', 'Apps & cloud']],
+    ['Shopping', ['Clothing', 'Household']],
+  ] as const) {
+    for (const [i, child] of children.entries()) {
+      await sql`
+        INSERT INTO categories (group_id, name, default_cost_type, default_necessity, parent_id, sort_order)
+        SELECT group_id, ${child}, default_cost_type, default_necessity, id, ${i + 1}
+        FROM categories WHERE name = ${parent} AND parent_id IS NULL
+        -- Categories survive a reseed (only the ledger is truncated).
+        ON CONFLICT (group_id, name) DO NOTHING`;
+    }
+  }
+
   console.log('· rules');
   const cat = async (name: string) =>
     (await sql<{ id: string }[]>`SELECT id FROM categories WHERE name = ${name}`)[0].id;
@@ -259,12 +300,19 @@ async function main() {
     ('Phone',          25, 'VERIZON|T-MOBILE|AT&T',         ${await cat('Internet & Phone')}),
     ('Utilities',       5, 'UTILITIES|ELECTRIC|PG&E|WATER DEPT', ${await cat('Utilities')}),
     ('Gym',            30, 'EQUINOX|PLANET FITNESS',        ${await cat('Fitness')}),
-    ('Subscriptions',  30, 'NETFLIX|SPOTIFY|APPLE.COM',     ${await cat('Subscriptions')}),
+    ('Streaming',      30, 'NETFLIX|SPOTIFY',               ${await cat('Streaming')}),
+    ('Apps',           30, 'APPLE.COM',                     ${await cat('Apps & cloud')}),
     ('Groceries',      40, 'TRADER JOE|WHOLE FOODS|SAFEWAY',${await cat('Groceries')}),
     ('Gas',            40, 'SHELL|CHEVRON|EXXON',           ${await cat('Gas')}),
     ('Coffee',         45, 'STARBUCKS|BLUE BOTTLE|PEETS',   ${await cat('Coffee')}),
-    ('Restaurants',    50, 'BISTRO|TACO|NOODLE|CHIPOTLE',   ${await cat('Restaurants')}),
-    ('Shopping',       55, 'AMAZON|TARGET|UNIQLO',          ${await cat('Shopping')}),
+    ('Dining out',     50, 'BISTRO|NOODLE',                 ${await cat('Dining out')}),
+    ('Takeout',        50, 'TACO|CHIPOTLE',                 ${await cat('Takeout')}),
+    ('Clothing',       55, 'UNIQLO',                        ${await cat('Clothing')}),
+    ('Household',      55, 'TARGET',                        ${await cat('Household')}),
+    ('Shopping',       56, 'AMAZON',                        ${await cat('Shopping')}),
+    ('Pharmacy',       45, 'CVS|WALGREENS',                 ${await cat('Pharmacy')}),
+    ('Rideshare',      60, 'UBER|LYFT',                     ${await cat('Rideshare')}),
+    ('Entertainment',  60, 'AMC THEATRES|TICKETMASTER',     ${await cat('Entertainment')}),
     ('Annual fee',     35, 'ANNUAL MEMBERSHIP FEE',         ${await cat('Fees & Interest')}),
     ('Daily Cash',     15, 'Daily Cash',                    ${await cat('Reimbursement')}),
     -- Deliberately NARROW. A broad 'AUTOPAY' here would swallow 'CITY UTILITIES
@@ -312,15 +360,19 @@ async function main() {
   }
 
   // --- An amount override, to exercise the edited-value marker ----------
-  const [edited] = await sql<{ id: string }[]>`
-    SELECT id FROM transactions WHERE raw_description LIKE 'AMAZON%'
+  // The newest Amazon CHARGE: the return is an Amazon row too, and
+  // overriding it would turn a refund into a charge. The edit log records
+  // the amount the row really had, as a real edit's does (I6).
+  const [edited] = await sql<{ id: string; amount_cents: number }[]>`
+    SELECT id, amount_cents FROM transactions
+    WHERE raw_description LIKE 'AMAZON%' AND amount_cents < 0
     ORDER BY posted_date DESC LIMIT 1`;
   if (edited) {
     await sql`
       UPDATE transactions SET amount_cents_override = -2500 WHERE id = ${edited.id}`;
     await sql`
       INSERT INTO transaction_edits (transaction_id, field, old_value, new_value)
-      VALUES (${edited.id}, 'amount_cents', '-6800', '-2500')`;
+      VALUES (${edited.id}, 'amount_cents', ${String(edited.amount_cents)}, '-2500')`;
   }
 
   // --- Brokerage snapshots: value moves with the market, never the ledger

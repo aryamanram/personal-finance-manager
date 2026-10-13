@@ -23,8 +23,15 @@ export function TransactionRow({
   onConfirm,
   pending,
   repeatsDate,
+  swatch,
+  groupSlots,
+  colors,
 }: {
+  groupSlots?: Record<string, number>;
+  colors?: Record<string, string>;
   txn: VTransaction;
+  /** The category's colour: its own shade of its group's (V10). */
+  swatch?: string;
   categories: CategoryWithGroup[];
   selected: boolean;
   /** The row above shares this date, so printing it again says nothing. */
@@ -47,8 +54,8 @@ export function TransactionRow({
   //
   // scrollIntoView's block options are not enough here. 'nearest' stops as
   // soon as the top edge shows, leaving the category button off screen, and
-  // 'end' aligns to the viewport bottom without accounting for the sticky
-  // header above. So compute the target directly: scroll only as far as it
+  // 'end' aligns to the viewport bottom without accounting for the phone's
+  // sticky top bar. So compute the target directly: scroll only as far as it
   // takes to fit the panel, and leave it alone when it already fits.
   useEffect(() => {
     if (!expanded) return;
@@ -59,7 +66,9 @@ export function TransactionRow({
     // has not been laid out yet, so its height reads as 0 and nothing scrolls.
     const id = requestAnimationFrame(() => {
       const r = el.getBoundingClientRect();
-      const HEADER = 64;   // the sticky nav, which overlays the top of the page
+      // The phone's top bar overlays the top of the page; from a tablet up
+      // the nav is a sidebar and nothing does.
+      const HEADER = document.querySelector('[data-topbar]')?.getBoundingClientRect().height ?? 0;
       const MARGIN = 12;
       const overflowBelow = r.bottom - (window.innerHeight - MARGIN);
       const overflowAbove = HEADER + MARGIN - r.top;
@@ -80,7 +89,9 @@ export function TransactionRow({
   // A machine chose it and no human has confirmed. NOT amber — amber is
   // reserved for "a human changed this" (CLAUDE.md), and this is the opposite:
   // nobody has touched it yet.
+  // A voided row is out of the ledger; there is nothing to confirm about it.
   const isGuess =
+    !voided &&
     !txn.category_locked &&
     txn.category_id !== null &&
     GUESS_SOURCES.includes(txn.category_source);
@@ -91,13 +102,13 @@ export function TransactionRow({
     <tr
       className={clsx(
         'rule-b group transition-colors',
-        voided ? 'text-paper-faint' : 'hover:bg-ink-850',
+        voided ? 'text-ink-faint' : 'hover:bg-well/40',
         /* Dim the row's own text, not the subtree. `opacity` on the <tr>
            composites every descendant against the page — including the
            "pending" badge, whose background and text fade together. That took
            the badge to 2.46:1, well under AA, and the badge is the one thing
            on a pending row you actually need to read. */
-        pending && !voided && 'text-paper-dim',
+        pending && !voided && 'text-ink-dim',
       )}
     >
       <td className="w-8 py-2 pl-1">
@@ -114,11 +125,11 @@ export function TransactionRow({
           }}
           onChange={(e) => onSelect(txn.id, e.target.checked)}
           aria-label={`Select ${txn.eff_description}`}
-          className="accent-edited"
+          className="accent-ink"
         />
       </td>
 
-      <td className="figure w-20 py-2 text-xs text-paper-faint">
+      <td className="figure w-20 py-2 text-xs text-ink-faint">
         {/* The register is sorted by date and averages 1.7 rows per date, so
             a repeat is the same string twice in a column. The row still knows
             its date — the title and the expanded editor both carry it. */}
@@ -159,7 +170,7 @@ export function TransactionRow({
           </span>
           {/* The bank's own string, kept visible under the rename (I2). */}
           {renamed && (
-            <span className="figure mt-0.5 block truncate text-xs text-paper-faint">
+            <span className="figure mt-0.5 block truncate text-xs text-ink-faint">
               {txn.raw_description}
             </span>
           )}
@@ -177,8 +188,15 @@ export function TransactionRow({
         <div className="flex w-full items-center gap-2">
         <button
           onClick={() => setExpanded(true)}
-          className="flex min-w-0 items-center gap-2 text-left text-sm text-paper-dim transition-colors hover:text-paper"
+          className="flex min-w-0 items-center gap-2 text-left text-sm text-ink-dim transition-colors hover:text-ink"
         >
+          {txn.category_id && (
+            <span
+              aria-hidden
+              className="swatch"
+              style={{ background: swatch ?? 'var(--color-chart-strong)' }}
+            />
+          )}
           <span className="truncate">{txn.category_name ?? 'Uncategorized'}</span>
         </button>
 
@@ -196,7 +214,7 @@ export function TransactionRow({
             disabled={pending}
             title={`${txn.suggested_reason ?? `Categorised by ${txn.category_source}`} — click to confirm`}
             aria-label={`Confirm ${txn.category_name} for ${txn.eff_description}`}
-            className="eyebrow shrink-0 rounded-sm border border-ink-600 px-1.5 py-0.5 text-[9px] text-paper-faint transition-colors hover:border-edited hover:text-edited disabled:opacity-40"
+            className="eyebrow shrink-0 rounded-sm border border-rule-strong px-1.5 py-0.5 text-[9px] text-ink-faint transition-colors hover:border-ink hover:text-ink disabled:opacity-40"
           >
             accept
           </button>
@@ -241,7 +259,7 @@ export function TransactionRow({
               }
               setEditing(null);
             }}
-            className="figure w-full rounded-sm border border-ink-500 bg-ink-800 px-2 py-1 text-right text-sm"
+            className="figure w-full rounded-sm border border-ink-faint bg-well px-2 py-1 text-right text-sm"
           />
         ) : (
           <button
@@ -282,6 +300,8 @@ export function TransactionRow({
           <RowEditor
             txn={txn}
             categories={categories}
+            groupSlots={groupSlots}
+            colors={colors}
             onPatch={onPatch}
             onClose={() => setExpanded(false)}
           />
@@ -297,7 +317,7 @@ function Badge({ children, tone }: { children: React.ReactNode; tone: 'neutral' 
     <span
       className={clsx(
         'rounded-sm px-1 py-px text-[10px] uppercase tracking-wide',
-        tone === 'out' ? 'bg-out-dim/25 text-out' : 'bg-ink-700 text-paper-faint',
+        tone === 'out' ? 'bg-well text-ink-dim' : 'bg-well text-ink-faint',
       )}
     >
       {children}

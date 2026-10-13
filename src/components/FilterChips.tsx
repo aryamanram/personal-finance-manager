@@ -60,7 +60,7 @@ export function FilterChips({
       )}
 
       {!showReview && !showUncategorized && (
-        <span className="text-paper-faint">Everything is categorised.</span>
+        <span className="text-ink-faint">Everything is categorised.</span>
       )}
 
       <Chip href={href('voided', active.voided)} on={active.voided} quiet>
@@ -70,7 +70,7 @@ export function FilterChips({
       {hasFilters && (
         <Link
           href={pathname}
-          className="ml-1 px-2 py-1.5 text-paper-faint transition-colors hover:text-paper"
+          className="ml-1 px-2 py-1.5 text-ink-faint transition-colors hover:text-ink"
         >
           Reset
         </Link>
@@ -158,14 +158,15 @@ function Chip({
   return (
     <Link
       href={href}
-      aria-pressed={on}
+      // A link cannot be pressed; it can be the current filter.
+      aria-current={on ? 'true' : undefined}
       className={clsx(
         'rounded-sm border px-3 py-1.5 transition-colors',
         on
-          ? 'border-out bg-out/10 text-out'
+          ? 'border-ink bg-ink text-ground'
           : quiet
-            ? 'border-transparent text-paper-faint hover:border-ink-600 hover:text-paper-dim'
-            : 'border-ink-600 text-paper-dim hover:border-ink-500 hover:text-paper',
+            ? 'border-transparent text-ink-faint hover:border-rule-strong hover:text-ink-dim'
+            : 'border-rule-strong text-ink-dim hover:border-ink-faint hover:text-ink',
       )}
     >
       {children}

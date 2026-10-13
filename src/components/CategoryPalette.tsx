@@ -69,10 +69,16 @@ export function CategoryPalette({
   categories,
   currentId,
   clearLabel = { name: 'Uncategorized', hint: 'clear' },
+  groupSlots = {},
+  colors = {},
   onPick,
   onClose,
 }: {
   categories: CategoryWithGroup[];
+  /** Each group's palette slot, so a group and its categories wear its colour (V10). */
+  groupSlots?: Record<string, number>;
+  /** Each category's own shade, by id (lib/palette.ts). */
+  colors?: Record<string, string>;
   currentId?: string | null;
   /**
    * What picking nothing means here. Assigning a category, that is clearing
@@ -161,7 +167,7 @@ export function CategoryPalette({
 
   return (
     <div
-      className="w-[340px] overflow-hidden rounded-sm border border-ink-500 bg-ink-800 shadow-2xl shadow-black/50"
+      className="w-[340px] overflow-hidden rounded-sm border border-rule-strong bg-raised shadow-xl shadow-black/20"
       onKeyDown={onKeyDown}
     >
       <input
@@ -177,7 +183,7 @@ export function CategoryPalette({
         }}
         placeholder="Type to filter…"
         aria-label="Filter categories"
-        className="rule-b w-full bg-transparent px-3 py-2.5 text-sm text-paper outline-none placeholder:text-paper-faint"
+        className="rule-b w-full bg-transparent px-3 py-2.5 text-sm text-ink outline-none placeholder:text-ink-faint"
       />
 
       <ul ref={listRef} className="max-h-[280px] overflow-y-auto">
@@ -192,12 +198,12 @@ export function CategoryPalette({
             {section.back ? (
               <button
                 onClick={section.back}
-                className="eyebrow rule-b sticky top-0 z-10 flex w-full items-center gap-1.5 bg-ink-900 px-3 py-2 text-left transition-colors hover:text-paper-dim"
+                className="eyebrow rule-b sticky top-0 z-10 flex w-full items-center gap-1.5 bg-ground px-3 py-2 text-left transition-colors hover:text-ink-dim"
               >
                 <span aria-hidden>‹</span> {section.label}
               </button>
             ) : (
-              <div className="eyebrow rule-b sticky top-0 z-10 bg-ink-900 px-3 py-2">
+              <div className="eyebrow rule-b sticky top-0 z-10 bg-ground px-3 py-2">
                 {section.label}
               </div>
             )}
@@ -212,10 +218,13 @@ export function CategoryPalette({
                   else { setOpenGroup(g.name); setOpenParent(null); }
                   setCursor(0);
                 }}
-                className="flex w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left text-sm text-paper-dim transition-colors hover:bg-ink-700 hover:text-paper"
+                className="flex w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left text-sm text-ink-dim transition-colors hover:bg-well hover:text-ink"
               >
-                <span className="truncate">{g.name}</span>
-                <span className="shrink-0 text-xs text-paper-faint">
+                <span className="flex min-w-0 items-center gap-2">
+                  {g.into === 'group' && <Swatch slot={groupSlots[g.name]} />}
+                  <span className="truncate">{g.name}</span>
+                </span>
+                <span className="shrink-0 text-xs text-ink-faint">
                   {g.count} <span aria-hidden>›</span>
                 </span>
               </button>
@@ -234,17 +243,18 @@ export function CategoryPalette({
                       onClick={() => onPick(category.id)}
                       className={clsx(
                         'flex w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left text-sm transition-colors',
-                        active ? 'bg-ink-700 text-paper' : 'text-paper-dim',
+                        active ? 'bg-well text-ink' : 'text-ink-dim',
                       )}
                     >
-                      <span className="truncate">
+                      <span className="flex min-w-0 items-center gap-2 truncate">
+                        <Swatch slot={groupSlots[category.group_name]} color={colors[category.id]} />
                         {label ?? category.name}
                         {category.id === currentId && (
-                          <span className="ml-2 text-xs text-paper-faint">current</span>
+                          <span className="ml-2 text-xs text-ink-faint">current</span>
                         )}
                       </span>
                       {note && (
-                        <span className="shrink-0 text-xs text-paper-faint">{note}</span>
+                        <span className="shrink-0 text-xs text-ink-faint">{note}</span>
                       )}
                     </button>
                   </li>
@@ -261,7 +271,7 @@ export function CategoryPalette({
           <li>
             <button
               onClick={() => onPick(null)}
-              className="rule-t flex w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left text-sm text-paper-faint transition-colors hover:bg-ink-700 hover:text-paper-dim"
+              className="rule-t flex w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left text-sm text-ink-faint transition-colors hover:bg-well hover:text-ink-dim"
             >
               <span className="truncate">{clearLabel.name}</span>
               <span className="shrink-0 text-xs">{clearLabel.hint}</span>
@@ -273,13 +283,13 @@ export function CategoryPalette({
             the group list has none — every row there drills — so testing it
             alone printed "No category matches" over a full screen of groups. */}
         {query.trim() !== '' && flat.length === 0 && (
-          <li className="px-3 py-4 text-center text-xs text-paper-faint">
+          <li className="px-3 py-4 text-center text-xs text-ink-faint">
             No category matches “{query.trim()}”.
           </li>
         )}
       </ul>
 
-      <div className="rule-t px-3 py-2 text-[10px] text-paper-faint">
+      <div className="rule-t px-3 py-2 text-[10px] text-ink-faint">
         ↑↓ move · ⏎ apply · esc close
       </div>
     </div>
@@ -367,4 +377,15 @@ export function browseSections(
 function matches(c: CategoryWithGroup, q: string): boolean {
   if (!q) return true;
   return c.name.toLowerCase().includes(q) || c.group_name.toLowerCase().includes(q);
+}
+
+/** The group's colour, as a small square — never the edit marker's diamond. */
+function Swatch({ slot, color }: { slot?: number; color?: string }) {
+  return (
+    <span
+      aria-hidden
+      className="swatch"
+      style={{ background: color ?? (slot ? `var(--color-group-${slot})` : 'var(--color-chart-strong)') }}
+    />
+  );
 }
