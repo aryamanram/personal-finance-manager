@@ -8,7 +8,7 @@
     "dev:demo": "tsx scripts/demo-db.ts dev",
     "build": "next build",
     "start": "next start -H 127.0.0.1 -p 3000",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit --incremental false",
     "test": "vitest run",
     "test:visual": "playwright test screens links console picker nav",
     "test:visual:update": "playwright test screens --update-snapshots",
