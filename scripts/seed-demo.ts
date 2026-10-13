@@ -360,15 +360,19 @@ async function main() {
   }
 
   // --- An amount override, to exercise the edited-value marker ----------
-  const [edited] = await sql<{ id: string }[]>`
-    SELECT id FROM transactions WHERE raw_description LIKE 'AMAZON%'
+  // The newest Amazon CHARGE: the return is an Amazon row too, and
+  // overriding it would turn a refund into a charge. The edit log records
+  // the amount the row really had, as a real edit's does (I6).
+  const [edited] = await sql<{ id: string; amount_cents: number }[]>`
+    SELECT id, amount_cents FROM transactions
+    WHERE raw_description LIKE 'AMAZON%' AND amount_cents < 0
     ORDER BY posted_date DESC LIMIT 1`;
   if (edited) {
     await sql`
       UPDATE transactions SET amount_cents_override = -2500 WHERE id = ${edited.id}`;
     await sql`
       INSERT INTO transaction_edits (transaction_id, field, old_value, new_value)
-      VALUES (${edited.id}, 'amount_cents', '-6800', '-2500')`;
+      VALUES (${edited.id}, 'amount_cents', ${String(edited.amount_cents)}, '-2500')`;
   }
 
   // --- Brokerage snapshots: value moves with the market, never the ledger
