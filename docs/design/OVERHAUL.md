@@ -4,19 +4,17 @@ Proposed 2026-10-07; the owner chose the direction the same day. Revised
 2026-10-08 with the owner's second round of asks, which moved the Flow to the
 front, replaced the colour scheme and added a second level of Flow.
 
-The work happens on a local branch, `overhaul`. Nothing is pushed and no PR
-is opened until the owner asks: there will be many design changes, and a
-review round-trip per change would slow them down.
+The work happened on a branch, `overhaul`, reviewed by the owner in rounds
+on the running app rather than a PR per change; on 2026-10-13 the owner
+called a save point and it went up as PR #23.
 
-**Where it stands (2026-10-08):** all nine steps below are built on
-`overhaul`, one commit each, and checked on the demo ledger in both themes
-and at phone width. V1–V10 each have a test: V1, V2 and V3 in
+**Where it stands (2026-10-13):** all nine steps below are built, and
+checked on the demo ledger in both themes and at phone width. V1–V10 each have a test: V1, V2 and V3 in
 `tests/flow.test.ts` and `tests/review.test.ts` against the app's own
 queries, V2 again end to end in `tests/visual/links.spec.ts`, V9 in
 `tests/design-tokens.test.ts`, V10's shades in `tests/palette.test.ts`.
-The a11y suite's known list is empty. The later asks (7–9: the folding
-picker, shades within a group, the Monarch-like cards) are built too. Not
-pushed; waiting on the owner's look.
+The a11y suite's known list is empty. The later asks (7–14) are built too.
+Open as PR #23; further UI work continues after it.
 
 ## The asks
 

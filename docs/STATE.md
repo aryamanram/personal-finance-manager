@@ -24,16 +24,15 @@ Describe the *shape* of a decision here and keep the specifics there.
 
 ## Right now · last updated 2026-10-13
 
-**The overhaul is built on a local branch, `overhaul`, and is not pushed.**
-The owner asked for no push or PR until they say so: there will be many
-design changes. It carries the whole of `docs/design/OVERHAUL.md` — the Flow
+**The overhaul is open as PR #23**, called by the owner as a save point
+before more UI work. It carries the whole of `docs/design/OVERHAUL.md` — the Flow
 as the first page with a category's own Flow beneath, the light and dark
 colour scheme, Review, Setup — with V1–V10 tested and the a11y suite clean.
 The owner is reviewing it in rounds and asking for changes (OVERHAUL.md "The
 asks", 1–14); the latest made the register load as it scrolls and dropped its
-totals line. The working tree is left on `overhaul` so
-they can run it; it changes no sync code and no schema, so the nightly sync
-behaves as on `main`. Switch back to `main` once they are done looking.
+totals line. Until it merges the working tree stays on `overhaul`; it
+changes no sync code and no schema, so the nightly sync behaves as on `main`.
+Once merged, the tree goes back to `main`.
 
 `main` itself is as on 2026-10-07: PRs #12–#22 merged, green. The ledger syncs
 itself daily, was caught up on 2026-10-07, and the owner has confirmed every
