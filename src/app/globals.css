@@ -176,12 +176,16 @@ html, body {
 
 /* Names a category's group: a small square, never a diamond — the diamond is
    the edit marker's shape. */
-.swatch {
-  display: inline-block;
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 1px;
-  flex-shrink: 0;
+/* In a layer, unlike the rules around it, so a size utility beside it —
+   `swatch h-3 w-3` — wins: rules outside any layer beat every utility. */
+@layer components {
+  .swatch {
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 1px;
+    flex-shrink: 0;
+  }
 }
 
 /* The Flow pours in, left to right, once — money arriving and splitting into
