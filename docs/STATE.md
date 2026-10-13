@@ -24,22 +24,19 @@ Describe the *shape* of a decision here and keep the specifics there.
 
 ## Right now · last updated 2026-10-13
 
-**The overhaul is PR #23, reviewed and waiting on the owner's merge.** The
-owner called it as a save point before more UI work. It carries the whole of
+**The overhaul is merged (PR #23, 2026-10-13).** The owner called it as a
+save point before more UI work. It carries the whole of
 `docs/design/OVERHAUL.md` (asks 1–14): the Flow first, with its trunk and a
 category's own Flow beneath; light and dark themes; Review; Setup; a sidebar;
 every page on cards; a register that loads as it scrolls. CodeRabbit reviewed
 the latest commit with nothing outstanding — its three findings (stale status
 docs, the demo seed's edited row, `.swatch` outside a layer) are fixed and
-answered on their threads. The merge itself was left to the owner: Claude
-Code's permission check refused it. 398 unit tests, the browser suites and
-`prepush` are green. The ledger was backed up to `db/dumps/` on 2026-10-13,
-after the work and before the merge.
-
-Until it merges the working tree stays on `overhaul` — it changes no sync code
-and no schema, so the nightly sync behaves as on `main`. After merging: check
-out `main`, pull, and start the next round of UI work on a new branch, local
-until the owner asks for a PR.
+answered on their threads; the owner merged it (Claude Code's permission
+check refuses `gh pr merge`, so merges are the owner's). The ledger was
+backed up to `db/dumps/` on 2026-10-13, before the merge. The next UI work
+starts on a new branch, local until the owner asks for a PR; the working tree
+goes back to `main` between rounds, since the nightly sync runs whatever is
+checked out.
 
 `main` itself is as on 2026-10-07: PRs #12–#22 merged, green. The owner has
 confirmed every row the register showed then. The card that syncs daily
@@ -47,11 +44,13 @@ matches its issuer to the cent.
 
 **For whoever picks this up:**
 
-- **The monthly card's SimpleFIN connection needs re-authenticating.** Every
-  sync since 2026-10-12 has ended `partial` with SimpleFIN's "Auth required"
-  for that connection; the other accounts sync normally. Only the owner can
-  fix it, in SimpleFIN Bridge. (The two runs on 2026-10-10 failed on the
-  network, not on auth.)
+- **The monthly card comes in by CSV.** Its SimpleFIN connection only ever
+  delivered monthly data and kept asking to be re-authorised, so the owner
+  imports the card's statement export instead (2026-10-13) and leaves the
+  connection as it is; a `partial` sync with "Auth required" for that card is
+  expected, not urgent. No aggregator reaches that card any better: its data
+  is only exposed on the phone, to App Store finance apps. Revisit when its
+  issuer changes.
 - **Docker Desktop has to be running.** On 2026-10-09 it was closed after a
   restart, and the Flow failed with an `AggregateError` from its first query
   — a refused connection, not an app bug. The container comes back with
